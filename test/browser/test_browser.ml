@@ -1,5 +1,9 @@
+(* The async tasks of kilim on a real host on Brr (design section 12). *)
+
 open Brr
-open Kilim_spike_async
+open Kilim
+module C = Private.Cancel
+module Q = Private.Run_queue
 
 let failures = ref 0
 
@@ -18,23 +22,34 @@ let set_timer ~ms f =
   let id = G.set_timeout ~ms f in
   fun () -> G.stop_timer id
 
-let host =
-  {Async.now_ms= (fun () -> Performance.now_ms G.performance); set_timer}
+(* A macrotask: one MessageChannel message. *)
+let post_task f =
+  let ch = Jv.new' (Jv.get Jv.global "MessageChannel") [||] in
+  let port1 = Jv.get ch "port1" and port2 = Jv.get ch "port2" in
+  Jv.set port1 "onmessage"
+    (Jv.callback ~arity:1 (fun _ ->
+         ignore (Jv.call port1 "close" [||]) ;
+         f () ) ) ;
+  ignore (Jv.call port2 "postMessage" [|Jv.of_int 0|])
 
-let rec run =
-  lazy (Async.Run_queue.create ~schedule:(fun () -> queue_microtask turn_now))
+let host =
+  { Private.Host.now_ms= (fun () -> Performance.now_ms G.performance)
+  ; set_timer
+  ; request_frame= (fun f -> ignore (G.request_animation_frame (fun _ -> f ())))
+  ; queue_microtask
+  ; post_task }
+
+let rec run = lazy (Q.create ~schedule:(fun () -> queue_microtask turn_now))
 
 and turn f =
   let r = Lazy.force run in
-  r.in_turn <- true ;
-  f () ;
-  Async.Run_queue.drain r ;
-  r.in_turn <- false
+  Q.with_turn r (fun () -> f () ; Q.drain r)
 
 and turn_now () = turn (fun () -> ())
 
 let start tok t ~ok ~error =
-  turn (fun () -> Async.start ~host ~run:(Lazy.force run) tok t ~ok ~error)
+  turn (fun () ->
+      Private.Async.start ~host ~run:(Lazy.force run) tok t ~ok ~error )
 
 (* A fetch with an abort. The response and the body are one step: an end action
    also runs when a step ends normally, thus an abort at the end of a step that
@@ -70,11 +85,7 @@ let with_server f =
       [|Jv.of_string "node:http"|]
   in
   let handler =
-    Jv.callback ~arity:2 (fun req res ->
-        ignore req ;
-        ignore
-          (Jv.call (Jv.get req "socket") "on"
-             [|Jv.of_string "close"; Jv.callback ~arity:0 (fun () -> ())|] ) ;
+    Jv.callback ~arity:2 (fun _req res ->
         ignore
           (G.set_timeout ~ms:150 (fun () ->
                if not (Jv.to_bool (Jv.get res "writableEnded")) then
@@ -96,7 +107,7 @@ let with_server f =
         ; Jv.callback ~arity:1 (fun _ -> on_listen ()) |] )
 
 (* Each check finishes later; the program reports when all are done. *)
-let later ms name f =
+let later ms f =
   incr pending ;
   ignore
     (G.set_timeout ~ms (fun () ->
@@ -107,39 +118,39 @@ let later ms name f =
              ( if !failures = 0 then "all browser checks pass"
                else "browser checks FAILED" ) ;
            if !failures > 0 then exit 1
-         end ) ) ;
-  ignore name
+         end ) )
 
 let () =
   (* A real timer. *)
   let fired = ref false in
-  start (Cancel.root ()) (Async.sleep ~ms:30)
+  start (C.root ())
+    (Async.sleep (Span.ms 30))
     ~ok:(fun () -> fired := true)
     ~error:(fun _ -> ()) ;
-  later 100 "sleep" (fun () -> check "a real timer fires" !fired) ;
+  later 100 (fun () -> check "a real timer fires" !fired) ;
   (* A cancel clears the real timer. *)
-  let fired = ref false and tok = Cancel.root () in
-  start tok (Async.sleep ~ms:30)
+  let fired = ref false and tok = C.root () in
+  start tok
+    (Async.sleep (Span.ms 30))
     ~ok:(fun () -> fired := true)
     ~error:(fun _ -> ()) ;
-  Cancel.cancel tok ;
-  later 100 "sleep cancel" (fun () ->
-      check "a cancel clears a real timer" (not !fired) ) ;
+  C.cancel tok ;
+  later 100 (fun () -> check "a cancel clears a real timer" (not !fired)) ;
   with_server (fun url stop ->
       (* A fetch that completes: the body arrives, also after the end of the
          step. *)
       let body = ref None in
-      start (Cancel.root ()) (fetch_text url)
+      start (C.root ()) (fetch_text url)
         ~ok:(fun s -> body := Some s)
         ~error:(fun _ -> body := Some "<error>") ;
       (* A fetch with a cancel: the request is aborted, and no result
          arrives. *)
-      let got = ref false and tok = Cancel.root () in
+      let got = ref false and tok = C.root () in
       start tok (fetch_text url)
         ~ok:(fun _ -> got := true)
         ~error:(fun _ -> got := true) ;
-      ignore (G.set_timeout ~ms:20 (fun () -> Cancel.cancel tok)) ;
-      later 600 "fetch" (fun () ->
+      ignore (G.set_timeout ~ms:20 (fun () -> C.cancel tok)) ;
+      later 600 (fun () ->
           check "a fetch gives its body" (!body = Some "slow body") ;
           (* undici in node keeps the server side open after a client abort,
              thus the check is on the client side: the abort ran, and no result

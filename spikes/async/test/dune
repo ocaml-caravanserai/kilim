@@ -1,6 +1,0 @@
-; The same test runs natively, with js_of_ocaml and with wasm_of_ocaml (node).
-
-(test
- (name test_async)
- (modes exe js wasm)
- (libraries kilim_spike_async))

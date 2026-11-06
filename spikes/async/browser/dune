@@ -1,7 +1,0 @@
-; Spike 1, browser part: a real host on Brr (timers, fetch with an abort),
-; in the js_of_ocaml and wasm_of_ocaml builds on node.
-
-(test
- (name test_browser)
- (modes js wasm)
- (libraries kilim_spike_async brr))

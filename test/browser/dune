@@ -1,0 +1,7 @@
+; A real host on Brr: timers and a fetch with an abort, in the js_of_ocaml and
+; wasm_of_ocaml builds on node (a local HTTP server of node).
+
+(test
+ (name test_browser)
+ (modes js wasm)
+ (libraries kilim brr))

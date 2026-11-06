@@ -1,5 +1,0 @@
-; Spike 1 of Phase 0: Async and Cancel with the trampoline. The library uses
-; only the standard library, with no Printf, Hashtbl, Fun or Printexc.
-
-(library
- (name kilim_spike_async))

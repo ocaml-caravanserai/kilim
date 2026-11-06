@@ -15,8 +15,6 @@
 
 (package
  (name kilim)
- ; Phase 0 has only spikes, thus the package installs nothing yet.
- (allow_empty)
  (synopsis
   "A browser application library for OCaml: the Elm architecture with encapsulated components")
  (description
@@ -33,6 +31,10 @@
     :with-test
     (>= 6.4)))
   (windtrap
+   (and
+    :with-test
+    (>= 0.2.0)))
+  (ppx_windtrap
    (and
     :with-test
     (>= 0.2.0)))

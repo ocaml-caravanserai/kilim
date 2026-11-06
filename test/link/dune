@@ -1,0 +1,14 @@
+; The link check of design section 13: a program that uses each module of
+; kilim must link none of these units (each one links CamlinternalFormat, or
+; is a part of Printf). The bytecode build lists the linked units exactly.
+
+(executable
+ (name link_check)
+ (modes byte)
+ (libraries kilim))
+
+(rule
+ (alias runtest)
+ (action
+  (system
+   "if ocamlobjinfo %{dep:link_check.bc} | grep -E \"compilation unit .(CamlinternalFormat|Stdlib__(Printf|Format|Scanf|Hashtbl|Random|Fun|Printexc)|Str)'\"; then echo 'kilim links a banned unit (design section 13)'; exit 1; fi")))

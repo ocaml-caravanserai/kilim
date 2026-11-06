@@ -1,0 +1,11 @@
+; The core library. It uses only the standard library, and none of Printf,
+; Format, Scanf, Str, Hashtbl, Random, Fun or Printexc (design section 13).
+; test/link makes sure of it.
+
+(library
+ (name kilim)
+ (public_name kilim)
+ (instrumentation
+  (backend ppx_windtrap.coverage))
+ (instrumentation
+  (backend ppx_windtrap.mutate)))

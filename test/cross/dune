@@ -1,0 +1,8 @@
+; The big tests in the three builds: native code, js_of_ocaml and
+; wasm_of_ocaml (on node). They are not in the mutation suite, because each
+; mutant would run them.
+
+(test
+ (name test_cross)
+ (modes exe js wasm)
+ (libraries kilim))
