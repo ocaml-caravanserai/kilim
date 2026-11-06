@@ -5,7 +5,11 @@ Phase 0 builds three spikes before the real work (section 16 of
 native code, js_of_ocaml 6.4.1 and wasm_of_ocaml 6.4.1, with OCaml 5.5.1 on
 node 24. `make test` runs all of them.
 
-## Spike 1: Async and Cancel (`spikes/async`)
+## Spike 1: Async and Cancel
+
+The library `kilim` (src/core) took the place of this spike. Its tests are in
+test/core (windtrap), test/cross (the three builds) and test/browser (a real
+host on Brr). The results that follow are from the spike.
 
 The library uses only the standard library. A test with a fake host and a
 virtual clock passes 16 checks in the three builds:
