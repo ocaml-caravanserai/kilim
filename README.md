@@ -18,7 +18,7 @@ kilim builds with js_of_ocaml and wasm_of_ocaml in their default modes.
 This repository is in Phase 0: spikes and budget targets. No library is ready
 for use at this time.
 
-The design is in [docs/design.html](docs/design.html).
+The design is in [docs/design.html](docs/design.html). The results of the spikes are in [docs/phase0.md](docs/phase0.md).
 
 ## Development
 
