@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kilim design plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+/* Plan: a technical design document. Indigo and madder from kilim dyes, cool neutrals.
+   Layout: a sticky contents column at the left, one reading column at the right. */
+:root{
+  --bg:#f4f5f9; --panel:#ffffff; --ink:#1b1d2b; --muted:#575c73; --line:#d8dae6;
+  --accent:#2c3f94; --accent-tint:#e5e9f8; --madder:#a53a2b; --madder-tint:#f7e6e2;
+  --saffron:#9a6512; --saffron-tint:#f8edd8; --ok:#2d6a4f; --ok-tint:#e1f0e7; --code-bg:#eceef5;
+  --font-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10121a; --panel:#181b27; --ink:#e6e8f2; --muted:#a2a7bf; --line:#2c3044;
+    --accent:#9aabff; --accent-tint:#212950; --madder:#ec8b77; --madder-tint:#3a1f1b;
+    --saffron:#e8b85a; --saffron-tint:#3a2d14; --ok:#7fd0a6; --ok-tint:#173226; --code-bg:#1f2232;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10121a; --panel:#181b27; --ink:#e6e8f2; --muted:#a2a7bf; --line:#2c3044;
+  --accent:#9aabff; --accent-tint:#212950; --madder:#ec8b77; --madder-tint:#3a1f1b;
+  --saffron:#e8b85a; --saffron-tint:#3a2d14; --ok:#7fd0a6; --ok-tint:#173226; --code-bg:#1f2232;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--font-body)}
+a{color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.band{height:14px;opacity:.9;
+  background:
+    linear-gradient(135deg, var(--madder) 25%, transparent 25%) -7px 0/14px 14px,
+    linear-gradient(225deg, var(--madder) 25%, transparent 25%) -7px 0/14px 14px,
+    linear-gradient(315deg, var(--accent) 25%, transparent 25%) 0 0/14px 14px,
+    linear-gradient(45deg, var(--accent) 25%, transparent 25%) 0 0/14px 14px}
+header.top{padding:40px 24px 28px;border-bottom:1px solid var(--line);background:var(--panel)}
+header.top .inner{max-width:1180px;margin:0 auto;display:grid;gap:10px}
+.eyebrow{font:500 13px/1.3 var(--font-mono);color:var(--muted);letter-spacing:.02em}
+h1,h2,h3{font-family:var(--font-display);text-wrap:balance;line-height:1.2}
+h1{font-size:clamp(30px,4.4vw,46px);margin:0;font-weight:700}
+h1 .kw{color:var(--madder)}
+.lede{max-width:70ch;color:var(--muted);margin:0;font-size:17px}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.pill{display:inline-flex;align-items:center;font:500 12.5px/1 var(--font-mono);padding:6px 10px;border-radius:99px;border:1px solid var(--line);background:var(--bg);color:var(--muted)}
+.pill.draft{border-color:var(--saffron);color:var(--saffron);background:var(--saffron-tint)}
+.layout{max-width:1180px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:48px}
+nav.toc{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;padding:28px 0}
+nav.toc h2{font:600 12px/1 var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 12px}
+nav.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px;counter-reset:toc}
+nav.toc li{counter-increment:toc}
+nav.toc a{display:flex;gap:10px;padding:5px 8px;border-radius:6px;color:var(--ink);text-decoration:none;font-size:14px;line-height:1.35}
+nav.toc a::before{content:counter(toc, decimal-leading-zero);font:500 12px/1.6 var(--font-mono);color:var(--muted);min-width:20px}
+nav.toc a:hover{background:var(--accent-tint)}
+main{padding:28px 0 80px;min-width:0;counter-reset:sec}
+section{padding:26px 0 30px;border-bottom:1px solid var(--line);counter-increment:sec}
+section:last-of-type{border-bottom:none}
+section > h2{font-size:27px;margin:0 0 14px;display:flex;gap:14px;align-items:baseline}
+section > h2::before{content:counter(sec, decimal-leading-zero);font:500 14px/1 var(--font-mono);color:var(--madder)}
+h3{font-size:19px;margin:28px 0 8px}
+p, li{max-width:70ch}
+p{margin:0 0 12px}
+ul,ol{padding-left:22px;margin:0 0 12px}
+li{margin:3px 0}
+code{font:0.88em/1.4 var(--font-mono);background:var(--code-bg);padding:1px 5px;border-radius:4px}
+pre{font:13.5px/1.55 var(--font-mono);background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:10px 0 16px;max-width:100%}
+pre code{background:none;padding:0;font-size:inherit}
+.cm{color:var(--muted);font-style:italic}
+.kw{color:var(--madder)}
+.note{border-left:3px solid var(--accent);background:var(--accent-tint);padding:10px 14px;border-radius:0 8px 8px 0;margin:12px 0 16px;max-width:72ch}
+.note.warn{border-color:var(--saffron);background:var(--saffron-tint)}
+.note strong{font-weight:600}
+.tablewrap{overflow-x:auto;margin:10px 0 18px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font-weight:600;background:var(--bg);font-size:13.5px}
+tr:last-child td{border-bottom:none}
+td:first-child{white-space:nowrap}
+td.wrap{white-space:normal}
+tr.gone td{color:var(--muted)}
+.decisions{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0}
+.decision{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.decision .q{font:500 12.5px/1.3 var(--font-mono);color:var(--muted)}
+.decision .a{font-weight:600;margin-top:4px}
+.decision p{margin:6px 0 0;font-size:14px;color:var(--muted)}
+.decision.new{border-color:var(--madder)}
+figure{margin:16px 0 22px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
+figure svg{display:block;width:100%;min-width:640px;height:auto;color:var(--ink);font-family:var(--font-body)}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px;max-width:75ch}
+.d-box{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+.d-core{fill:var(--accent-tint);stroke:var(--accent);stroke-width:1.5}
+.d-new{fill:var(--madder-tint);stroke:var(--madder);stroke-width:1.5}
+.d-test{fill:var(--ok-tint);stroke:var(--ok);stroke-width:1.5;stroke-dasharray:5 4}
+.d-scope{fill:none;stroke:var(--muted);stroke-width:1.2;stroke-dasharray:5 4}
+.d-t{fill:currentColor;font-size:13px}
+.d-b{fill:currentColor;font-size:13.5px;font-weight:600}
+.d-s{fill:var(--muted);font-size:11.5px}
+.d-m{fill:currentColor;font-size:12px;font-family:var(--font-mono)}
+.d-line{stroke:currentColor;stroke-width:1.4;fill:none}
+.d-arrow{fill:currentColor}
+.phase{display:grid;grid-template-columns:76px minmax(0,1fr);gap:14px;padding:14px 0;border-bottom:1px dashed var(--line)}
+.phase:last-child{border-bottom:none}
+.phase .n{font:700 26px/1 var(--font-display);color:var(--accent)}
+.phase h4{margin:0 0 4px;font:600 16.5px/1.3 var(--font-body)}
+.phase p{margin:0 0 6px;font-size:15px}
+.exit{font-size:14px;color:var(--muted)}
+.exit b{color:var(--ok);font-weight:600}
+.sev{display:inline-block;font:600 11.5px/1 var(--font-mono);padding:4px 7px;border-radius:99px;white-space:nowrap}
+.sev.high{background:var(--madder-tint);color:var(--madder)}
+.sev.med{background:var(--saffron-tint);color:var(--saffron)}
+.sev.low{background:var(--ok-tint);color:var(--ok)}
+.sev.off{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.qs{list-style:none;padding:0;display:grid;gap:10px;counter-reset:q}
+.qs li{counter-increment:q;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px 12px 52px;position:relative;max-width:none}
+.qs li::before{content:"Q" counter(q);position:absolute;left:14px;top:12px;font:600 13px/1.5 var(--font-mono);color:var(--madder)}
+footer{color:var(--muted);font-size:13.5px;padding:24px 0 40px}
+@media (max-width: 860px){
+  .layout{grid-template-columns:1fr;gap:0}
+  nav.toc{position:static;max-height:none;padding:20px 0 0}
+  nav.toc ol{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+}
+@media (max-width: 420px){
+  header.top{padding:28px 16px 22px}
+  .layout{padding:0 16px}
+  .phase{grid-template-columns:1fr;gap:4px}
+}
+</style>
+</head>
+<body>
+<div class="band" aria-hidden="true"></div>
+<header class="top">
+  <div class="inner">
+    <div class="eyebrow">github.com/ocaml-caravanserai/kilim &middot; design plan &middot; draft 26 &middot; 2026-11-06</div>
+    <h1><span class="kw">kilim</span>: a browser application library for OCaml</h1>
+    <p class="lede">The Elm architecture, with components that keep their own state, actions and tasks. The core performs no OCaml effects. Async tasks are values with cancel tokens, and an unmount cancels all tasks of a component.</p>
+    <div class="meta">
+      <span class="pill draft">Draft 26: final, after 22 reviews</span>
+      <span class="pill">OCaml &ge; 5.5</span>
+      <span class="pill">js_of_ocaml + wasm_of_ocaml, default modes</span>
+      <span class="pill">opam package: kilim</span>
+      <span class="pill">DOM: Brr</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#decisions">Decisions</a></li>
+    <li><a href="#review">Reviews and changes</a></li>
+    <li><a href="#names">Name</a></li>
+    <li><a href="#goals">Goals and non-goals</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#compare">Elm, React and kilim</a></li>
+    <li><a href="#core">TEA core</a></li>
+    <li><a href="#components">Components</a></li>
+    <li><a href="#shared">Shared state</a></li>
+    <li><a href="#runtime">Runtime semantics</a></li>
+    <li><a href="#async">Async tasks</a></li>
+    <li><a href="#brr">Browser bindings: Brr</a></li>
+    <li><a href="#testing">Testing</a></li>
+    <li><a href="#layout">Repository layout</a></li>
+    <li><a href="#phases">Phases</a></li>
+    <li><a href="#risks">Risks</a></li>
+    <li><a href="#questions">Answered questions</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="summary">
+  <h2>Summary</h2>
+  <p>The ocaml-caravanserai organization has three libraries: <b>caravan</b> (HTTP server and web framework), <b>weft</b> (structured concurrency) and <b>windtrap</b> (tests). kilim is the library for the browser side. kilim does not depend on weft.</p>
+  <p>kilim has three main ideas:</p>
+  <ul>
+    <li><b>The Elm architecture (TEA).</b> A model, typed messages, a pure <code>update</code> and a <code>view</code> function.</li>
+    <li><b>Encapsulated components.</b> A component keeps its own model, messages, tasks and subscriptions. The parent sees only typed props and typed outputs. The compiler enforces this through the <code>.mli</code> file.</li>
+    <li><b>No OCaml effects.</b> Event handling and rendering are synchronous. An async task is a value of the type <code>'a Async.t</code>, written with <code>let*</code>. The runtime gives each task a cancel token. The tokens make a tree: an unmount cancels the token of the component, and thus all of its tasks, timers and requests.</li>
+  </ul>
+  <p>Because kilim performs no effects, the two compilers use their default modes, with no CPS transform. The core is pure OCaml with no browser dependency, thus the tests run native with a fake DOM and a virtual clock.</p>
+</section>
+
+<section id="decisions">
+  <h2>Decisions</h2>
+  <div class="decisions">
+    <div class="decision"><div class="q">Async and effects</div><div class="a">No weft. No OCaml effects.</div><p>Commands are values. Async tasks use <code>'a Async.t</code> with cancel tokens and a trampoline.</p></div>
+    <div class="decision new"><div class="q">DOM bindings (draft 7)</div><div class="a">Brr + kilim.web, no JS file</div><p>Brr for the Web APIs. <code>Jv</code> bindings in <code>kilim.web</code> for the gaps. The diff calls <code>Jv</code> with literal names and literal arrays. The compilers change these calls into direct JS calls.</p></div>
+    <div class="decision"><div class="q">Targets</div><div class="a">js_of_ocaml + wasm_of_ocaml</div><p>Default modes of the two compilers. No CPS, because kilim performs no effects.</p></div>
+    <div class="decision"><div class="q">SSR and hydration</div><div class="a">After version 1</div><p>The view type can render to a string from the start.</p></div>
+    <div class="decision"><div class="q">Name</div><div class="a">kilim</div><p>The opam package and the repository name.</p></div>
+    <div class="decision new"><div class="q">License</div><div class="a">MPL-2.0</div><p>The same license as caravan.</p></div>
+    <div class="decision new"><div class="q">Tasks and interop</div><div class="a">Tasks only send, Fut only</div><p>A task cannot read the model. The only interop for <code>Async.t</code> is <code>of_fut</code> for Brr <code>Fut.t</code>.</p></div>
+    <div class="decision"><div class="q">Components</div><div class="a">OCaml 5.5 module-dependent functions</div><p><code>Component.v (module Counter)</code>. Outputs through <code>Ctx.emit</code>. Shallow props equality by default.</p></div>
+    <div class="decision new"><div class="q">Runtime (draft 26)</div><div class="a">One turn for each callback</div><p>Each callback runs one turn: settle the two queues, then render. A discrete event renders at once. Other renders wait for a frame or 100 ms. A limit of 50 ms of busy time.</p></div>
+    <div class="decision new"><div class="q">Model change (draft 20)</div><div class="a">Physical equality</div><p>An instance is dirty when <code>update</code> gives a model that is not physically the same as the old model (<code>Object.is</code> under js_of_ocaml). No structural equality on models.</p></div>
+    <div class="decision new"><div class="q">Lifecycle (draft 7)</div><div class="a">An alive flag for each instance</div><p>A message goes to an instance object. The runtime drops each message to an unmounted instance, also with no token.</p></div>
+    <div class="decision"><div class="q">Scope of version 1</div><div class="a">Smaller again</div><p>No <code>Cmd.msg</code>, no <code>Cmd.run</code>, no <code>props_changed</code>, no <code>View.lazy_</code>. Handles, Store, <code>Component.any</code> and slots come after version 1.</p></div>
+  </div>
+</section>
+
+<section id="review">
+  <h2>Reviews and changes</h2>
+  <p>Twenty-two rounds of adversarial review examined the plan. In each round, two independent reviewers examined correctness, and complexity and performance. I checked their main claims myself.</p>
+  <h3>Twenty-second review (draft 25)</h3>
+  <p>No finding is high. The correctness reviewer found one low fault, and no other fault in its full pass. The performance reviewer measured the draft 25 Trusted Types change in each run with no error. Its findings are in the new text of draft 25.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 25</th><th>Change in draft 26</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The order rule tells users to load a library with a blocking script before the head part. That delays the build download by one fetch. Measured: about 105 ms in Chrome and Firefox. The rule is also stricter than necessary.</td><td class="wrap">A blocking script anywhere before the start part (inline form), or anywhere (<code>loader.js</code> form), never before the head part.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">Two kilim apps on one page: the fixed flag starts one build two times, and the second <code>createPolicy</code> throws. Tested.</td><td class="wrap">The keys of the result, the flag and the started mark are the <code>data-base</code> value. The policy object is shared on the page. A CI test.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">No path for a library that ships only as an ES module. The CI test of the hand-off depends on browser timing, thus it can pass when the path is broken. Measured: Firefox took the path in 7 of 10 runs.</td><td class="wrap"><code>import()</code> in a task through <code>Async.of_fut</code>. The test server forces the path, and a dev attribute records it.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Twenty-first review (draft 24)</h3>
+  <p>The two reviewers found the Trusted Types fault independently, and tested it in headless Chrome 157 and Firefox 159. The performance reviewer found no cost in the draft 24 changes, and its 6 Firefox runs of the new tag position were stable. Each reviewer found no other real fault in its full pass.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 24</th><th>Change in draft 25</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">In the hand-off, the head part inserts the build with a plain string, but only the start part had the Trusted Types policy. Under a Trusted Types CSP, the <code>loader.js</code> form then does not start. The hand-off is the usual path in Chrome, also on a first visit. Tested: 5 of 5 first visits in Chrome.</td><td class="wrap">One start function, which either part calls, makes the policy one time. CI tests in the <code>loader.js</code> form in Chromium (first visit) and Firefox (repeat visit).</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">The build can run before each <code>defer</code> script of the page, and the page does not tell this. An app that reads a global of a <code>defer</code> library in <code>init</code> fails. Tested in Chrome and Firefox.</td><td class="wrap">A documented rule: link a library into the build, or load it with a blocking script before the head part.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Twentieth review (draft 23)</h3>
+  <p>The two reviewers found the same two faults independently, both in the <code>loader.js</code> form, and tested them in headless Chrome 157 and Firefox 159. The inline form has neither fault. Each reviewer found no other real fault in its full pass.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 23</th><th>Change in draft 24</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">In Chrome, the <code>defer</code> start part can run before the <code>async</code> head part, for example on a repeat visit with all files in the cache. It then finds no probe result, and the app does not start. Tested: in each repeat visit in Chrome.</td><td class="wrap">The part that runs second starts the build: a flag from the start part, and a start from the head part after its probes. One probe stays. A CI test of a repeat visit in Chromium.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A <code>defer</code> start part at the end of the <code>body</code> waits for each earlier <code>defer</code> script. Measured: about 1 s of delay with a slow tag manager.</td><td class="wrap">The <code>defer</code> start tag goes directly after the <code>async</code> tag, before the stylesheets and other <code>defer</code> scripts. Measured in Chrome and Firefox (Firefox not confirmed by the second reviewer).</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Nineteenth review (draft 22)</h3>
+  <p>The correctness reviewer found no fault ("NO FINDINGS"). It tested the two-part loader in headless Chrome 157 and Firefox 159: a slow stylesheet and a slow <code>@import</code> are waited for, a failed stylesheet does not hang, each build downloads one time, and the Trusted Types policy works (with a control). The performance reviewer found three loader costs, and it measured them in headless Chrome.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 22</th><th>Change in draft 23</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap"><code>run</code> waits for <code>DOMContentLoaded</code>, and that event waits for each <code>defer</code> script on the page. Measured: 700 ms of delay with a slow third-party script, in the js_of_ocaml build in Chrome.</td><td class="wrap">No wait when the mount element exists. If not, a wait for <code>readystatechange</code>. A CI test with a slow <code>defer</code> script.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">A single <code>defer</code> <code>loader.js</code> starts the build download after the stylesheets. Measured: 300 ms more, not 100 ms, with a 400 KB build.</td><td class="wrap">Two parts for <code>loader.js</code> too: <code>async</code> before the stylesheets, and <code>defer</code> with <code>data-start</code>. Measured: 657 ms against 858 ms.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">The start part runs the probes again. Under a CSP with no <code>'wasm-unsafe-eval'</code>, each page view sends two CSP violation reports. Measured.</td><td class="wrap">The head part stores the result, and the start part reads it. An optional <code>data-build="js"</code>.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Eighteenth review (draft 21)</h3>
+  <p>The two reviewers found the <code>@import</code> fault independently, and tested it in headless Chrome and Firefox. The performance reviewer measured the cut that draft 22 applies. Each reviewer found no other real fault in its full pass.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 21</th><th>Change in draft 22</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The stylesheet filter of <code>run</code> does not see <code>@import</code>: in Chrome, the sheet of a link is not null while its import loads. A <code>&lt;style&gt;@import</code> is not a link. Thus the first render has no CSS. Tested.</td><td class="wrap">A cut: the loader has two parts. The head part adds preloads, and the start part at the end of the <code>body</code> inserts the build. The parser holds it until the stylesheets that block scripts are done. <code>run</code> has no stylesheet rule. Measured.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A stylesheet that failed before <code>run</code> keeps a null sheet in some cases (SRI in Chrome, CSP in Firefox). The wait then lasts until window <code>load</code>, or forever with an endless image. A <code>type</code> with a charset parameter is not matched. Tested.</td><td class="wrap">The same cut: the browser decides, and a failed stylesheet does not block. CI tests for these cases.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap"><code>Unsafe_html.t</code> has no compare rule and no place. A new <code>TrustedHTML</code> on each render writes <code>innerHTML</code> each time and resets the selection. The core cannot render it to a string. Measured: 8.8 ms for each write of 34 KB.</td><td class="wrap">A core record of the string and an optional native value. The diff compares the strings. <code>of_trusted</code> is in <code>kilim.browser</code>.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Seventeenth review (draft 20)</h3>
+  <p>The two reviewers found the stylesheet wait faults and the float model fault independently. They tested them in headless Chrome and Firefox, and under js_of_ocaml. I measured the <code>Fun.id</code> fault again myself.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 20</th><th>Change in draft 21</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Brr links <code>Fun</code> through <code>Fun.id</code>, and <code>Fun</code> links <code>Printf</code>. Thus the link check cannot pass, and the size target does not apply. Measured: 23,394 bytes against 9,904 for a hello world with only <code>Fun.id</code>. An earlier claim on this page ("Brr links no Printf") was incorrect.</td><td class="wrap">The check covers kilim other than Brr. A size baseline that includes Brr. A small pull request to Brr for <code>Fun.id</code> (about 14 KB after it).</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The 3 s end of the stylesheet wait starts the app before a slow main stylesheet, thus the first render has no CSS. Also, the Wasm build usually starts after <code>load</code>, thus a wait for that event never ends, and a stylesheet that a script adds after <code>load</code> delays the start. Tested in Chrome and Firefox.</td><td class="wrap">No wait when <code>readyState</code> is <code>"complete"</code>. If not, wait only for the links of that time, until they are done or <code>load</code>. The 3 s timer only filters the links again and warns.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">Under js_of_ocaml, <code>!=</code> is <code>!==</code>, thus a float model that changes from <code>0.</code> to <code>-0.</code> does not render. Tested.</td><td class="wrap">The js_of_ocaml build uses <code>Object.is</code> for the model compare, the JS form of identity.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">Under Trusted Types, <code>View.unsafe_html</code> writes a plain string to <code>innerHTML</code>, and the browser refuses it.</td><td class="wrap"><code>Unsafe_html.t</code>, with <code>of_trusted</code> for a value from the policy of the app.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Sixteenth review (draft 19)</h3>
+  <p>All findings are in the loader and start rules of draft 19. The correctness reviewer found no other real fault in its full pass. The two reviewers found the stylesheet wait fault independently, and tested it in headless Chrome and Firefox 159. Draft 20 also adds the rule for a model change that you asked about.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 19</th><th>Change in draft 20</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The stylesheet wait never ends for a <code>disabled</code> link or a link with an empty <code>href</code>, because the browser fetches nothing and fires no event. The app never starts. A print or alternate stylesheet delays the start by its full download. Tested.</td><td class="wrap">Wait only for links that apply to the first layout. End the wait at the window <code>load</code> event or after 3 s. Tested: the disabled and empty cases start at once, and a slow main stylesheet is still waited for.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A static server ignores <code>?v=</code>. During a deploy that is not atomic, an old server gives the old launcher under the new URL, and the browser stores it as immutable for up to one year.</td><td class="wrap"><code>kilim dist</code> after dune makes copies with content names. An old server then gives a 404, not a stale file. Keep the files of the last deploy.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">A CSP with Trusted Types blocks the loader, because it sets <code>script.src</code> with a plain string. Tested. <code>loader.js</code> has no content name.</td><td class="wrap">A Trusted Types policy with the fixed name <code>kilim-loader</code>. <code>loader.js</code> also gets a content name in <code>kilim dist</code>.</td></tr>
+      <tr><td><span class="sev low">Your question</span></td><td class="wrap">The page did not tell how the runtime decides that a model changed. Structural equality (<code>=</code>) raises on a closure, misses <code>0.</code> against <code>-0.</code>, and costs O(n). Tested.</td><td class="wrap">Physical equality: an instance is dirty when <code>update</code> gives a new physical model.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Fifteenth review (draft 18)</h3>
+  <p>All findings are in the loader changes of draft 18. The correctness reviewer found no other real fault in its full pass. The two reviewers found the profile hash independently. They tested the loader faults in headless Chrome, and the dune fault with dune 3.24.2.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 18</th><th>Change in draft 19</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">With the loader first, an async build can render before the stylesheets apply. A layout read in the first turn gets the unstyled size. Tested: height 18 against 300.</td><td class="wrap"><code>run</code> also waits for each stylesheet that has not loaded. Tested: 300, and the download stays early.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A CSP <code>&lt;meta&gt;</code> after the loader does not cover the probe. The loader picks Wasm, and the compile is then blocked. Measured.</td><td class="wrap">The loader comes after <code>&lt;meta charset&gt;</code> and each CSP <code>&lt;meta&gt;</code>. A dev warning and a CI test.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A dune rule cannot declare files whose names come from their content, except with the experimental directory targets. The plan has no step that writes the HTML. Tested with dune 3.24.2.</td><td class="wrap">No copies: a content hash as a query string. The rule fills a user HTML template or writes a JSON manifest.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">If the dev check is in the script text, dev and release have different CSP hashes, and a release build is blocked by the CSP of a dev build.</td><td class="wrap">The profile is a <code>data-</code> attribute. A CI test compares the dev and release hashes.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Fourteenth review (draft 17)</h3>
+  <p>The correctness reviewer found no high or medium fault, in the new parts or in its full pass over the design. It tested the loader in headless Chrome: deep links, the CSP hash, the <code>JSTag</code> probe and the preload. The performance reviewer found no cost in the <code>Cmd.latest</code> change, and two medium load-time problems that it measured in headless Chrome.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 17</th><th>Change in draft 18</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">An inline script waits for each stylesheet before it. In the usual head (CSS first), the build request starts one round trip late. Measured: 314 ms to 331 ms against 214 ms.</td><td class="wrap">The loader is the first element in the <code>head</code>. The snippet, the documentation, a dev warning and a CI test with a slow stylesheet.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Only the <code>.wasm</code> has a content hash. A launcher with a fixed name costs one revalidation on each repeat visit, or a stale launcher loads an old <code>.wasm</code> after a deploy. Measured: 213 ms against 113 ms on a repeat visit.</td><td class="wrap">Content-hashed copies of the launcher and of the js_of_ocaml build, with their names in the <code>data-</code> attributes. Hashed files are immutable.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">The text does not say that a cancel of an ended token sets its cancelled flag. An implementation with one state can make the cancel a no-op, and then a stale <code>Cmd.latest</code> result gets through.</td><td class="wrap">A rule and a unit test: a cancel of an ended token sets the flag and runs no action again.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Thirteenth review (draft 16)</h3>
+  <p>No finding is high. The correctness reviewer found no new fault in the turn, the time limit, the tokens, the boundaries, Context, the keyed diff, controlled inputs and DOM safety. The two reviewers found the changing CSP hash independently. The reviewers tested the loader in headless Chrome with a small server. I tested the <code>Cmd.latest</code> fix in the model of the reviewer.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 16</th><th>Change in draft 17</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The key of <code>Cmd.latest</code> leaves its table when the task ends. But a result in the queue always belongs to an ended task. Thus a newer key press cancels nothing, and the stale result arrives. Tested: query "ab" shows the results of "a".</td><td class="wrap">The key leaves when the result message or the error leaves the queue. Tested: the stale result is dropped, and 1,000 distinct keys leave an empty table.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The loader resolves relative names against the URL of the document. A deep link of a router app (<code>/users/42</code>) loads nothing. Tested in headless Chrome.</td><td class="wrap">An absolute base path in a <code>data-</code> attribute, or the URL of <code>loader.js</code> itself. A CI test for a deep link.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The inline script contains the hashed name of the <code>.wasm</code> file, thus its CSP hash changes with each build, and a static CSP blocks the next deploy. The default <code>loader.js</code> adds one round trip. Measured: 314 ms against 213 ms.</td><td class="wrap">The build-specific names are in <code>data-</code> attributes, thus the hash is fixed. The inline form is the default. <code>loader.js</code> is the form for a CSP with no hash, with <code>async</code>.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Twelfth review (draft 15)</h3>
+  <p>No finding is high. The two reviewers found the two loader faults independently. The correctness reviewer tested them in headless Chrome with a small server. I ran the probe of the performance reviewer again.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 15</th><th>Change in draft 16</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">An inserted build script is async. If the body comes later than the head, the build runs before <code>#app</code> exists, and <code>run</code> finds no element. Tested: "MISSING" with a body 20 ms to 300 ms late.</td><td class="wrap"><code>run</code> waits for <code>DOMContentLoaded</code> while the document is loading. The default loader is a <code>defer</code> script. A CI test with a late body.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A usual strict CSP (<code>script-src 'self'</code>) blocks the inline loader, thus no build loads. The fallback after a failed Wasm compile cannot be built, because the generated launcher gives the loader no hook. Tested: the loader did not run.</td><td class="wrap">A same-origin <code>loader.js</code> by default, and an inline form with its <code>sha256</code> source expression. Synchronous probes pick one build before any build starts. No fallback after a start.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">A catch in a task step or in the <code>subs</code> pass of a render does not mark a render as pending. The preload of the <code>.wasm</code> needs the hashed file name and <code>crossorigin</code>. The key table of <code>Cmd.latest</code> keeps an entry for each key that it ever got.</td><td class="wrap">Each boundary catch outside the diff marks a render as pending. The rule reads the hashed name, with <code>crossorigin</code>, and no preload in the dev profile. A key leaves the table when its task ends.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Eleventh review (draft 14)</h3>
+  <p>No finding is high. The two reviewers found the first two findings independently. I ran the tested claims again, and each result is confirmed. The control tests of the reviewers show the two fixes.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 14</th><th>Change in draft 15</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">No rule removes a boundary from the owned list of an owner that stays alive. A page with a boundary for each row collects one dead record for each row that it ever rendered, with its exception and fallback. Tested: 100,000 entries after 1,000 replacements of 100 rows.</td><td class="wrap">The boundary keeps its list nodes. A removal, a key change and a catch unlink it from the owned list and the nested list. A leak test with a live owner. Tested: 0 entries.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The text does not tell when the token of a <code>Cmd.latest</code> task is made. If the token is made when the task starts, two key presses in one settle start two tasks, and the stale result arrives last. Tested.</td><td class="wrap">The runtime makes the token when <code>update</code> gives the command, and it cancels the old token also before its task starts. Tested: the first request never starts.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">A fallback that a catch mounts outside the render does not start its subscriptions until an unrelated render. The loader fails with no <code>WebAssembly</code> or with a CSP that blocks Wasm. The loader has no place in the libraries and the phases, and the js_of_ocaml build on WebKit has no tests. Tested: the naive loader throws.</td><td class="wrap">A catch outside the render marks a render as pending. A guarded loader with a fallback when the Wasm compile fails. A dune rule that generates an inline loader, in Phase 1. Playwright WebKit for the js_of_ocaml build and its leak tests.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Tenth review (draft 13)</h3>
+  <p>Each reviewer also did one full pass over the whole design. The two reviewers found the <code>JSTag</code> problem independently, and they recommended the same cut. I ran the tested claims again, and I tested each fix in a model, natively and under js_of_ocaml.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 13</th><th>Change in draft 14</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Without <code>JSTag</code>, the handlers inside Brr also do not catch JS exceptions (<code>Json.decode</code>, <code>Uri.of_jstr</code>). The JS helper of draft 13 cannot reach them. <code>JSTag</code> depends on the browser, not on the build.</td><td class="wrap">The loader examines <code>WebAssembly.JSTag</code> and loads the js_of_ocaml build where it is missing. No JS helper. A CI test with <code>delete WebAssembly.JSTag</code>.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Nothing removes a boundary from the nested list of its outer boundary when its owner unmounts. Tested: 20,000 dead entries after 1,000 pages of 20 cards.</td><td class="wrap">A list of owned boundaries for each instance. The unmount unlinks them. Tested: 0 entries.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">After an error in <code>update</code>, nothing marks a render as pending. A model change of another instance in the same turn does not render. Tested: 0 renders.</td><td class="wrap">Each call of <code>update</code> is in <code>try ... with</code>, and the settle continues. After a catch at the turn level, a dirty instance marks a render as pending. Tested: 1 render.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">The old token of a <code>Cmd.latest</code> key is cancelled only when the new request starts, after the message queue is empty. After a yield, a stale result can come first.</td><td class="wrap">The old token is cancelled when <code>update</code> gives the command. Tested: the stale result is dropped.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Ninth review (draft 12)</h3>
+  <p>The correctness reviewer found no high or medium fault in the new parts of draft 12. The two reviewers found the same three faults independently. I ran the tested claims again, and I tested each fix in a model, natively and under js_of_ocaml.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 12</th><th>Change in draft 13</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">In a browser, the tick runs just after a turn. Then a result after more than 1 s of idle time finds the wall-time cap passed, and it yields with no progress. The model test ran the tick after the idle time, thus it did not find this. Tested: 0 of 10 results processed.</td><td class="wrap">A turn starts a new clock if it is a macrotask turn or if no tick is pending. Tested: 10 of 10 after 0.5 s, 1.5 s and 2 s of idle time. The loop tests still stop.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The catch walks the whole child list of the owner. When all rows of a list fail in one render, the time is quadratic. Measured: 10,000 rows, 501 ms to 1,151 ms under js_of_ocaml.</td><td class="wrap">A doubly linked member list for each boundary, and a list of its nested boundaries, with an O(1) unlink. The catch walks only its subtree. Tested: 100,000 rows in 52 ms under js_of_ocaml.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">The text does not say that the tick is not a turn. If a tick runs a turn, each turn posts the next tick, and an idle page keeps one core busy.</td><td class="wrap">The tick is not a turn. It only sets the busy sum to 0, and it posts nothing.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">Without <code>JSTag</code>, a JS exception passes through the OCaml handlers inside the runtime, for example in <code>Cancel.cancel</code>. Then tokens can stay that nothing reaches.</td><td class="wrap">Phase 0 decides: without <code>JSTag</code>, each JS call that can throw goes through one JS helper that gives an error value.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Eighth review (draft 11)</h3>
+  <p>The two reviewers found the clock faults independently. The performance reviewer judged the plan buildable as phased. I ran the tested claims again, and I tested each fix in a model, natively and under js_of_ocaml.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 11</th><th>Change in draft 12</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A task that loops through microtasks with no message runs 1 or 2 continuations in each drain. The drain never gets to 256, and the page freezes. Measured: 2,000,000 microtask turns, 0 yields.</td><td class="wrap">The drain also reads the clock before its first continuation. Tested: the loop stops at the limit.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The 4 ms gap rule counts wall time. Results less than 4 ms apart (IndexedDB, streamed chunks, fast listeners) yield with no progress and give false warnings. A promise loop with more than 4 ms of foreign work in each step never yields. Tested in the two directions.</td><td class="wrap">The limit counts the busy time of kilim turns. A macrotask turn and one <code>MessageChannel</code> message after a turn reset it. A wall-time cap of 1 s with no reset. Tested: 0 false yields, and the promise loop stops after 1 s.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">With two boundaries in one view, the outer catch does not reach the instances of the inner boundary. They stay alive with live tokens. Tested.</td><td class="wrap">A boundary records its owner and its outer boundary. The catch walks the child list of the owner and unmounts each child whose boundary chain contains the boundary. Tested.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A fallback that a render-alone catch builds misses the providers on the path of the parent. A boundary list of members grows without a limit: 100,000 entries after 1,000 replacements of 100 rows. Measured.</td><td class="wrap">A boundary records its context environment at mount. No member list: a doubly linked child list of the owner, with an O(1) unlink. Tested: 0 links added.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">The <code>subs</code> calls are outside the catch of each instance. The Safari wrapper does not name all the state that it must reset.</td><td class="wrap">Each <code>subs</code> call of one instance is in <code>try ... with</code>. The wrapper resets all the state of the turn and asks for a turn if work stays.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Seventh review (draft 10)</h3>
+  <p>The two reviewers found the first finding independently. The performance reviewer found no measurable cost in the new mechanisms of draft 10, and it judged the runtime buildable in Phases 1 and 2 with the fixes that follow. I tested each fix in a small model, natively and under js_of_ocaml.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 10</th><th>Change in draft 11</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">The boundary catch covers only the diff of the parent. An instance that renders alone (its own model changed, or a Context reader) has no boundary on the call path. Its error goes to the root or to the turn, and the other dirty instances do not render. Tested.</td><td class="wrap">Each instance records its nearest boundary at mount. Each render of an instance alone is in <code>try ... with</code>, and the error goes to that boundary. Tested.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The 50 ms limit does not cover the drain of the run queue. A task that loops through synchronous steps freezes the page. Measured: 2,000,000 steps in one turn, 0 yields.</td><td class="wrap">The drain reads the clock once every 256 continuations. Tested: the endless loop yields.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">An early stop of a subscription, and then the same key at the render, leaves a cancelled token under a key that "stays". Polling stops. Tested.</td><td class="wrap">The early call removes each key that it cancels from the recorded set. Tested: the key is live after the render.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">A catch can leave new instances outside the tree, with live tokens. A boundary catches the errors of its own fallback, and can loop. An unmount does not remove reader registrations. <code>View.boundary</code> has no key for a retry.</td><td class="wrap">Link before init. Errors in a fallback go to the next boundary. The unmount removes the registrations in O(1). <code>View.boundary ?key</code>. Tested in the model.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">Phase 1 builds the turn, but its tests are in Phase 2, and Phase 2 must write it again for instances. The virtual cost rule of the test host does not agree with the test claim. The fresh flag costs one task after each turn and fails after a long foreign task.</td><td class="wrap">The turn works on an instance record from Phase 1, and its tests are in the Phase 1 exit. The virtual cost is on <code>update</code> and on each 256 continuations. An idle gap of 4 ms replaces the fresh flag. Tested.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Sixth review (draft 9)</h3>
+  <p>The two reviewers tested with OCaml 5.5.0, js_of_ocaml 6.4.1 and node. I ran the tested claims again in my own models, and each result is confirmed. The two reviewers found the stale clock independently.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 9</th><th>Change in draft 10</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">The <code>try ... with</code> around the turn stops the whole diff of the parent. A DOM exception in row 2 of a keyed list leaves row 3 unmoved, row 4 not inserted, row 1 alive with a live token, and a message in the queue with no turn. Tested: "DOM keys = [2;3]".</td><td class="wrap">The catch is in the diff, around the child of each boundary, and the diff of the parent continues. The diff cancels a removed instance at the removal. After a catch, work in a queue asks for a turn. Tested: "[3; 2 (fallback); 4]".</td></tr>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">A microtask turn continues the clock of the last kilim macrotask, which can be seconds old. Thus each promise result after idle time yields with no progress, and 10 results give a false loop warning. Tested.</td><td class="wrap">A "fresh" flag that one <code>MessageChannel</code> message sets after each turn. A microtask turn starts a new clock only when the flag is set. A microtask loop never lets the message run. Tested: 10 of 10 results processed, no warning, and the loop still stops.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A discrete turn that yields before it renders still restores the controlled input from the last view. The next key press then loses the first one. Tested: typed "ab", model "b".</td><td class="wrap">No restore in a turn that yields. The restore comes after the next render. Tested.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A boundary in the error state has no rule for its state. Either it mounts the failing child again on each render of the parent, or it is a hidden instance that Phase 2 does not plan.</td><td class="wrap">The boundary keeps the exception and the fallback in the retained tree of its parent, until its place remounts, as in React.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap"><code>subs</code> runs at the end of each settle and again at the render. A kept key does not get the new message function before the render. A <code>Context.read</code> below a provider in the same view gets the outer value.</td><td class="wrap">The early call only at the end of a turn that leaves a render pending. It also updates the message functions. The diff keeps the providers on its path for <code>Context.read</code>.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">The virtual clock of the test host does not move during <code>update</code>, thus the time limit never fires there. In Safari, wasm_of_ocaml can have no <code>JSTag</code>, and the catch then fails. <code>run</code> is not a turn.</td><td class="wrap">A fixed virtual cost for each message and task request. A <code>try ... finally</code> in the JS wrapper of each callback, and a check in Safari in Phase 0. <code>run</code> renders in a first turn.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Fifth review (draft 8)</h3>
+  <p>The two reviewers tested with OCaml 5.5.0, js_of_ocaml 6.4.1 and node. I ran each tested claim again, and each result is confirmed. The two reviewers found three findings independently: closures in the props compare, a late stop of a subscription, and the identity of a provider.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 8</th><th>Change in draft 9</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">An exception that leaves a turn (for example <code>setAttribute</code> with an invalid name in the diff) leaves the turn flag set. No turn runs again. Tested: "in_turn = true".</td><td class="wrap"><code>try ... with</code> around each turn. A DOM exception goes to the error scope of the instance that the diff was writing. <code>At.v</code> refuses invalid names. Tested.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Under js_of_ocaml, <code>shallow_equal</code> gives <code>true</code> for any two functions, because their "fields" are <code>undefined</code>. A translation function in a Context then never changes the view. Tested.</td><td class="wrap">No field scan for a tag at or above <code>Lazy_tag</code>. Tested: 13 cases in the two builds.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A removed subscription sends messages until the next render, for example a socket of the old room after a change of the room.</td><td class="wrap">Removed keys stop at the end of each settle step. New keys start at the render. Tested.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A message loop through microtasks gets a new budget in each microtask turn. Thus it freezes the page. Tested: 200,000 messages in one microtask checkpoint.</td><td class="wrap">A time limit of 50 ms. Only a macrotask turn starts a new clock. Tested: the loop yields.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">"One render for each turn" is false when the render gives work. In a frame turn, the result waits for one more frame for each level of mounts. The init tasks start at two points.</td><td class="wrap">After a render that gives work, settle and render again at once, at most 3 renders in one turn. Init tasks start only in the settle step.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap"><code>Context.provide</code> and <code>View.boundary</code> take a list, thus the diff needs fragments, which Phase 1 does not plan. The identity rule has no case for a provider.</td><td class="wrap">One child for each. A provider and a boundary are node kinds in identity: if one appears, disappears or changes its context, the subtree remounts.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">Under js_of_ocaml, a user callback of <code>Async.make</code> inside <code>update</code> keeps the variables of <code>update</code> alive after a cancel. The plan said that js_of_ocaml has no real weak pointers, but it uses <code>WeakRef</code>. Tested.</td><td class="wrap"><code>of_fut</code> uses a JS callback that holds only a JS cell. Bindings are top-level functions. The leak tests run under js_of_ocaml. Tested.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">The limit of 10,000 items gives an error for permitted work (a mount of 10,000 rows). The text about the hidden tab contradicts itself, and "200 messages give one render" is too strong.</td><td class="wrap">A time limit with a warning after 10 yields in 1 s. One text for the hidden tab: at most one render for each <code>post_task</code>.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Fourth review (draft 7)</h3>
+  <p>The two reviewers tested with OCaml 5.5.0, js_of_ocaml 6.4.1 and node. I ran each tested claim again, and each result is confirmed. The two reviewers found the first finding independently.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 7</th><th>Change in draft 8</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">The run queue drains after the last check of the message queue. Thus each result of <code>Async.make</code> (a timer, a fetch, a synchronous <code>ok</code>) waits for an unrelated event. Tested: "stranded=[Got_timer]".</td><td class="wrap">One turn for each callback: drain the run queue, process the messages, apply the task requests, until all are empty. Then render one time. Tested in a model of the turn.</td></tr>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">A message from a raw callback (the last <code>ok</code> of a binding, a <code>send</code> of <code>Sub.run</code>) never starts a batch.</td><td class="wrap">A push to a queue outside a turn asks for one turn in a microtask.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A message from step 3 gives a second render in the same callback. The limit of 100 batches uses a macrotask that the host does not have, and a timer is throttled.</td><td class="wrap">One render for each turn. A limit of 10,000 messages and task requests, then <code>host.post_task</code> (<code>MessageChannel</code>).</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The prefix and suffix passes of ivi do not find a duplicate key, for example old <code>[1; 2]</code> and new <code>[1; 1; 2]</code>. A later diff then leaks an instance and its tokens.</td><td class="wrap">If the new list does not match the old list key by key, the diff checks all keys with a <code>Map</code> before it writes.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The restore of a radio button touches only the target. A rejected change then leaves no button checked.</td><td class="wrap">The restore covers each radio button with the same <code>name</code> in the same form or root.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap"><code>on_end</code> after a release adds an action that never runs. Tested: 1 live listener after the unmount.</td><td class="wrap">A release marks the token as ended. <code>on_end</code> on an ended token runs the action at once. Tested: 0.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The subscription diff in step 3 uses old props, and it starts subscriptions of instances that the render removes. It also runs two times in each batch.</td><td class="wrap">One point that compares subscriptions, at the end of the render, for live instances only.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap"><code>shallow_equal</code> still differs by build. Under js_of_ocaml, a float is a JS number with no tag, thus <code>0.</code> and <code>-0.</code> are equal and the view keeps a stale value. NaN values can have different bits. Tested.</td><td class="wrap">kilim.browser installs <code>Object.is</code> as the field compare in the js_of_ocaml build. The contract: <code>true</code> means the same view. Tested: 9 cases in the two builds.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">A promise that never settles keeps the whole unmounted instance alive through the message link. A burst of callbacks in a hidden tab gives one render for each callback. A throttled frame in an iframe that is out of view has no time limit. The Context machinery is not in the Phase 2 scope.</td><td class="wrap">The unmount clears the instance, and <code>make</code> keeps the continuations in a cell that a cancel clears. One render in a new task in a hidden tab. A frame or 100 ms. Context data and tests in Phase 2.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Third review (draft 6)</h3>
+  <p>The two reviewers tested with OCaml 5.5.0, js_of_ocaml 6.4.1 and node 24. I ran each tested claim again, and each result is confirmed. The /nix/store had no wasm_of_ocaml. Thus the reviewer checked the wasm claims in the source of js_of_ocaml 6.4.1, which contains wasm_of_ocaml. Phase 0 must make a check of these claims in a real wasm build.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 6</th><th>Change in draft 7</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">The token rule does not drop all messages to an unmounted instance. An instance with no task, a task that ended before the unmount, and DOM events have no live token. Then <code>update</code> runs on a dead instance. Tested.</td><td class="wrap">An alive flag for each instance. A message goes to an instance object, and the runtime drops a message to a dead instance. A dead instance gets a cancelled token.</td></tr>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">A binding that calls <code>ok</code> from a callback that kilim does not wrap (a raw <code>Ev.listen</code>, IndexedDB, an observer) puts the continuation on the run queue, and nothing drains it. The task hangs. Tested.</td><td class="wrap">If the queue goes from empty to not empty outside a runtime callback, the runtime drains it in a microtask.</td></tr>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">Messages that come after step 2 of a batch (a synchronous task result, the first message of <code>Sub.run</code>, a <code>focusout</code> from a DOM operation) wait for an unrelated event.</td><td class="wrap">After the render, if the queue is not empty, a new batch starts in the same callback. A limit stops a loop.</td></tr>
+      <tr><td><span class="sev high">High</span></td><td class="wrap"><code>kilim_dom.js</code> is not necessary. js_of_ocaml changes <code>Jv.call</code> with a literal name and a literal array into a direct call, with no array (tested). wasm_of_ocaml does the same (source). Also, each external in a <code>.js</code> file needs a second version in a <code>.wat</code> file for wasm_of_ocaml.</td><td class="wrap">No <code>kilim_dom.js</code>. The diff calls <code>Jv</code> with literal names and literal arrays. Phase 0 makes a check of the generated code in the two builds.</td></tr>
+      <tr><td><span class="sev high">High</span></td><td class="wrap"><code>shallow_equal</code> with <code>==</code> gives different results in different builds. A string, a boxed float or a tuple that <code>view</code> builds is equal under js_of_ocaml and not equal in native code. Tested.</td><td class="wrap">A compare for each field by its tag: <code>String.equal</code> for strings, a bit compare for floats, <code>==</code> for all other values.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">An error that is in the queue before a cancel still gets to the error scope. Thus a boundary can show its fallback for a task that is cancelled. Tested.</td><td class="wrap">The queued closure examines the token again when it runs. The runtime drops the last error of a cancelled task.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap"><code>Hashtbl</code>, <code>Random</code>, <code>Fun.protect</code> and <code>Printexc</code> each link <code>Printf</code>. Each one adds 13 KB to 18 KB (gzip) to a hello world of 9.9 KB. Tested.</td><td class="wrap">The link check bans these modules in <code>kilim</code> and <code>kilim.browser</code>. The runtime uses <code>Map.Make</code> and writes an exception to the console as a raw value.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A child that gets new props with no change to its model keeps its old subscriptions.</td><td class="wrap">After a render, the runtime compares the subscriptions of each instance that got new props.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A frame that the runtime asks for before the tab becomes hidden does not come. Timers in a hidden tab can wait up to 1 minute. Thus unmounts, cancels and new fetches wait too.</td><td class="wrap">In a hidden tab, the render is synchronous at the end of the batch. On <code>visibilitychange</code>, the runtime does a pending render at once. No timer path.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The restore of <code>checked</code> occurs in the click dispatch, before the browser sends <code>input</code> and <code>change</code>. Thus a controlled checkbox never toggles.</td><td class="wrap">For a checkbox and a radio button, <code>Ev.change</code> and <code>Ev.input</code> use the click event, as in React. The listener reads <code>checked</code> before the restore.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Identity uses "position among unkeyed siblings", but the DOM diff uses absolute position. <code>View.keyed</code> has no rule for duplicate keys.</td><td class="wrap">Identity uses absolute position. A key moves an instance only inside <code>View.keyed</code>. A duplicate key raises <code>Invalid_argument</code>.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Context renders the whole subtree of the provider. A value that <code>view</code> builds is never <code>==</code> to the old value, thus the whole app renders each time.</td><td class="wrap"><code>Context.read</code> records the reader. A change marks only the readers. The compare uses <code>shallow_equal</code>.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The "allowlist" of elements is a denylist. It lets through SVG <code>set</code> and <code>animate</code>, which can change a checked <code>href</code>, and <code>meta</code>. A naive URL check accepts <code>" javascript:"</code>.</td><td class="wrap">A real allowlist with no SVG animation elements and no <code>meta</code>. The URL check finds the scheme as the WHATWG URL parser does.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A fold of 20,000 <code>and+</code> overflows the stack in the recursive <code>Cancel.cancel</code>. A fold of 5,000 overflows at the start if <code>map</code> does not go through <code>bind</code>. Tested.</td><td class="wrap">The branches start through the run queue. The cancel is iterative. Test: 100,000 nested branches start and cancel in the two builds.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">Detach uses <code>List.filter</code>: 306 ms for 10,000 siblings. Detach drops the actions of a step, thus a listener stays after <code>ok</code>. An exception after <code>ok</code> is lost. Keys of <code>Cmd.latest</code> collide under two <code>Cmd.map</code>.</td><td class="wrap">A doubly linked list of children (0.14 ms native, 2 ms jsoo for 10,000). End actions run when a step ends. The runtime writes such an exception to the console. <code>Cmd.map ?scope</code>.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">Queries by ARIA role are a large subsystem for Phase 1. The fetch mock comes before <code>kilim.http</code>. <code>Gc.minor_words</code> gives 0 under js_of_ocaml. Keys for every parameter of <code>Sub.every</code>. <code>View.lazy_</code> repeats the skip rule of a component. Delegated touch and wheel listeners.</td><td class="wrap">Queries by label, text and test id only. The fetch mock in Phase 4. The allocation count only finds regressions. Automatic keys for <code>Sub.every</code> and <code>Sub.window</code>. No <code>View.lazy_</code> in version 1. Touch and wheel listeners on their elements.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Second review (draft 5)</h3>
+  <p>The correctness reviewer tested the sketches with OCaml 5.5, js_of_ocaml 6.4.1 and node. I ran the stack test and the double-resolve test again, and the two results are confirmed.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 5</th><th>Change in draft 6</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">Synchronous <code>let*</code> chains overflow the stack under js_of_ocaml: 1,000 steps passed, 2,000 steps gave <code>Stack_overflow</code>. Native code passed 1,000,000 steps.</td><td class="wrap">A trampoline in <code>bind</code> and <code>make</code>. A test of 100,000 steps in each build in Phase 0.</td></tr>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">The default <code>equal_props</code> (<code>==</code>) renders each child again on each render of its parent.</td><td class="wrap">Shallow comparison by default. The <code>~on</code> function is never compared.</td></tr>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">Cancel actions and finished tokens are never removed. Memory grows on a long-lived token.</td><td class="wrap">Step tokens that detach. The runtime drops a message whose token is cancelled. No generation numbers.</td></tr>
+      <tr><td><span class="sev high">High</span></td><td class="wrap">Task messages wait for an animation frame, also for <code>update</code>. A hidden tab pauses the frames.</td><td class="wrap"><code>update</code> runs at once. Only the render waits, with a timer in a hidden tab.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap"><code>Async.make</code> can resolve two times, and its <code>try</code> catches errors of later steps.</td><td class="wrap">A once rule. Continuations go through the run queue, never inside the user callback.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A lazy token can miss a child when its parent is cancelled.</td><td class="wrap">A new token makes the tokens of its ancestors first. A token under a cancelled token is cancelled at once.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap"><code>Sub.run</code> and <code>Sub.every</code> keep their first parameters for the same key.</td><td class="wrap">Every parameter goes into the key.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Controlled inputs are checked only for dirty instances, and not at <code>compositionend</code>.</td><td class="wrap">Restore the controlled properties of the target after each discrete event and at <code>compositionend</code>.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The error rules are incomplete. An error can leave a half-changed DOM.</td><td class="wrap">A table of error scopes, <code>App.make ?fallback</code>, a boundary unmounts its subtree, a child view runs before its DOM changes.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The DOM safety rules are incomplete.</td><td class="wrap">An allowlist of elements, checks that ignore case, URL checks for all URL attributes.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Each DOM operation under wasm_of_ocaml crosses to JavaScript and copies strings.</td><td class="wrap">Fixed-arity externals in <code>kilim_dom.js</code>. Budgets for each build.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">About 27 concepts. Elm has about 8.</td><td class="wrap">No <code>Cmd.msg</code>, no <code>Cmd.run</code>, no <code>props_changed</code>: a key change resets a child.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">The tests need the test host before it comes. The budgets have no targets. Timing gates on shared CI machines fail at random.</td><td class="wrap">Test host in Phase 1. A component spike in Phase 0. Targets. Counts in CI, timing each night.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">Type errors in the sketch, batch order, identity edge cases, Context tracking, <code>lazy_</code>, keyed diff, <code>Printf</code>, Brr milliseconds.</td><td class="wrap">A corrected sketch, ordering rules, documented edge cases, provider subtree render, <code>lazy_</code> compares the function, ivi diff with <code>int</code> keys, a link check, rounding.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>First review (draft 3)</h3>
+  <p>Draft 4 applied the findings of the first review. Draft 5 then removed weft, by your decision. The last column shows the status at this time.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Finding on draft 3</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr class="gone"><td><span class="sev high">Critical</span></td><td class="wrap">A weft world module cannot park the scheduler (<code>weft.ml:62-63</code>, <code>sched.ml:2118</code>).</td><td class="wrap"><span class="sev off">Gone</span> No weft.</td></tr>
+      <tr class="gone"><td><span class="sev high">Critical</span></td><td class="wrap">The default mode of wasm_of_ocaml (<code>jspi</code>) refuses effect handlers in JS callbacks.</td><td class="wrap"><span class="sev off">Gone</span> kilim performs no effects, thus the default modes work.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Each DOM event goes through a full scheduler round.</td><td class="wrap">Synchronous dispatch and render. No scheduler.</td></tr>
+      <tr class="gone"><td><span class="sev med">Major</span></td><td class="wrap"><code>Ready.External</code> from JS does nothing. Microtask resumes can starve the browser.</td><td class="wrap"><span class="sev off">Gone</span> No weft driver.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A failed fiber cancels its scope up to the root.</td><td class="wrap">An error in a task goes to the error rules of its instance.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">A scope for each instance costs a parked fiber.</td><td class="wrap">A cancel token is a small object, made at the first task.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Command semantics: outputs in the same batch, stale results of <code>Cmd.latest</code>, no definition of a batch.</td><td class="wrap">Synchronous <code>Ctx.emit</code>. A cancelled token drops a stale result. A batch has a definition.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Deferred dispatch breaks <code>preventDefault</code>, controlled inputs, IME and focus events.</td><td class="wrap">Static event options, a live-DOM compare, <code>focusin</code>/<code>focusout</code>, a re-entrant queue.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap"><code>model Type.Id.t</code> proves only the model type.</td><td class="wrap"><code>Component.id</code> witnesses <code>props</code>, <code>model</code>, <code>msg</code> and <code>out</code>.</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">Slots conflict with <code>equal_props</code>. A patch list costs two passes. Structural equality raises on closures.</td><td class="wrap">Slots after version 1. The diff calls DOM operations directly. Shallow equality is the default (draft 6).</td></tr>
+      <tr><td><span class="sev med">Major</span></td><td class="wrap">No performance budgets.</td><td class="wrap">Budget targets in Phase 0. A CI gate from Phase 1.</td></tr>
+      <tr><td><span class="sev low">Minor</span></td><td class="wrap">A stale subscription closure, key and position, an ill-typed example, DOM safety, about 20 concepts.</td><td class="wrap">Parameters in the key, the key replaces the position, a corrected example, DOM safety rules, a smaller version 1.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Why no weft</h3>
+  <p>After draft 4, weft ran only the async tasks. kilim's main promise, components that stop their own tasks, does not need fibers. weft cost these items:</p>
+  <ul>
+    <li>Fibers in the browser need OCaml effects. Effects need the CPS transform on the two targets, and CPS makes all code slower and larger.</li>
+    <li>wasm_of_ocaml <code>--effects=native</code> (Wasm stack switching) removes the CPS cost. But at this time it runs only in Chrome 148 or later with an experimental flag.</li>
+    <li>The default <code>jspi</code> mode refuses effect handlers in JS callbacks.</li>
+    <li>weft needed a new driver entry point and time slices. The core of weft also links multicore code that the browser does not use.</li>
+  </ul>
+  <p>Without weft, kilim loses direct-style async code, CML events and the weft simulator. A small task type with <code>let*</code>, cancel tokens and a virtual clock replaces them (<a href="#async">section 12</a>).</p>
+</section>
+
+<section id="names">
+  <h2>Name</h2>
+  <p>The opam package is <b>kilim</b>. A kilim is a flat-woven rug. The name keeps the theme of the organization: caravanserai, caravan, weft.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Item</th><th>Name</th></tr></thead>
+    <tbody>
+      <tr><td>Repository</td><td><code>github.com/ocaml-caravanserai/kilim</code></td></tr>
+      <tr><td>opam package</td><td><code>kilim</code></td></tr>
+      <tr><td>Libraries</td><td class="wrap"><code>kilim</code>, <code>kilim.browser</code>, <code>kilim.web</code>, <code>kilim.http</code>, <code>kilim.router</code>, <code>kilim.storage</code>, <code>kilim.websocket</code>, <code>kilim.testing</code></td></tr>
+      <tr><td>Top modules</td><td class="wrap"><code>Kilim</code>, <code>Kilim_browser</code>, <code>Kilim_web</code>, <code>Kilim_http</code>, <code>Kilim_testing</code> and so on</td></tr>
+      <tr><td>Bindings (later)</td><td><code>webapi</code>, <code>webapi-gen</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><strong>Note:</strong> on 2026-11-06, opam.ocaml.org had no package with the name kilim (404).</div>
+</section>
+
+<section id="goals">
+  <h2>Goals and non-goals</h2>
+  <h3>Goals</h3>
+  <ul>
+    <li>A typed TEA core with a pure <code>update</code>.</li>
+    <li>Components that encapsulate state, messages, tasks and subscriptions.</li>
+    <li>Synchronous event handling and rendering.</li>
+    <li>Async tasks with cancellation by component, and no OCaml effects.</li>
+    <li>Deterministic tests without a browser.</li>
+    <li>Two targets from one code base, in the default modes of the compilers.</li>
+    <li>No memory growth: after a mount and an unmount, no token, timer or listener stays alive.</li>
+    <li>Performance budgets that the CI checks (<a href="#phases">section 16</a>).</li>
+    <li>A view type that can render to a string, for SSR after version 1.</li>
+  </ul>
+  <h3>Non-goals for version 1</h3>
+  <ul>
+    <li>Handles and public actions (<code>api</code>). Props do the same task.</li>
+    <li><code>props_changed</code>. A key change resets a child.</li>
+    <li><code>Cmd.msg</code>. Call your own update function again in your code.</li>
+    <li>A shared <code>Store</code>. <code>Context</code> does the same task.</li>
+    <li><code>Component.any</code>. A <code>match</code> with a static module in each branch does the same task.</li>
+    <li><code>View.lazy_</code>. A component with <code>equal_props</code> does the same task.</li>
+    <li>Test queries by ARIA role. Queries by label, text and test id do most of the same task.</li>
+    <li>Slots (children of a container component).</li>
+    <li>Direct-style async code and an integration with weft.</li>
+    <li>SSR and hydration, a CSS system, a JSX-like PPX, native mobile targets.</li>
+  </ul>
+</section>
+
+<section id="architecture">
+  <h2>Architecture</h2>
+  <p>The kilim core is in the middle. It knows nothing about the browser. It uses a host interface for time and timers. The browser and the test host give two implementations of this interface and of the DOM operations.</p>
+  <figure>
+    <svg viewBox="0 0 780 382" role="img" aria-label="Layer diagram. The application uses kilim libraries. kilim.browser sits on the kilim core, which has the Async tasks and the cancel tokens. kilim.browser uses Brr and kilim.web, compiled by js_of_ocaml or wasm_of_ocaml in default modes. A test host replaces kilim.browser with kilim.testing, a virtual clock and native OCaml.">
+      <text class="d-s" x="20" y="14">BROWSER HOST</text>
+      <text class="d-s" x="604" y="14">TEST HOST (NO BROWSER)</text>
+      <rect class="d-box" x="20" y="24" width="560" height="46" rx="7"/>
+      <text class="d-b" x="300" y="45" text-anchor="middle">Your application</text>
+      <text class="d-s" x="300" y="61" text-anchor="middle">App.make + components</text>
+      <rect class="d-new" x="20" y="82" width="131" height="46" rx="7"/>
+      <text class="d-m" x="85" y="110" text-anchor="middle">kilim.http</text>
+      <rect class="d-new" x="163" y="82" width="131" height="46" rx="7"/>
+      <text class="d-m" x="228" y="110" text-anchor="middle">kilim.router</text>
+      <rect class="d-new" x="306" y="82" width="131" height="46" rx="7"/>
+      <text class="d-m" x="371" y="110" text-anchor="middle">kilim.storage</text>
+      <rect class="d-new" x="449" y="82" width="131" height="46" rx="7"/>
+      <text class="d-m" x="514" y="110" text-anchor="middle">kilim.websocket</text>
+      <rect class="d-new" x="20" y="140" width="560" height="46" rx="7"/>
+      <text class="d-b" x="300" y="161" text-anchor="middle">kilim.browser</text>
+      <text class="d-s" x="300" y="177" text-anchor="middle">synchronous dispatch &#183; DOM operations &#183; browser host (timers, frames) &#183; mount</text>
+      <rect class="d-new" x="20" y="198" width="560" height="56" rx="7"/>
+      <text class="d-b" x="300" y="221" text-anchor="middle">kilim (core)</text>
+      <text class="d-s" x="300" y="239" text-anchor="middle">View &#183; Cmd &#183; Sub &#183; Component &#183; App &#183; Context &#183; Async &#183; Cancel &#8212; stdlib only</text>
+      <rect class="d-core" x="20" y="266" width="560" height="46" rx="7"/>
+      <text class="d-b" x="300" y="287" text-anchor="middle">Brr + kilim.web</text>
+      <text class="d-s" x="300" y="303" text-anchor="middle">Web APIs, and Jv bindings for the gaps</text>
+      <rect class="d-box" x="20" y="324" width="560" height="46" rx="7"/>
+      <text class="d-b" x="300" y="345" text-anchor="middle">js_of_ocaml  |  wasm_of_ocaml</text>
+      <text class="d-s" x="300" y="361" text-anchor="middle">default modes, no CPS: kilim performs no effects</text>
+      <rect class="d-test" x="604" y="140" width="156" height="46" rx="7"/>
+      <text class="d-b" x="682" y="161" text-anchor="middle">kilim.testing</text>
+      <text class="d-s" x="682" y="177" text-anchor="middle">fake DOM, queries</text>
+      <rect class="d-test" x="604" y="266" width="156" height="46" rx="7"/>
+      <text class="d-b" x="682" y="287" text-anchor="middle">virtual clock host</text>
+      <text class="d-s" x="682" y="303" text-anchor="middle">mocks for fetch</text>
+      <rect class="d-test" x="604" y="324" width="156" height="46" rx="7"/>
+      <text class="d-b" x="682" y="352" text-anchor="middle">native OCaml</text>
+      <line class="d-line" x1="582" y1="226" x2="600" y2="226"/>
+      <line class="d-line" x1="600" y1="226" x2="600" y2="163"/>
+      <line class="d-line" x1="600" y1="226" x2="600" y2="289"/>
+    </svg>
+    <figcaption>Madder boxes are kilim libraries. The indigo box is the dependency for the browser. The core uses only the OCaml standard library. The green dashed boxes replace the browser parts in tests.</figcaption>
+  </figure>
+  <h3>Libraries</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Library</th><th>Content</th><th>Depends on</th></tr></thead>
+    <tbody>
+      <tr><td><code>kilim</code></td><td class="wrap">View, Cmd, Sub, Component, App, Context, Async, Cancel, the instance tree, the keyed diff. The diff calls a record of DOM operations. Async uses a host record for time and timers.</td><td>stdlib</td></tr>
+      <tr><td><code>kilim.web</code></td><td class="wrap"><code>Jv</code> bindings for the APIs that Brr does not have: observers, <code>queueMicrotask</code></td><td>brr</td></tr>
+      <tr><td><code>kilim.browser</code></td><td class="wrap">DOM operations for Brr, event delegation, the dispatch loop, the frame scheduler, the browser host, <code>run</code>, <code>Async.of_fut</code></td><td class="wrap">kilim, kilim.web, brr</td></tr>
+      <tr><td><code>kilim.http</code></td><td class="wrap">Fetch as <code>Async.t</code>, JSON decoders, cancel through <code>AbortController</code></td><td class="wrap">kilim.browser, <code>Brr_io.Fetch</code>, <code>Brr.Abort</code></td></tr>
+      <tr><td><code>kilim.router</code></td><td class="wrap">Typed routes, History API, links</td><td class="wrap">kilim.browser, <code>Brr.Window.History</code></td></tr>
+      <tr><td><code>kilim.storage</code></td><td class="wrap">Commands for localStorage and sessionStorage, a subscription to <code>storage</code> events</td><td class="wrap">kilim.browser, <code>Brr_io.Storage</code></td></tr>
+      <tr><td><code>kilim.websocket</code></td><td class="wrap">WebSocket as a subscription and a send command</td><td class="wrap">kilim.browser, <code>Brr_io.Websocket</code></td></tr>
+      <tr><td>loader (dune rule)</td><td class="wrap">Generates the loader (an inline script with a fixed CSP hash and <code>data-</code> attributes, or a <code>loader.js</code> file) that picks the wasm_of_ocaml or the js_of_ocaml build (<a href="#runtime">section 11</a>)</td><td>none</td></tr>
+      <tr><td><code>kilim.testing</code></td><td class="wrap">Test host: fake DOM operations, a virtual clock, queries, simulated events. Mocks for fetch come in Phase 4.</td><td class="wrap">kilim, windtrap</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="compare">
+  <h2>Elm, React and kilim</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Topic</th><th>Elm</th><th>React</th><th>kilim</th></tr></thead>
+    <tbody>
+      <tr><td>Location of state</td><td class="wrap">One model tree. The parent stores the model of the child.</td><td class="wrap">In the component (hooks)</td><td class="wrap">In the component instance. The <code>.mli</code> hides it from the parent.</td></tr>
+      <tr><td>Use of a child</td><td class="wrap">The parent calls the view of the child and maps its messages</td><td class="wrap">A JSX element</td><td class="wrap"><code>Component.v (module Counter)</code></td></tr>
+      <tr><td>Child to parent</td><td class="wrap">The parent maps the messages of the child</td><td class="wrap">Callback props</td><td class="wrap">A typed <code>out</code> value, mapped with <code>~on</code></td></tr>
+      <tr><td>Parent to child</td><td class="wrap">The parent changes the model of the child</td><td class="wrap">Props, or <code>ref</code> + <code>useImperativeHandle</code></td><td class="wrap">Props, and a key change to reset. Handles come after version 1.</td></tr>
+      <tr><td>Async</td><td class="wrap"><code>Task</code> and <code>Cmd</code> values, the runtime runs them</td><td class="wrap"><code>useEffect</code>, async functions</td><td class="wrap"><code>'a Async.t</code> values with <code>let*</code>, the runtime runs them</td></tr>
+      <tr><td>Cancel</td><td class="wrap">Manual (an HTTP tracker)</td><td class="wrap">Manual (cleanup function, AbortController)</td><td class="wrap">By component: a tree of cancel tokens, <code>Cmd.latest</code>, unmount</td></tr>
+      <tr><td>Dispatch</td><td class="wrap">Synchronous update, render in an animation frame</td><td class="wrap">Synchronous for discrete events, batched for others</td><td class="wrap"><code>update</code> at once for each message. Synchronous render for discrete events, one render for each frame for others.</td></tr>
+      <tr><td>Tests</td><td class="wrap">elm-program-test</td><td class="wrap">Testing Library + jsdom</td><td class="wrap">Fake DOM, virtual clock, native speed</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="core">
+  <h2>TEA core</h2>
+  <p>The API in this section is a sketch. The names can change during Phase 2.</p>
+
+  <h3>View</h3>
+  <p><code>'msg View.t</code> is a virtual DOM tree. The names follow <code>caravan.html</code>, thus a later phase can share view code with the server. An event handler gives a message. The options <code>~prevent_default</code> and <code>~stop</code> are static, thus the listener applies them synchronously before <code>update</code>.</p>
+<pre><code><span class="kw">open</span> Kilim
+
+<span class="kw">let</span> view (m : model) : msg View.t =
+  El.form ~ev:[Ev.submit ~prevent_default:true Save]
+    [ El.label ~at:[At.for_ <span class="kw">"name"</span>] [txt <span class="kw">"Name"</span>]
+    ; El.input ~at:[At.id <span class="kw">"name"</span>; At.value m.name]
+        ~ev:[Ev.input (<span class="kw">fun</span> s -&gt; Edited s)] ()
+    ; View.keyed El.ul
+        (List.map (<span class="kw">fun</span> it -&gt; (Key.int it.id, El.li [txt it.label])) m.items)
+    ; El.button [txt <span class="kw">"Save"</span>] ]</code></pre>
+
+  <h3>App</h3>
+<pre><code><span class="kw">val</span> App.make :
+  init:(unit -&gt; 'model * 'msg Cmd.t) -&gt;
+  update:('model -&gt; 'msg -&gt; 'model * 'msg Cmd.t) -&gt;
+  view:('model -&gt; 'msg View.t) -&gt;
+  ?subs:('model -&gt; 'msg Sub.t) -&gt;
+  ?fallback:(exn -&gt; 'msg View.t) -&gt; unit -&gt; App.t
+
+<span class="kw">val</span> Kilim_browser.run : mount:string -&gt; App.t -&gt; unit
+<span class="cm">(* Starts at once if the mount element exists. If not, it waits until the document
+   is not "loading". The loader starts the build after the stylesheets (section 11). Then it renders the app into the element in a first turn (thus the init tasks start at once),
+   installs the listeners, and returns. *)</span></code></pre>
+
+  <h3>Cmd: commands</h3>
+  <p><code>update</code> stays pure. It gives a command as a value. The type <code>'msg Cmd.t</code> has one parameter, as in Elm.</p>
+<pre><code>Cmd.none
+Cmd.batch [c1; c2]
+Ctx.emit ctx out              <span class="cm">(* components only: an output for the parent, in the same turn *)</span>
+Cmd.task t                    <span class="cm">(* t : msg Async.t; its result is a message *)</span>
+Cmd.latest ~key:<span class="kw">"search"</span> t    <span class="cm">(* as task, but cancels the old task of the key in this instance *)</span>
+Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope: a prefix for the keys of Cmd.latest in cmd *)</span></code></pre>
+  <ul>
+    <li><code>Ctx.emit</code> puts the output at the back of the queue, as a message of the parent.</li>
+    <li>A task command becomes a task request. The runtime starts the task in the settle step of the turn, after the messages, with a new cancel token (<a href="#async">section 12</a>).</li>
+    <li>The keys of <code>Cmd.latest</code> are local to the instance. When <code>update</code> gives a task with a key, the runtime makes the token of the new task at once, under the instance token, and it cancels the token of the old task with that key, also if the old task has not started. The new task starts later, in the settle step, with that token. When the result message or the error of a task leaves the queue (processed or dropped), the runtime removes the key from the table if the key still points to that token. The key does not leave when the task ends, because its result can still wait in the queue, and a newer task with the same key must cancel it. Thus an instance that uses many keys (for example <code>"save/" ^ id</code>) keeps no entry for an ended task. A leak test sends 1,000 distinct keys to a live instance, and the table must be empty at the end. Thus a result of the old task that is already in a queue is dropped, also after a yield. If one component has two sub-parts under two <code>Cmd.map</code>, give each <code>Cmd.map</code> a different <code>?scope</code>. Then the same key in the two parts does not collide.</li>
+    <li>Each queued message keeps its instance and the token of the task that sent it. When the message leaves the queue, the runtime drops it if the instance is unmounted or the token is cancelled. Thus a stale result of <code>Cmd.latest</code> and a late message after an unmount do nothing.</li>
+    <li>Version 1 has no <code>Cmd.msg</code>. A message from <code>update</code> to itself can loop forever and needs more ordering rules. Call your update function again in your own code.</li>
+  </ul>
+
+  <h3>Sub: declarative subscriptions</h3>
+  <p><code>subs</code> gives a set of subscriptions with keys. At the end of a render, the runtime compares the new set with the last set:</p>
+  <ul>
+    <li>A new key starts the subscription with a new cancel token.</li>
+    <li>A removed key cancels its token.</li>
+    <li>A key that stays keeps its subscription. The runtime gives it the new message function through a mutable cell, thus its messages use the newest mapping.</li>
+    <li><code>Sub.every</code> and <code>Sub.window</code> need no key. The runtime makes their key from their parameters: the interval, or the event name and the options. If two of them have the same parameters, the runtime adds their position among them to the key.</li>
+    <li><code>Sub.run</code> needs a key. Its function is opaque, thus each parameter of the function must be in the key, for example the room.</li>
+    <li>A duplicate key of <code>Sub.run</code> raises <code>Invalid_argument</code> (error scopes: <a href="#components">section 09</a>).</li>
+    <li>The runtime starts new keys at the render. If a turn ends with a render that is pending, the runtime calls <code>subs</code> for the changed instances at the end of the turn. It stops the removed keys and removes them from the recorded set, and it gives the new message functions to the keys that stay (<a href="#runtime">section 11</a>). Thus a removed subscription sends no more messages, a kept one uses the newest mapping, and a new one sees the newest props.</li>
+  </ul>
+<pre><code><span class="kw">let</span> subs _props m =
+  Sub.batch
+    [ (<span class="kw">if</span> m.running <span class="kw">then</span> Sub.every (Span.ms m.period) Tick <span class="kw">else</span> Sub.none)
+    ; Sub.window <span class="kw">"resize"</span> (<span class="kw">fun</span> _ -&gt; Resized)
+    ; Sub.run ~key:(<span class="kw">"room/"</span> ^ m.room) (<span class="kw">fun</span> send -&gt; Chat.listen m.room send) ]
+<span class="cm">(* Chat.listen : string -&gt; (msg -&gt; unit) -&gt; unit Async.t never ends by itself.
+   A change of m.room or m.period changes the key: the old subscription stops, and a new one starts.
+   The runtime makes the key of Sub.every from the interval. *)</span></code></pre>
+</section>
+
+<section id="components">
+  <h2>Components</h2>
+  <p>A component is a module with its own model, messages, tasks and subscriptions. Its public interface is <code>props</code> (in) and <code>out</code> (to the parent).</p>
+<pre><code><span class="kw">module type</span> COMPONENT = <span class="kw">sig</span>
+  <span class="kw">type</span> props
+  <span class="kw">type</span> model
+  <span class="kw">type</span> msg
+  <span class="kw">type</span> out                     <span class="cm">(* outputs for the parent *)</span>
+  <span class="kw">val</span> id : (props, model, msg, out) Component.id   <span class="cm">(* typed identity *)</span>
+  <span class="kw">val</span> init : props -&gt; model * msg Cmd.t
+  <span class="kw">val</span> update : (msg, out) Ctx.t -&gt; props -&gt; model -&gt; msg -&gt; model * msg Cmd.t
+  <span class="kw">val</span> view : props -&gt; model -&gt; msg View.t
+  <span class="kw">val</span> subs : props -&gt; model -&gt; msg Sub.t
+  <span class="kw">val</span> equal_props : props -&gt; props -&gt; bool
+<span class="kw">end</span>
+
+<span class="cm">(* OCaml 5.5 module-dependent functions: the types of the later
+   parameters come from the module parameter C. *)</span>
+<span class="kw">val</span> Component.v :
+  (<span class="kw">module</span> C : COMPONENT) -&gt; ?key:string -&gt; on:(C.out -&gt; 'msg) -&gt; C.props -&gt; 'msg View.t
+
+<span class="kw">val</span> Component.id : unit -&gt; ('p, 'm, 'msg, 'o) Component.id
+<span class="kw">val</span> Component.shallow_equal : 'a -&gt; 'a -&gt; bool
+<span class="kw">val</span> Ctx.emit : ('msg, 'out) Ctx.t -&gt; 'out -&gt; 'msg Cmd.t</code></pre>
+  <p><code>Component.Defaults</code> gives <code>subs</code> and <code>equal_props</code>.</p>
+  <p><b>Props equality.</b> The default <code>equal_props</code> is <code>Component.shallow_equal</code>. It compares two records one field at a time, as <code>React.memo</code> does. Its contract: if it gives <code>true</code>, the two props give the same view. A <code>false</code> result for equal values costs only one more render. The field compare depends on the build:</p>
+  <ul>
+    <li>Native code and wasm_of_ocaml: the compare reads the tag of the value first. It uses <code>String.equal</code> for a string and a compare of the bits for a float, also in a record with only <code>float</code> fields. Thus <code>0.</code> and <code>-0.</code> are not equal. For all other values, it uses physical equality (<code>==</code>).</li>
+    <li>js_of_ocaml: a float, an <code>int32</code> and an <code>int</code> are JS numbers with no tag, and a string is a JS string. Thus <code>kilim.browser</code> installs <code>Object.is</code> as the field compare in this build. <code>Object.is</code> compares strings and numbers by value, keeps <code>0.</code> and <code>-0.</code> apart, and compares blocks by identity.</li>
+  </ul>
+  <p>With <code>==</code> only, a string that <code>view</code> builds is equal under js_of_ocaml and not equal in native code. Also <code>0.</code> and <code>-0.</code> are equal under js_of_ocaml, and the view then keeps a stale value. The compare scans the fields only of a block with a tag below <code>Lazy_tag</code> (a record, a tuple, a variant). A closure, an object, a lazy value or a block with no scan has no field scan: the field compare alone decides. Under js_of_ocaml, a JS function has the tag of a closure, and its "fields" are <code>undefined</code>. Thus a scan would find two different functions equal. A sketch of the rule above gave the correct result for 13 cases in native code and under js_of_ocaml, also for <code>0.</code> and <code>-0.</code> and for two different closures. Some results can still differ by build, but only in the safe direction: two equal <code>int32</code> values, or two NaN values with different bits. Props must be immutable: a mutable field that changes in place compares as equal. The compare uses <code>Obj</code> inside the runtime. If the props are equal, the instance does not render. The <code>~on</code> function of the parent is never compared: the runtime replaces it on each render of the parent.</p>
+  <p><b>Outputs through a context.</b> The runtime gives <code>update</code> a context of the type <code>(msg, out) Ctx.t</code>. <code>Ctx.emit ctx out</code> puts the output in the queue as a message of the parent, in the same turn. <code>init</code> does not get a context, because an output during a mount is usually a design error.</p>
+  <p><b>Reset by key.</b> Version 1 has no <code>props_changed</code>. To reset a child, the parent changes the key of the child. The runtime then unmounts the old instance and mounts a new one, and <code>init</code> runs again.</p>
+
+  <h3>What OCaml 5.5 changes</h3>
+  <p>OCaml 5.5 adds <a href="https://ocaml.org/manual/5.5/firstclassmodules.html#s:first-class-modules">module-dependent functions</a>. In the type <code>(module C : COMPONENT) -&gt; C.props -&gt; ...</code>, a later parameter or the result uses a type of the module parameter.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Topic</th><th>Before 5.5</th><th>OCaml 5.5</th></tr></thead>
+    <tbody>
+      <tr><td>Use of a child</td><td class="wrap"><code>let counter = Component.make (module Counter)</code>, then <code>Component.v counter</code></td><td class="wrap"><code>Component.v (module Counter)</code>. No extra value.</td></tr>
+      <tr><td>Type of the API</td><td class="wrap"><code>(module COMPONENT with type props = 'p and type out = 'o) -&gt; ('p, 'o) Component.t</code></td><td class="wrap"><code>(module C : COMPONENT) -&gt; ... C.props -&gt; ...</code></td></tr>
+      <tr><td>Storage of instances</td><td class="wrap">An existential type with a closure or an unsafe cast</td><td class="wrap"><code>Component.id</code> is built on <code>Type.Id</code> and witnesses all four types. A match gives the model, the props and the queued messages with their types. No <code>Obj.magic</code>.</td></tr>
+    </tbody>
+  </table></div>
+  <p><code>Component.id</code> witnesses all four types. Thus a module that includes <code>Counter</code> and changes <code>props</code> does not compile: its <code>id</code> has the old <code>props</code> type.</p>
+
+  <h3>Encapsulation with the .mli file</h3>
+<pre><code><span class="cm">(* counter.mli *)</span>
+<span class="kw">type</span> props = { step : int; label : string }
+<span class="kw">type</span> out = Changed <span class="kw">of</span> int
+<span class="kw">include</span> Kilim.COMPONENT <span class="kw">with type</span> props := props <span class="kw">and type</span> out := out
+<span class="cm">(* model and msg stay abstract: the parent cannot read the state or send a private message *)</span></code></pre>
+  <div class="note"><strong>Choice at run time:</strong> a module-dependent function takes only a static module argument. A <code>match</code> with a static module in each branch covers most cases. <code>Component.any</code>, a packed form, comes after version 1.</div>
+<pre><code><span class="kw">let</span> panel = <span class="kw">function</span>
+  | `Chart -&gt; Component.v (<span class="kw">module</span> Chart) ~on:(<span class="kw">fun</span> _ -&gt; Noop) ()
+  | `Table -&gt; Component.v (<span class="kw">module</span> Table) ~on:(<span class="kw">fun</span> _ -&gt; Noop) ()</code></pre>
+
+  <h3>Polymorphic parameters (OCaml 5.5)</h3>
+  <p>OCaml 5.5 also lets a function parameter have an explicit polymorphic type. kilim uses this feature in few places, because the component modules and the props records already carry the necessary polymorphism.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Place</th><th>Use</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td>Instance tree, subscription diff, test inspection</td><td>Yes (internal)</td><td class="wrap">The instances have different types. A visitor parameter <code>'m. 'm instance -&gt; unit</code> replaces a wrapper record.</td></tr>
+      <tr><td>Content with no events, in a plain view helper</td><td>Where necessary</td><td class="wrap"><code>render:('m. item -&gt; 'm View.t)</code> shows in the type that the content has no events.</td></tr>
+      <tr><td>Signatures of components</td><td>No</td><td class="wrap">The values of a module are already polymorphic.</td></tr>
+    </tbody>
+  </table></div>
+<pre><code><span class="cm">(* before 5.5: a wrapper record *)</span>
+<span class="kw">type</span> visitor = { visit : 'm. 'm instance -&gt; unit }
+<span class="kw">let rec</span> iter v (Any i) = v.visit i; List.iter (iter v) i.children
+
+<span class="cm">(* OCaml 5.5: a polymorphic parameter *)</span>
+<span class="kw">let rec</span> iter (visit : 'm. 'm instance -&gt; unit) (Any i) =
+  visit i; List.iter (iter visit) i.children</code></pre>
+  <div class="note"><strong>Limits:</strong> an optional parameter cannot be polymorphic (pull request #14985 is open). A polymorphic type cannot have an abbreviation.</div>
+
+  <h3>Rules</h3>
+  <ul>
+    <li><b>Encapsulation.</b> The <code>.mli</code> file keeps <code>model</code> and <code>msg</code> abstract. The compiler refuses each access from the parent.</li>
+    <li><b>Identity.</b> The identity of an instance is its parent instance, its place and <code>C.id</code>. The place is the absolute position among its siblings, the same position that the DOM diff uses. Inside <code>View.keyed</code>, the key replaces the position, thus a move does not remount. Outside <code>View.keyed</code>, the <code>?key</code> of <code>Component.v</code> only resets: a new key at the same position remounts. If the key or the id at a place changes, the runtime unmounts the old instance and mounts the new one.</li>
+    <li><b>Duplicate keys.</b> A duplicate key in <code>View.keyed</code> raises <code>Invalid_argument</code> before the diff writes the DOM. The old list has no duplicate, because the runtime checked it. If the new list matches the old list key by key, the diff needs no check. If not (an insert, a move or a removal), the diff checks all keys of the new list with a <code>Map</code> before it writes. The prefix and suffix passes of ivi alone do not find a duplicate. For example, old <code>[1; 2]</code> and new <code>[1; 1; 2]</code> has no middle pass with the old list.</li>
+    <li><b>Two edge cases of identity.</b> A component module made inside <code>view</code> (a local module or a functor application) gets a new id on each render, thus it remounts each time. Two modules that share one <code>id</code> (for example by <code>include</code>) do not remount when they change places. Do not do these things.</li>
+    <li><b>Mount.</b> The runtime calls <code>init</code>. Its commands become task requests.</li>
+    <li><b>Cancel tokens.</b> When <code>update</code> or <code>init</code> of an instance gives its first task command, or the instance starts its first subscription, the runtime makes its token. If an ancestor has no token yet, the runtime first makes the tokens of the ancestors, from the top. Thus the token of a child is always under the token of its parent. A token made under a cancelled token is cancelled at once. An unmounted instance gets only a cancelled token.</li>
+    <li><b>Alive flag.</b> Each instance has an alive flag. A queued message points to its instance object, not to a path in the tree. When the message leaves the queue, the runtime drops it if the instance is not alive. This rule covers instances with no token, tasks that ended before the unmount, and DOM events. At the unmount, the runtime clears the model, the last view, the DOM references and the children of the instance. Only the flag and the id stay. Thus a JS callback that never runs (for example a promise that never settles) keeps only a small object alive, not the subtree.</li>
+    <li><b>Unmount.</b> The runtime clears the alive flag of the instance and of its children, removes them, and cancels their tokens. Thus all tasks, timers, requests and subscriptions of the instance and of its children stop.</li>
+    <li><b>Model change.</b> An instance is dirty when the model that <code>update</code> gives is not physically the same as the old model, as Elm does for <code>lazy</code>. In native code and under wasm_of_ocaml, the compare is <code>new_model != old_model</code>. Under js_of_ocaml, <code>!=</code> becomes <code>!==</code>, and a float model is a JS number: then <code>0.</code> and <code>-0.</code> would be the same value, and the render of a real change would be missed (tested). Thus in the js_of_ocaml build, the runtime uses the <code>Object.is</code> compare that <code>kilim.browser</code> installs for props (<a href="#components">section 09</a>), which is the identity of JS values. It keeps <code>0.</code> and <code>-0.</code> apart, and it costs one JS call for each <code>update</code>. The runtime never uses structural equality (<code>=</code>) on a model. A test with OCaml 5.5 and js_of_ocaml 6.4.1 showed why: <code>=</code> raises on a closure in the model, gives <code>true</code> for <code>0.</code> and <code>-0.</code> (a missed render), gives <code>false</code> for <code>nan</code>, walks the whole model on each message, and loops on a cyclic value. Physical equality costs one compare, never raises, and its error is in the safe direction in each build: a new model with the same content costs one more render. <code>update</code> gives back the same model when nothing changed. The model must be immutable: if <code>update</code> changes a mutable field in place and gives back the same model, the runtime does not render.</li>
+    <li><b>Props.</b> If <code>equal_props</code> gives <code>false</code>, the runtime renders the instance again.</li>
+    <li><b>Outputs.</b> The <code>~on</code> function of the parent changes the output into a message of the parent, in the same turn.</li>
+  </ul>
+  <h3>Errors</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>User code</th><th>Error scope</th></tr></thead>
+    <tbody>
+      <tr><td><code>init</code>, <code>update</code>, <code>subs</code>, <code>equal_props</code></td><td class="wrap">The instance</td></tr>
+      <tr><td><code>view</code></td><td class="wrap">The instance. The runtime calls the <code>view</code> of a child before the diff writes any DOM node of that child, thus an error leaves no half-changed DOM.</td></tr>
+      <tr><td>A step of a task, a callback of <code>Async.make</code></td><td class="wrap">The instance that owns the task</td></tr>
+      <tr><td>The <code>~on</code> function of a parent</td><td class="wrap">The parent</td></tr>
+      <tr><td>An end action of a token</td><td class="wrap">No instance. The runtime writes the error to the console and runs the other actions.</td></tr>
+      <tr><td>A callback of <code>Async.make</code> that raises after <code>ok</code> or <code>error</code></td><td class="wrap">No instance. The task already has its result. The runtime writes the error to the console.</td></tr>
+      <tr><td>A task whose token is cancelled</td><td class="wrap">None. The runtime drops its last error.</td></tr>
+      <tr><td>The functions of the app</td><td class="wrap">The root</td></tr>
+    </tbody>
+  </table></div>
+  <p>After an error in an instance, the runtime goes to the nearest <code>View.boundary</code> above it. It unmounts the whole subtree of the boundary, and thus cancels all of its tokens. Then it puts the fallback view in the DOM node of the boundary. With no boundary, the root does the same with the <code>?fallback</code> of <code>App.make</code>, and the runtime writes the error to the console. It gives the exception to <code>console.error</code> as a raw value, because <code>Printexc</code> links <code>Printf</code>.</p>
+  <p><b>State of a boundary.</b> A boundary is a node in the retained tree of its parent instance. After an error, it keeps the exception and the fallback subtree. It keeps the fallback until its place remounts: a key change, or a change of the node kind at its place. A new render of the parent calls <code>fallback exn</code> again and diffs the result with the fallback subtree. The fallback uses the context environment and the outer boundary that the boundary recorded at its mount. Thus a fallback that a catch builds outside the diff of the parent gets the same providers as the child had. It does not try the failed child again, as in React. To try again, change the <code>?key</code> of the boundary. An error in the fallback subtree goes to the next boundary above, not to the boundary that shows the fallback, as in React. Thus a fallback that raises cannot cause a loop of remounts.</p>
+<pre><code><span class="kw">val</span> View.boundary : ?key:string -&gt; fallback:(exn -&gt; 'msg View.t) -&gt; 'msg View.t -&gt; 'msg View.t</code></pre>
+  <p><code>View.boundary</code> and <code>Context.provide</code> take one child, not a list. Thus each view node maps to exactly one DOM node, and the diff of Phase 1 needs no fragments. Put a list in an element, for example <code>El.div</code>.</p>
+
+  <figure>
+    <svg viewBox="0 0 760 330" role="img" aria-label="Instance tree. The App instance sends props down to Counter and Search and gets outputs back through on. Counter has no cancel token because it has no tasks. Search has a cancel token with a task from Cmd.latest.">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="d-arrow" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+      <rect class="d-core" x="300" y="20" width="180" height="60" rx="8"/>
+      <text class="d-b" x="390" y="45" text-anchor="middle">App (root)</text>
+      <text class="d-s" x="390" y="63" text-anchor="middle">model, msg, root token</text>
+
+      <rect class="d-new" x="60" y="170" width="240" height="64" rx="8"/>
+      <text class="d-b" x="180" y="196" text-anchor="middle">Counter  key="left"</text>
+      <text class="d-s" x="180" y="215" text-anchor="middle">model hidden &#183; no token (no tasks)</text>
+
+      <rect class="d-scope" x="448" y="158" width="284" height="150" rx="10"/>
+      <text class="d-s" x="460" y="298">token of Search (made at the first task)</text>
+      <rect class="d-new" x="460" y="170" width="260" height="64" rx="8"/>
+      <text class="d-b" x="590" y="196" text-anchor="middle">Search</text>
+      <text class="d-s" x="590" y="215" text-anchor="middle">model hidden</text>
+      <rect class="d-box" x="472" y="250" width="236" height="32" rx="16"/>
+      <text class="d-m" x="590" y="271" text-anchor="middle">task: Cmd.latest "fetch"</text>
+      <line class="d-line" x1="590" y1="234" x2="590" y2="248" marker-end="url(#ah)"/>
+
+      <polyline class="d-line" points="360,80 360,135 200,135 200,168" marker-end="url(#ah)"/>
+      <text class="d-s" x="208" y="154">props</text>
+      <polyline class="d-line" points="140,170 140,110 330,110 330,82" marker-end="url(#ah)"/>
+      <text class="d-m" x="150" y="104">Changed n &#8594; Count n</text>
+
+      <polyline class="d-line" points="420,80 420,135 560,135 560,168" marker-end="url(#ah)"/>
+      <text class="d-s" x="568" y="154">props</text>
+      <polyline class="d-line" points="640,170 640,110 450,110 450,82" marker-end="url(#ah)"/>
+      <text class="d-m" x="470" y="104">Picked s &#8594; Pick s</text>
+    </svg>
+    <figcaption>The parent sends props down and gets typed outputs back through <code>~on</code>, in the same turn. Counter never starts a task, thus it has no token. Search got a token at its first <code>Cmd.latest</code>. When Search unmounts, the runtime cancels the token: the timer stops and the browser aborts the fetch.</figcaption>
+  </figure>
+
+  <h3>Example: a counter with an output</h3>
+<pre><code><span class="cm">(* counter.ml *)</span>
+<span class="kw">open</span> Kilim
+<span class="kw">include</span> Component.Defaults
+<span class="kw">type</span> props = { step : int; label : string }
+<span class="kw">type</span> model = int
+<span class="kw">type</span> msg = Incr | Decr
+<span class="kw">type</span> out = Changed <span class="kw">of</span> int
+
+<span class="kw">let</span> id : (props, model, msg, out) Component.id = Component.id ()
+<span class="kw">let</span> init _ = (0, Cmd.none)
+
+<span class="kw">let</span> update ctx p n = <span class="kw">function</span>
+  | Incr -&gt; <span class="kw">let</span> n = n + p.step <span class="kw">in</span> (n, Ctx.emit ctx (Changed n))
+  | Decr -&gt; <span class="kw">let</span> n = n - p.step <span class="kw">in</span> (n, Ctx.emit ctx (Changed n))
+
+<span class="kw">let</span> view p n =
+  El.div ~at:[At.class_ <span class="kw">"counter"</span>]
+    [ El.span [txt p.label]
+    ; El.button ~ev:[Ev.click Decr] [txt <span class="kw">"-"</span>]
+    ; El.output [txt (string_of_int n)]
+    ; El.button ~ev:[Ev.click Incr] [txt <span class="kw">"+"</span>] ]</code></pre>
+
+  <h3>Example: a search box with debounce and cancel</h3>
+  <p>Each key press starts a new <code>Cmd.latest</code> task with the key <code>"fetch"</code>. The new task cancels the token of the old task. If the old task waits in <code>Async.sleep</code>, its timer stops. If its request is in flight, the browser aborts it. A result that is already in the queue keeps the cancelled token of the old task, thus the runtime drops it.</p>
+<pre><code><span class="cm">(* search.ml *)</span>
+<span class="kw">open</span> Kilim
+<span class="kw">open</span> Async.Syntax
+<span class="kw">include</span> Component.Defaults
+<span class="kw">type</span> props = { endpoint : string }
+<span class="kw">type</span> model = { query : string; results : string list; loading : bool }
+<span class="kw">type</span> msg = Typed <span class="kw">of</span> string | Got <span class="kw">of</span> (string list, Http.error) result | Chose <span class="kw">of</span> string
+<span class="kw">type</span> out = Picked <span class="kw">of</span> string
+
+<span class="kw">let</span> id : (props, model, msg, out) Component.id = Component.id ()
+<span class="kw">let</span> init _ = ({ query = <span class="kw">""</span>; results = []; loading = false }, Cmd.none)
+
+<span class="kw">let</span> update ctx p m = <span class="kw">function</span>
+  | Typed q -&gt;
+      ( { m <span class="kw">with</span> query = q; loading = true }
+      , Cmd.latest ~key:<span class="kw">"fetch"</span>
+          (<span class="kw">let*</span> () = Async.sleep (Span.ms 250) <span class="kw">in</span>
+           <span class="kw">let+</span> r = Http.get_json Decode.(list string)
+                     (Url.with_query p.endpoint [<span class="kw">"q"</span>, q]) <span class="kw">in</span>
+           Got r) )
+  | Got (Ok rs) -&gt; ({ m <span class="kw">with</span> results = rs; loading = false }, Cmd.none)
+  | Got (Error _) -&gt; ({ m <span class="kw">with</span> loading = false }, Cmd.none)
+  | Chose s -&gt; (m, Ctx.emit ctx (Picked s))
+
+<span class="kw">let</span> view _ m =
+  El.div
+    [ El.input ~at:[At.value m.query; At.aria_label <span class="kw">"City"</span>]
+        ~ev:[Ev.input (<span class="kw">fun</span> s -&gt; Typed s)] ()
+    ; El.ul (List.map (<span class="kw">fun</span> r -&gt; El.li ~ev:[Ev.click (Chose r)] [txt r]) m.results) ]</code></pre>
+
+  <h3>Example: the parent</h3>
+<pre><code><span class="kw">type</span> model = { total : int; city : string option; resets : int }
+<span class="kw">type</span> msg = Count <span class="kw">of</span> int | Pick <span class="kw">of</span> string | Reset_all
+
+<span class="kw">let</span> init () = ({ total = 0; city = None; resets = 0 }, Cmd.none)
+
+<span class="kw">let</span> update m = <span class="kw">function</span>
+  | Count n -&gt; ({ m <span class="kw">with</span> total = n }, Cmd.none)
+  | Pick s -&gt; ({ m <span class="kw">with</span> city = Some s }, Cmd.none)
+  | Reset_all -&gt; ({ m <span class="kw">with</span> total = 0; resets = m.resets + 1 }, Cmd.none)
+
+<span class="kw">let</span> view m =
+  El.main
+    [ Component.v (<span class="kw">module</span> Counter) ~key:(<span class="kw">"left/"</span> ^ string_of_int m.resets)
+        ~on:(<span class="kw">fun</span> (Counter.Changed n) -&gt; Count n)
+        { Counter.step = 1; label = <span class="kw">"Left"</span> }
+    ; Component.v (<span class="kw">module</span> Search)
+        ~on:(<span class="kw">fun</span> (Search.Picked s) -&gt; Pick s)
+        { Search.endpoint = <span class="kw">"/api/cities"</span> }
+    ; El.button ~ev:[Ev.click Reset_all] [txt <span class="kw">"Reset"</span>] ]
+
+<span class="kw">let</span> fallback _exn = El.p [txt <span class="kw">"An error occurred. Reload the page."</span>]
+
+<span class="kw">let</span> () = Kilim_browser.run ~mount:<span class="kw">"#app"</span> (App.make ~init ~update ~view ~fallback ())</code></pre>
+  <p>The parent does not store the model of a child, and it does not know the messages of a child. The reset is a key change: a new key at the same position gives a new Counter instance, and its <code>init</code> sets the count to 0.</p>
+</section>
+
+<section id="shared">
+  <h2>Shared state</h2>
+  <p><code>Context.t</code> is a typed key. A provider in the view gives a value to all components below it. During <code>view</code>, <code>Context.read</code> records the instance that reads the value. The runtime compares a new provided value with the old value by <code>Component.shallow_equal</code>. If the value changed, the runtime marks only the readers as dirty. A reader renders also when its parent skips it because of <code>equal_props</code>. The other components below the provider do not render.</p>
+  <p>The data of the runtime for Context:</p>
+  <ul>
+    <li>A provider is a view node with one child and no DOM element of its own: its DOM node is the DOM node of its child. It keeps its last value and a doubly linked list of its readers. It moves with its node in a keyed move.</li>
+    <li>A provider and a boundary are node kinds in identity. If a provider or a boundary appears or disappears at a place, or the context of a provider changes, the subtree at that place remounts, as in React. Thus a reader never keeps a context environment that points to a removed provider.</li>
+    <li>Each instance keeps its context environment from its mount: a map from the context id to the nearest provider above it. Thus the runtime can render a reader alone.</li>
+    <li>Each render of a reader removes its old registrations and adds new ones, because a read can be conditional.</li>
+    <li>The diff keeps the providers on its path. A <code>Context.read</code> node gets the nearest provider on this path, also a provider in the same view. If no provider is on the path, it gets the environment of its instance. The read registers with that provider.</li>
+    <li>When a provider unmounts, its readers unmount too, because they are below it. An unmount removes each registration of the instance from the reader list of its provider, in O(1). The leak tests also count these registrations.</li>
+  </ul>
+  <p>This machinery is in the scope of Phase 2, with tests for a provider in a keyed move, a provider that unmounts, and a conditional read. Version 1 has no <code>Store</code>: a context with a value in the model of the app does the same task.</p>
+<pre><code><span class="kw">let</span> theme : theme Context.t = Context.create ~default:Light ()
+
+<span class="kw">let</span> view m =
+  Context.provide theme m.theme
+    (Component.v (<span class="kw">module</span> Toolbar) ~on:(<span class="kw">fun</span> Toolbar.Menu -&gt; Open_menu) ())
+
+<span class="cm">(* in toolbar.ml *)</span>
+<span class="kw">let</span> view () _model =
+  Context.read theme (<span class="kw">fun</span> t -&gt; El.nav ~at:[At.class_ (theme_class t)] [ ... ])</code></pre>
+</section>
+
+<section id="runtime">
+  <h2>Runtime semantics</h2>
+  <p>The whole runtime is synchronous and single-threaded. It has no scheduler and performs no OCaml effects.</p>
+  <h3>A turn</h3>
+  <p>The runtime has two queues: the message queue, and the run queue of <code>Async</code>. A <b>turn</b> is the only way to process them. Each DOM listener and each host callback (timer, fetch, socket, frame) runs one turn. A turn never nests: an event that a DOM operation causes (for example <code>focusout</code> on a removed element) only goes into the message queue. A turn has these steps, in this order:</p>
+  <ol>
+    <li>For a DOM event, the listener applies the static options (<code>~prevent_default</code>, <code>~stop</code>) at once.</li>
+    <li><b>Settle.</b> The runtime does the three settle actions again and again, until the two queues and the list of task requests are empty.</li>
+    <li><b>Render.</b> For a discrete event (<code>click</code>, <code>input</code>, <code>change</code>, <code>submit</code>, <code>keydown</code>), or for a frame turn with a pending render, the runtime renders at once. In all other cases, it marks a render as pending (see the rules that follow).</li>
+    <li>The render can give new work: a <code>focusout</code>, the init tasks of new instances, the first message of <code>Sub.run</code>. Then the runtime settles again (step 2). If the settle changed a model, the runtime renders again at once. One turn has at most 3 renders. After the third, the rest waits for the next pending render.</li>
+  </ol>
+  <p>The three settle actions are:</p>
+  <ul>
+    <li>Drain the run queue. A continuation can put a message in the message queue.</li>
+    <li>Take one message. Drop it if its instance is not alive or its token is cancelled. If not, call <code>update</code>, and mark the instance as dirty if the new model is not physically the same as the old model. An output of <code>Ctx.emit</code> goes to the back of the message queue.</li>
+    <li>When the message queue is empty, apply the task requests in the order of their creation. The init tasks of new instances also start here, after the render, and at no other point. A task with a synchronous result gives its message in the same settle step.</li>
+  </ul>
+  <p><b>Subscriptions in a turn.</b> In a discrete turn and in a frame turn, the render follows the settle at once, thus the render alone compares the subscriptions. If a turn ends with a render that is pending, the runtime calls <code>subs</code> at the end of the turn for each instance whose model changed, with its stored props. It cancels the keys that are gone and removes them from the recorded set, and it gives the new message functions to the keys that stay. Thus a key that comes back before the render starts again at the render. A removed subscription sends no more messages, and a kept one uses the newest mapping, before the render. New keys start only at the render, with the newest props. If the render then changes the props, the worst result is one restart of a subscription.</p>
+  <p>Thus one click renders one time, also when its <code>update</code> starts a task with a synchronous result. A render that mounts children with synchronous init tasks renders again, at most 3 times in one turn. A sketch of this turn passed these tests in the two builds:</p>
+  <ul>
+    <li>A result of <code>Async.make</code> in a click, in a timer callback and in a raw callback, and a <code>Sub.run</code> send from a raw callback: each message is processed in the same turn, with one render.</li>
+    <li>Five levels of mounts with synchronous init tasks: 3 renders in the click turn, 3 in the next frame turn, then none.</li>
+    <li>A message loop through microtasks stops after 50 ms and continues in a new task. After 10 yields in 1 s, a warning goes to the console.</li>
+    <li>10 promise results after 0.5 s, 1.5 s or 2 s of idle time (the tick runs before the idle time), and 500 raw callbacks 1 ms or 2 ms apart: each one is processed in its own turn, with no yield and no warning.</li>
+    <li>A task that loops through synchronous <code>make</code> steps, or through microtasks with no message: the drain stops at the limit, and the turn yields one time.</li>
+    <li>A promise loop with 5 ms of JS work outside kilim in each step: the wall-time cap stops it after 1 s, with one yield.</li>
+    <li>One event gives messages to two widgets. The <code>update</code> of Y changes its model, then the <code>update</code> of X raises: the error goes to the boundary of X, and Y renders in the same turn.</li>
+    <li>A search box gets "ab", and then the result of "a" comes in the same turn: the result of "a" is dropped. Two key presses in one turn, before the first request starts: the first request never starts. A yield leaves the last continuation of "a" in the run queue, then "ab" comes: the result of "a" is dropped. 1,000 distinct keys on a live instance leave an empty table.</li>
+    <li>A model of the instance tree: a card that renders alone and raises goes to its own boundary, and the other dirty instance still renders. Rows 4 and 5 mount with <code>Sub.run</code>, then row 6 raises: 0 live instances and tokens stay. A nested boundary in the same view: the outer catch also unmounts the inner subtree. All rows of a list fail, each in its own boundary: the time is linear. A fallback that a catch builds gets the provider of its place. An error in a fallback goes to the outer boundary. 1,000 replacements of 100 rows add 0 links. 1,000 pages of 20 cards, each with its own boundary, leave 0 nested entries. An unmount leaves 0 reader registrations. A key that stops and starts again before the render is live after the render.</li>
+    <li>An input event in a turn that yields: no restore in that turn, and one restore after the next render.</li>
+    <li>10,000 init tasks in one turn: one yield and no warning.</li>
+    <li>An exception in the render: the next turn runs normally. If work stays in a queue, the runtime asks for a new turn.</li>
+    <li>A keyed diff from <code>[1; 2; 3]</code> to <code>[3; 2; 4]</code> where row 2 raises in its boundary: the DOM is <code>[3; 2 (fallback); 4]</code>, row 1 is cancelled, and the init task of row 4 is requested.</li>
+    <li>A change of the room in a non-discrete turn: the old subscription stops at the end of the turn, before the render, and its next message is dropped.</li>
+  </ul>
+  <ul>
+    <li><b>Outside a turn.</b> A binding can call <code>ok</code>, and <code>Sub.run</code> can call <code>send</code>, from a callback that kilim does not wrap (for example a raw <code>Ev.listen</code> or an IndexedDB request). Then the push to a queue asks the host for one turn in a microtask. A flag prevents a second request before that turn runs.</li>
+    <li><b>Time limit.</b> The limit counts the busy time of kilim turns, not wall time. Each turn adds its duration to a busy sum. The settle step yields when the busy sum passes 50 ms. The end of each turn posts one tick (a <code>MessageChannel</code> message, at most one at a time). The tick is not a turn: it only clears its own flag and sets the busy sum to 0, and it posts nothing. A turn starts a new clock (busy sum 0, and the wall-time window starts) if it is a macrotask turn (a DOM event, a timer, a frame, a <code>post_task</code> continuation), or if no tick is pending. No pending tick means that a browser task ran since the last turn. Thus results that come from foreign tasks (IndexedDB, raw listeners, streamed chunks) add only their own small cost, and they never yield with no progress. A microtask chain never lets that message run. Thus a message loop through microtasks adds busy time and stops. A wall-time cap stops a chain whose time is outside kilim (for example a promise loop with long JS work in each step): if 1 s of wall time passes in one chain with no reset, the runtime yields. A result after idle time gets a new clock, because its tick ran before the idle time, thus the cap does not make it yield. The drain of the run queue reads the clock before its first continuation and once every 256 continuations. Thus a task that loops through synchronous steps, or through microtasks with no message, also stops. At the limit, the runtime keeps the rest in its queues, marks a render as pending, and continues in a new task (<code>host.post_task</code>). A large mount of 10,000 rows can yield one time, with no error. After 10 yields in 1 s, the runtime writes a warning to the console.</li>
+    <li><b>Exceptions.</b> At mount, each instance records its nearest boundary, as it records its context environment. Each boundary is a record in the retained tree. At its mount, it records its owner instance, the next boundary above it (its outer boundary), and the context environment on the diff path at its place. The diff puts the child of each <code>View.boundary</code> in <code>try ... with</code> (not <code>Fun.protect</code>). Each render of a dirty instance alone (its own model changed, or it reads a Context) is also in <code>try ... with</code>, and so is each call of <code>update</code> and of <code>subs</code> for one instance. After an error in <code>update</code>, the settle step continues with the next message. Thus a model change of another instance in the same turn still renders. Each boundary catch that is not inside the diff marks a render as pending: a catch in <code>update</code>, in a task step or a callback of <code>Async.make</code> (in the drain), or in the early call of <code>subs</code>. Thus the subscriptions of the fallback start at that render. A catch in the <code>subs</code> pass at the end of a render starts the subscriptions of the fallback instances in the same pass. The error goes to the recorded boundary. On an exception from user code or from a DOM operation, the boundary unmounts its subtree, builds the fallback with its recorded environment, writes the fallback into its DOM node, and the render continues. The instances of the fallback record the outer boundary. The diff of the parent continues with the other siblings, and the render skips the dirty instances that the catch unmounted. The root has the same catch, with the <code>?fallback</code> of <code>App.make</code>. The turn has one more <code>try ... with</code> for errors outside the render. After that catch, the runtime clears its turn flags. If work stays in a queue, it asks for a new turn. If an instance is dirty, it marks a render as pending (a discrete turn renders at once).</li>
+    <li><b>Link before init.</b> The diff links a new instance into the child list of its owner instance, and into the member list of its boundary, before <code>init</code> runs and before its first DOM write. A boundary also links into the list of nested boundaries of its outer boundary, and into the list of owned boundaries of its owner instance. All these lists are doubly linked, and an unmount unlinks in O(1), as for tokens. The boundary record keeps its own nodes in these lists. The unmount of an instance unlinks its owned boundaries from their outer boundaries. A diff that removes a boundary node, a key change of a boundary, and a catch that removes nested boundaries unlink the boundary from the owned list of its owner and from the nested list of its outer boundary, also when the owner stays alive. Thus the nested list of a long-lived boundary does not grow: in a model, 1,000 pages of 20 cards, each card with its own boundary, left 0 entries. To unmount the subtree of a boundary, the catch walks only its member list and, recursively, its nested boundaries. Thus a nested boundary in the same view, and an instance that a stopped diff mounted, are never outside the unmount. The cost of a catch is linear in the size of its subtree: in a model, 100,000 rows that each fail in their own boundary took 7.5 ms native and 52 ms under js_of_ocaml. The leak tests also count these links, the member lists, the nested lists and the owned lists. One leak test keeps the owner alive and replaces 100 boundary rows 1,000 times: each list must be empty at the end.</li>
+    <li><b>Start.</b> A loader picks the build and starts it (see "The loader" in this section).</li>
+  </ul>
+  <h3>A render</h3>
+  <ul>
+    <li><b>Timing.</b> A pending render runs at the next animation frame, or after 100 ms, whichever comes first. Thus a throttled frame (for example in an iframe that is out of view) does not delay unmounts, cancels and new tasks for long.</li>
+    <li><b>Hidden tab.</b> In a hidden tab, a pending render runs in a new task (<code>host.post_task</code>), not in each callback. Thus a <code>post_task</code> gives at most one render, for all the messages that came before it. When the tab becomes hidden, a <code>visibilitychange</code> listener does a pending render at once.</li>
+    <li>The render calls <code>view</code> for the dirty instances, from the top. It mounts and unmounts instances. The diff calls the DOM operations directly, with no patch list.</li>
+    <li>The keyed diff uses the algorithm of ivi and Inferno: it compares the common start and end, uses a map only for the middle, and moves nodes along the longest increasing subsequence. Keys are <code>int</code> or <code>string</code> (<code>Key.int</code>, <code>Key.string</code>).</li>
+    <li>The diff cancels a removed instance when it removes it. At the end of the render, the runtime starts the subscriptions of new instances. Then it compares the subscriptions of each live instance whose model changed or that got new props, and starts the new keys. The init tasks of new instances start in the next settle step.</li>
+    <li>New subscriptions start only at the render, thus <code>subs</code> gets the newest props, and an instance that the render removes starts no subscription. The cost: for a non-discrete event, a new subscription can start up to one frame later. A removed subscription stops earlier, at the end of the turn.</li>
+    <li>A task request of an instance that the next render removes still starts in step 2, and the unmount then cancels it. Its message does nothing, because the instance is not alive.</li>
+  </ul>
+  <h3>The loader</h3>
+  <p>A kilim app starts through a small loader. The loader picks one build, one time, before any build starts. There is no fallback after a start, because the generated launcher of wasm_of_ocaml gives no hook to the loader.</p>
+  <ul>
+    <li><b>Why two builds.</b> wasm_of_ocaml catches a JS exception only through <code>WebAssembly.JSTag</code>. Its runtime has a comment that Safari does not support it yet (I am not sure which versions). Without it, no OCaml handler catches a JS exception, also the handlers inside Brr (for example <code>Json.decode</code>). <code>JSTag</code> depends on the browser, not on the build.</li>
+    <li><b>Probes.</b> The loader picks the wasm_of_ocaml build only if all of these synchronous probes pass: <code>typeof WebAssembly === "object"</code>, <code>WebAssembly.JSTag</code> exists, <code>new WebAssembly.Module</code> on the 8 bytes of an empty module does not throw (it throws under a CSP with no <code>'wasm-unsafe-eval'</code>), and <code>WebAssembly.validate</code> accepts a module with one GC struct type. If not, it picks the js_of_ocaml build. The probes take about 0.001 ms.</li>
+    <li><b>Two parts, one script text.</b> The page has the same inline script two times. The head part comes directly after <code>&lt;meta charset&gt;</code> and each CSP <code>&lt;meta&gt;</code>, and before each stylesheet. It runs the probes, stores the selected build in a property of <code>document.documentElement</code>, and adds preloads: the selected build (<code>as="script"</code>) and, for the wasm_of_ocaml build in the release profile, the main <code>.wasm</code> (<code>as="fetch"</code>, <code>crossorigin</code>). The start part has a <code>data-start</code> attribute and is the last element of the <code>body</code>. It reads the selected build from that property and does not run the probes again. The part that runs second starts the build: if the start part finds no stored result, it sets a flag on <code>document.documentElement</code> and returns, and the head part starts the build after its probes if it finds that flag. In the inline form, the head part always runs first. In the <code>loader.js</code> form, this hand-off is the usual path in Chrome: the <code>defer</code> start part ran before the <code>async</code> head part on each first visit with no slow stylesheet, and on repeat visits when the stylesheets are in the cache (measured in Chrome 157). Firefox 159 did the same on about 7 of 10 repeat visits. The stored result, the flag and a started mark have the <code>data-base</code> value as a key, and a part clears the flag when it uses it. Thus two kilim apps on one page (for example two live examples) each start one time. Under a CSP with no <code>'wasm-unsafe-eval'</code>, each probe compile sends a CSP violation report, thus one probe gives one report for each page view, not two. An optional <code>data-build="js"</code> attribute skips the Wasm probe for a site that never permits <code>'wasm-unsafe-eval'</code>. The start part inserts the selected build, which comes from the preload.</li>
+    <li><b>Stylesheets.</b> The parser holds a parser-inserted script until each stylesheet before it that blocks scripts has loaded or failed, also with its <code>@import</code>. Thus the browser decides which stylesheets the first render waits for, and <code>run</code> needs no rule for stylesheets. A failed stylesheet does not block. A print, alternate or disabled stylesheet, and a stylesheet that a script inserts, do not delay the start. The reviewer measured this in headless Chrome and Firefox: with a stylesheet or an <code>@import</code> that comes at 1.5 s, the app started at about 1.5 s to 1.7 s with the styled layout. With the other links, it started at 60 ms to 65 ms. The build request started at 8 ms to 11 ms, with one download.</li>
+    <li><b>Mount.</b> If the mount element exists, <code>Kilim_browser.run</code> starts at once. If not, it waits for <code>readystatechange</code> until <code>document.readyState</code> is not <code>"loading"</code>. It does not wait for <code>DOMContentLoaded</code>, because that event also waits for each <code>defer</code> script on the page (for example a tag manager). The reviewer measured this in Chrome: with a slow stylesheet, the build ran while the state was still <code>"loading"</code>, and <code>DOMContentLoaded</code> came 700 ms later, after a slow <code>defer</code> script. With the start part as the last element of the <code>body</code>, the mount element always exists.</li>
+    <li><b>Values.</b> The build-specific values are in <code>data-</code> attributes of the script element, and the script reads them through <code>document.currentScript.dataset</code>: the absolute base path, the URL of each build, the name of the main <code>.wasm</code> (release only), the profile (<code>data-dev</code>) and <code>data-start</code>. Thus the script text is the same in the two parts, in the dev and release profiles and in each build. Its <code>'sha256-…'</code> source expression changes only when the kilim template changes, and the user adds it to <code>script-src</code> one time.</li>
+    <li><b>URLs.</b> The loader resolves each URL against the base path, never against the URL of the document. Thus a deep link of a router app (for example <code>/users/42</code>) loads the build. The launcher finds its <code>.wasm</code> against its own URL.</li>
+    <li><b>Trusted Types.</b> One start function inserts the build, and either part can call it (see the hand-off). If <code>window.trustedTypes</code> exists, this function makes a policy with the fixed name <code>kilim-loader</code> and sets the <code>src</code> of the script through it. A second <code>createPolicy</code> with the same name throws. Thus the function keeps the policy object in a shared property of the page, and it uses that object again if it exists. Thus the second app of a page makes no second policy. Neither part makes the policy at its top. The documentation tells users to add this name to the <code>trusted-types</code> directive. The <code>href</code> of a preload link is not a Trusted Types sink (tested in Chrome and Firefox), thus the preloads need no policy.</li>
+    <li><b>Order with other scripts.</b> The build can run before each <code>defer</code> script of the page, in the two forms, because the start part runs before them and the inserted build is async. Thus a JS library that the app uses must be linked into the build, or loaded with a blocking script. In the inline form, the blocking script can be anywhere before the start part. In the <code>loader.js</code> form, it can be anywhere in the document. It must not come before the head part, because it then delays the build download (measured: about 105 ms with a 150 KB library). A library that ships only as an ES module cannot be a blocking script: the app loads it with <code>import()</code> in a task, through a JS expression and <code>Async.of_fut</code>. The documentation tells these rules.</li>
+    <li><b>A CSP with no hash.</b> For this case, the rule also writes <code>loader.js</code>, with the same two parts: <code>&lt;script src="loader.js" async&gt;</code> before the stylesheets for the probes and the preloads, and directly after it <code>&lt;script src="loader.js" defer data-start&gt;</code> for the start, before the stylesheets and before each other <code>defer</code> script. A <code>defer</code> script runs after the earlier <code>defer</code> scripts, thus at the end of the <code>body</code> it would wait for a slow tag manager (measured: about 1 s). A <code>defer</code> script still waits for each stylesheet that blocks scripts in the document, thus the first render has the CSS. The reviewers measured this position with a 600 ms stylesheet and a 1 s third-party <code>defer</code> script: start at 610 ms to 613 ms in Chrome and at 654 ms to 660 ms in Firefox (6 runs, stable), with the styled layout. The third-party script never delayed the start. The browser requests <code>loader.js</code> one time. This form costs one more round trip before the build download starts. The reviewer measured it with a 400 KB build, a 300 ms stylesheet and a 100 ms server delay: start at 657 ms, against 555 ms for the inline form and 858 ms for a single <code>defer</code> loader. The documentation tells this cost.</li>
+    <li><b>Release files.</b> A dune rule cannot declare a target whose name comes from its content without the experimental directory targets. Thus the dev profile uses the dune rule, with fixed names and no cache. For a release, a small executable, <code>kilim dist</code>, runs after dune. It copies the js_of_ocaml build, the launcher (next to its <code>.assets</code> directory) and <code>loader.js</code> to names with a content hash. During a deploy that is not atomic, an old server then gives a 404 for a new name, and the browser stores no stale file as immutable. <code>kilim dist</code> fills a template of the HTML page that the user gives (with no change to the script text), or it writes a JSON manifest for a server such as caravan. The documentation tells users to serve each file with a content name as immutable, the HTML page with no cache, and to keep the files of the last deploy for one more deploy. A repeat visit then starts with no request for the build (measured: 113 ms against 214 ms with a 100 ms server delay).</li>
+    <li><b>Dev checks.</b> In the dev profile, the loader writes a console warning if a stylesheet comes before the head part, a CSP <code>&lt;meta&gt;</code> comes after it, or the start part is not in its place (the last element of the <code>body</code> in the inline form, or directly after the <code>async</code> tag in the <code>loader.js</code> form).</li>
+  </ul>
+  <p>The loader, its dune rule and <code>kilim dist</code> are deliverables of Phase 1, and all examples use them. CI tests in Chromium, Firefox and WebKit:</p>
+  <ul>
+    <li>The js_of_ocaml build loads and starts after <code>delete WebAssembly.JSTag</code>, after <code>delete WebAssembly</code>, and under <code>script-src 'self'</code> plus the hash (no <code>'wasm-unsafe-eval'</code>), with a CSP header and with a CSP <code>&lt;meta&gt;</code></li>
+    <li>A CSP with Trusted Types, with a <code>View.unsafe_html</code> node, in the inline form, and in the <code>loader.js</code> form in Chromium and Firefox with the hand-off path. The test server delays the head part to force this path, and in the dev profile the loader records which part started the build in a <code>data-</code> attribute of <code>document.documentElement</code>. The test fails if the expected path did not run.</li>
+    <li>Two kilim apps on one page, with and without Trusted Types: each app starts one time</li>
+    <li>A deep link, a body that comes 300 ms after the head, and a slow third-party <code>defer</code> script that must not delay the start</li>
+    <li>Under a CSP with no <code>'wasm-unsafe-eval'</code>: one CSP violation report for each page view</li>
+    <li>The <code>loader.js</code> form on a repeat visit with all files in the cache, in Chromium: the app starts, with one probe</li>
+    <li>One script hash for two builds with different OCaml code, and for the dev and release profiles</li>
+    <li>A slow stylesheet, a slow <code>@import</code>, a failed stylesheet and a stylesheet with <code>type="text/css; charset=utf-8"</code>: the first render sees the styled layout, and the start does not hang</li>
+    <li>A print, alternate, disabled or empty stylesheet link, and a stylesheet that a script inserts: no delay of the start.</li>
+  </ul>
+  <h3>DOM rules</h3>
+  <ul>
+    <li><b>Controlled inputs.</b> For <code>value</code> and <code>checked</code>, the diff compares with the value that it wrote last. After each discrete event, the runtime restores the controlled properties of the event target from the last view, also when the instance is not dirty. Thus a rejected input does not stay, as in React. If a discrete turn yields before it renders, the runtime does not restore in that turn: it restores after the next render. Thus the input of the user does not get lost.</li>
+    <li><b>Checkbox and radio button.</b> The browser sends <code>input</code> and <code>change</code> after the click dispatch, thus after the restore. For these two types, <code>Ev.input</code> and <code>Ev.change</code> use the <code>click</code> event, as React does. The listener reads <code>checked</code> before the restore and gives it to the message function.</li>
+    <li><b>Radio group.</b> A click on a radio button also clears the other buttons of its group. Thus the restore of a radio button also restores each radio button with the same <code>name</code> in the same form, or in the mount root if it has no form. React does the same.</li>
+    <li><b>IME.</b> During IME composition, the runtime does not write <code>value</code>. At <code>compositionend</code>, it restores the value again.</li>
+    <li><b>Events that do not bubble.</b> <code>focus</code> and <code>blur</code> use <code>focusin</code> and <code>focusout</code>. <code>mouseenter</code>, <code>mouseleave</code> and <code>scroll</code> use listeners on their elements.</li>
+    <li><b>Touch and wheel.</b> <code>wheel</code>, <code>touchstart</code> and <code>touchmove</code> use listeners on their elements, not delegation at the root. The listener is <code>passive</code> if the handler has no <code>~prevent_default</code>. Thus a scroll over the app does not wait for the main thread.</li>
+  </ul>
+  <figure>
+    <svg viewBox="0 0 760 250" role="img" aria-label="Runtime loop. A DOM event goes to a synchronous listener, which settles the queues with update, renders and calls DOM operations. Task requests from the batch go to the host, which runs timers and fetches. Host callbacks continue the tasks, which send messages back to the queue in a new turn.">
+      <defs>
+        <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="d-arrow" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+      <text class="d-s" x="12" y="18">DISPATCH</text>
+      <rect class="d-box" x="12" y="30" width="132" height="58" rx="7"/>
+      <text class="d-t" x="78" y="63" text-anchor="middle">DOM event</text>
+      <rect class="d-new" x="160" y="30" width="132" height="58" rx="7"/>
+      <text class="d-t" x="226" y="55" text-anchor="middle">Listener</text>
+      <text class="d-s" x="226" y="73" text-anchor="middle">prevent_default, queue</text>
+      <rect class="d-new" x="308" y="30" width="132" height="58" rx="7"/>
+      <text class="d-t" x="374" y="55" text-anchor="middle">Batch</text>
+      <text class="d-s" x="374" y="73" text-anchor="middle">update until empty</text>
+      <rect class="d-new" x="456" y="30" width="132" height="58" rx="7"/>
+      <text class="d-t" x="522" y="55" text-anchor="middle">Render</text>
+      <text class="d-s" x="522" y="73" text-anchor="middle">now or next frame</text>
+      <rect class="d-box" x="604" y="30" width="144" height="58" rx="7"/>
+      <text class="d-t" x="676" y="55" text-anchor="middle">DOM operations</text>
+      <text class="d-s" x="676" y="73" text-anchor="middle">no patch list</text>
+      <line class="d-line" x1="144" y1="59" x2="158" y2="59" marker-end="url(#ah2)"/>
+      <line class="d-line" x1="292" y1="59" x2="306" y2="59" marker-end="url(#ah2)"/>
+      <line class="d-line" x1="440" y1="59" x2="454" y2="59" marker-end="url(#ah2)"/>
+      <line class="d-line" x1="588" y1="59" x2="602" y2="59" marker-end="url(#ah2)"/>
+      <text class="d-s" x="308" y="128">TASKS</text>
+      <rect class="d-core" x="308" y="140" width="132" height="58" rx="7"/>
+      <text class="d-t" x="374" y="165" text-anchor="middle">Task requests</text>
+      <text class="d-s" x="374" y="183" text-anchor="middle">start, cancel, subs</text>
+      <rect class="d-core" x="456" y="140" width="132" height="58" rx="7"/>
+      <text class="d-t" x="522" y="165" text-anchor="middle">Host</text>
+      <text class="d-s" x="522" y="183" text-anchor="middle">timers, fetch, sockets</text>
+      <rect class="d-core" x="604" y="140" width="144" height="58" rx="7"/>
+      <text class="d-t" x="676" y="165" text-anchor="middle">Callbacks</text>
+      <text class="d-s" x="676" y="183" text-anchor="middle">continue the task</text>
+      <line class="d-line" x1="374" y1="88" x2="374" y2="138" marker-end="url(#ah2)"/>
+      <text class="d-s" x="382" y="118">in the settle step</text>
+      <line class="d-line" x1="440" y1="169" x2="454" y2="169" marker-end="url(#ah2)"/>
+      <line class="d-line" x1="588" y1="169" x2="602" y2="169" marker-end="url(#ah2)"/>
+      <polyline class="d-line" points="676,198 676,228 290,228 290,100 330,100 330,90" marker-end="url(#ah2)"/>
+      <text class="d-m" x="300" y="244">message: a new turn at once</text>
+    </svg>
+    <figcaption>Everything runs on the JS event loop, with no scheduler and no OCaml effects. Each callback runs one turn. Only the render can wait, for a frame or 100 ms at most.</figcaption>
+  </figure>
+</section>
+
+<section id="async">
+  <h2>Async tasks</h2>
+  <p>An <code>'a Async.t</code> is a cold task: nothing runs until the runtime starts it with a cancel token. Thus <code>update</code> can make a task as a pure value, and the native tests can run it on a virtual clock. The token passes through <code>let*</code> with no extra argument. The design is close to the <code>Task</code> of Elm plus <code>Process.kill</code>. Brr's <code>Fut</code> does not fit, because a future starts at once and exists only in JavaScript.</p>
+<pre><code><span class="kw">module</span> Async : <span class="kw">sig</span>
+  <span class="kw">type</span> 'a t
+  <span class="kw">val</span> return : 'a -&gt; 'a t
+  <span class="kw">val</span> fail : exn -&gt; 'a t
+  <span class="kw">val</span> map : ('a -&gt; 'b) -&gt; 'a t -&gt; 'b t
+  <span class="kw">val</span> bind : 'a t -&gt; ('a -&gt; 'b t) -&gt; 'b t
+  <span class="kw">module</span> Syntax : <span class="kw">sig</span>
+    <span class="kw">val</span> ( <span class="kw">let*</span> ) : 'a t -&gt; ('a -&gt; 'b t) -&gt; 'b t
+    <span class="kw">val</span> ( <span class="kw">let+</span> ) : 'a t -&gt; ('a -&gt; 'b) -&gt; 'b t
+    <span class="kw">val</span> ( <span class="kw">and+</span> ) : 'a t -&gt; 'b t -&gt; ('a * 'b) t   <span class="cm">(* the two run at the same time *)</span>
+  <span class="kw">end</span>
+  <span class="kw">val</span> sleep : Span.t -&gt; unit t
+  <span class="kw">val</span> first : 'a t list -&gt; 'a t                 <span class="cm">(* the first ok; cancels the others *)</span>
+  <span class="kw">val</span> timeout : Span.t -&gt; 'a t -&gt; ('a, [`Timeout]) result t
+  <span class="kw">val</span> make : (Cancel.t -&gt; ok:('a -&gt; unit) -&gt; error:(exn -&gt; unit) -&gt; unit) -&gt; 'a t
+<span class="kw">end</span>
+
+<span class="kw">module</span> Cancel : <span class="kw">sig</span>
+  <span class="kw">type</span> t
+  <span class="kw">val</span> cancelled : t -&gt; bool
+  <span class="kw">val</span> on_end : t -&gt; (unit -&gt; unit) -&gt; unit   <span class="cm">(* runs one time: at the cancel, or when the step ends;
+                                               at once if t is cancelled *)</span>
+<span class="kw">end</span></code></pre>
+  <h3>Rules</h3>
+  <ul>
+    <li><b>Token tree.</b> The root token, an instance token, a task token, and a child token for each step of <code>Async.make</code> and for each branch of <code>and+</code> and <code>first</code>.</li>
+    <li><b>End actions and long work.</b> An end action runs at a cancel and also when the step ends normally. Thus a binding must not stop, in an end action, work that continues after its <code>ok</code>. For example, a fetch binding reads the body in the same step as the response, and its end action aborts the request only if the token is cancelled. Phase 0 found this rule: an abort at the end of a step that gave only the response headers would stop the download of the body.</li>
+    <li><b>Release.</b> When a step, a branch or a task ends, its token detaches from its parent in O(1), is marked as ended, and runs its end actions. The children of a token are a doubly linked list. Thus a long-lived token does not collect old tokens, and a binding that removes a listener in <code>on_end</code> removes it also after <code>ok</code>. <code>on_end</code> on an ended or cancelled token runs the action at once.</li>
+    <li><b>Cancel of an ended token.</b> A cancel of a token that a release already ended sets its cancelled flag, and it runs no action again. <code>Cmd.latest</code> needs this rule: the result of an ended task can still wait in the queue, and the drop check reads the cancelled flag. A unit test does a release, then a cancel, and expects <code>cancelled = true</code>.</li>
+    <li><b>Cancel order.</b> A cancel first cancels the children, from the newest, and then runs the end actions of the token in the reverse order of registration. Each action runs once. An action that raises does not stop the others. The cancel uses an explicit stack, not recursion, thus a deep tree of tokens does not overflow the stack.</li>
+    <li><b>Once.</b> The <code>ok</code> and <code>error</code> functions that <code>make</code> gives to the callback work one time only, and not after a cancel. A second call does nothing. If the token is already cancelled, <code>make</code> does not call the callback. If the callback raises after <code>ok</code> or <code>error</code>, the runtime writes the exception to the console. The callback keeps the continuations only in a cell that the end of the step clears. Thus a JS callback that never runs does not keep the continuation alive after a cancel.</li>
+    <li><b>No continuation inside the callback.</b> <code>ok</code> and <code>error</code> put the continuation on the run queue. Thus the <code>try</code> of <code>make</code> covers only the user callback, and an error of a later step goes to the correct place.</li>
+    <li><b>Check at the run.</b> A queued continuation examines the token of the task again when it runs. Thus a result or an error that was in the queue before a cancel does nothing.</li>
+    <li><b>Trampoline.</b> <code>bind</code> starts its task and runs the next step at once only while the depth of synchronous steps is below a limit (for example 256). Above the limit, it puts the work on the run queue. Thus a long chain of <code>let*</code> does not overflow the stack under js_of_ocaml, for a right-nested chain (a loop) and for a left-nested chain (for example from <code>List.fold_left</code>).</li>
+    <li><b>Drain.</b> The run queue drains in the settle step of each turn (<a href="#runtime">section 11</a>). A push outside a turn asks the host for a turn in a microtask. Thus a binding can call <code>ok</code> from any callback.</li>
+    <li><b>Combinators.</b> Each branch of <code>and+</code> and <code>first</code> has a child token and starts through the run queue. <code>and+</code> cancels the other branch at the first error. <code>first</code> gives the first <code>ok</code> and cancels the other branches. If all branches fail, it gives the last error. <code>first []</code> fails with <code>Invalid_argument</code> when the task starts.</li>
+    <li><b>Errors.</b> An exception in a step goes to the error scope of the instance (<a href="#components">section 09</a>).</li>
+  </ul>
+  <h3>Implementation sketch</h3>
+<pre><code><span class="cm">(* No OCaml effect. The browser host uses Brr; the test host uses a virtual clock. *)</span>
+<span class="kw">type</span> host = {
+  now_ms : unit -&gt; float;
+  set_timer : ms:int -&gt; (unit -&gt; unit) -&gt; (unit -&gt; unit);  <span class="cm">(* gives a function that clears the timer *)</span>
+  request_frame : (unit -&gt; unit) -&gt; unit;
+  queue_microtask : (unit -&gt; unit) -&gt; unit;            <span class="cm">(* a turn for a push outside a turn *)</span>
+  post_task : (unit -&gt; unit) -&gt; unit;                  <span class="cm">(* MessageChannel: the limit, a hidden tab *)</span>
+}
+<span class="kw">type</span> ctx = { cancel : Cancel.t; host : host; run : Run_queue.t }
+<span class="kw">type</span> 'a t = ctx -&gt; ok:('a -&gt; unit) -&gt; error:(exn -&gt; unit) -&gt; unit
+
+<span class="kw">let</span> bind (t : 'a t) (f : 'a -&gt; 'b t) : 'b t = <span class="kw">fun</span> ctx ~ok ~error -&gt;
+  Run_queue.step ctx.run (<span class="kw">fun</span> () -&gt;       <span class="cm">(* the start of t: a left-nested chain stays flat *)</span>
+  t ctx ~error ~ok:(<span class="kw">fun</span> x -&gt;
+    Run_queue.step ctx.run (<span class="kw">fun</span> () -&gt;     <span class="cm">(* at once, or on the queue above the depth limit *)</span>
+      <span class="kw">if</span> not (Cancel.cancelled ctx.cancel) <span class="kw">then</span>
+        <span class="kw">match</span> f x <span class="kw">with</span>
+        | t' -&gt; t' ctx ~ok ~error
+        | <span class="kw">exception</span> e -&gt; error e)))
+
+<span class="kw">let</span> make (start : Cancel.t -&gt; ok:('a -&gt; unit) -&gt; error:(exn -&gt; unit) -&gt; unit) : 'a t =
+  <span class="kw">fun</span> ctx ~ok ~error -&gt;
+    <span class="kw">if</span> not (Cancel.cancelled ctx.cancel) <span class="kw">then</span> <span class="kw">begin</span>
+      <span class="kw">let</span> step = Cancel.child ctx.cancel <span class="kw">in</span>        <span class="cm">(* the resources of this step *)</span>
+      <span class="kw">let</span> cell = ref (Some (ok, error)) <span class="kw">in</span>       <span class="cm">(* the only link from the callback *)</span>
+      Cancel.on_end step (<span class="kw">fun</span> () -&gt; cell := None);
+      <span class="kw">let</span> finish pick v =
+        <span class="kw">match</span> !cell <span class="kw">with</span>
+        | Some ks <span class="kw">when</span> not (Cancel.cancelled step) -&gt;
+            cell := None;
+            Cancel.release step;                    <span class="cm">(* detach in O(1), run the end actions *)</span>
+            <span class="kw">let</span> k = pick ks <span class="kw">in</span>
+            Run_queue.push ctx.run (<span class="kw">fun</span> () -&gt;      <span class="cm">(* never inside the callback *)</span>
+              <span class="kw">if</span> not (Cancel.cancelled ctx.cancel) <span class="kw">then</span> k v)   <span class="cm">(* check again at the run *)</span>
+        | _ -&gt; () <span class="kw">in</span>
+      <span class="kw">try</span> start step ~ok:(finish fst) ~error:(finish snd)
+      <span class="kw">with</span> e -&gt; <span class="kw">if</span> Option.is_none !cell <span class="kw">then</span> log_error e <span class="kw">else</span> finish snd e
+    <span class="kw">end</span></code></pre>
+  <div class="note"><strong>Test of this sketch (draft 8):</strong> I compiled the sketch with small versions of <code>Cancel</code> and <code>Run_queue</code>, and a model of a turn, natively and with js_of_ocaml 6.4.1 (OCaml 5.5) on node. Each of these tests passed in the two builds:
+  <ul>
+    <li>1,000,000 steps for a right-nested chain and for a left-nested chain from <code>List.fold_left</code></li>
+    <li>A second <code>ok</code> runs the continuation one time only. The error of a later step goes to the error function of that step.</li>
+    <li>An error that is in the queue before a cancel does not arrive</li>
+    <li>A result of <code>Async.make</code> in a click, in a timer callback and in a raw callback, and a raw <code>Sub.run</code> send: each message is processed in the same turn, with one render</li>
+    <li>A loop of messages stops at the limit after one render and continues in a new task</li>
+    <li>An <code>on_end</code> action after <code>ok</code> runs at once: 0 live listeners</li>
+    <li>The cancel order: children from the newest, then the actions in reverse order</li>
+    <li>The release of 10,000 sibling tokens, oldest first: 0.14 ms native</li>
+    <li>A fold of 100,000 nested <code>and+</code>: the start and the cancel do not overflow the stack.</li>
+  </ul>
+  A test with weak pointers (js_of_ocaml uses <code>WeakRef</code>, run with <code>node --expose-gc</code>) examined a cancelled task whose JS callback never runs. In native code, the continuation is freed. Under js_of_ocaml, it is freed when the callback is made in a library function, and also when the callback holds only a JS cell. A control case that is not cancelled stays alive, as it must.</div>
+  <p><code>Cancel.child</code>, <code>Cancel.release</code> and <code>Cancel.cancel</code> are internal. <code>Run_queue</code> does not use <code>Fun.protect</code>, because <code>Fun</code> links <code>Printf</code>. <code>Kilim_browser.Async.of_fut</code> changes a Brr <code>Fut.t</code> into an <code>Async.t</code>. A JS promise cannot be cancelled: a task that waits on it stops at the cancel, but a promise that never settles keeps its JS callback until the page closes. Thus <code>of_fut</code> makes this callback with a JS expression that holds only a JS cell, and the cancel clears the cell. The promise then keeps only a small JS object.</p>
+  <div class="note"><strong>Limit under js_of_ocaml:</strong> V8 keeps one shared context for the closures of one JS function. Thus a user callback of <code>Async.make</code> written inside <code>update</code> can keep the variables of <code>update</code> alive, also after a cancel (a test of the fifth review). Write each binding as a top-level function, as <code>of_fut</code> is. The leak tests run under js_of_ocaml with <code>node --expose-gc</code>.</div>
+  <div class="note"><strong>Trade-off:</strong> async code is in monadic style with <code>let*</code>, not in direct style. Complex flows (retry, race, timeout) use the combinators <code>first</code>, <code>timeout</code> and <code>and+</code>.</div>
+</section>
+
+<section id="brr">
+  <h2>Browser bindings: Brr</h2>
+  <p>kilim uses <a href="https://erratique.ch/software/brr">Brr</a> 0.0.8 or later for the DOM and the Web APIs. Brr supports wasm_of_ocaml since version 0.0.7.</p>
+  <h3>Does Brr decrease the effort?</h3>
+  <p>Yes. The port of webapi-gen was the largest single task of draft 1. With Brr, Phase 1 becomes an audit and a small set of hand bindings. Brr has documentation, an FFI manual and an FFI cookbook. The costs are small: Brr uses <code>Jstr.t</code> for strings and <code>Fut.t</code> for promises. The diff works on OCaml strings and converts only when it writes to the DOM.</p>
+  <h3>Missing APIs without a change to Brr</h3>
+  <p>Brr is built on <code>Jv</code>, its low-level FFI. Each Brr type converts to and from <code>Jv.t</code> (for example <code>El.to_jv</code> and <code>El.of_jv</code>). <code>kilim.web</code> binds the missing APIs with <code>Jv</code> and uses the Brr types in its signatures. No fork is necessary.</p>
+<pre><code><span class="cm">(* src/web/resize_observer.ml: Brr has no ResizeObserver. *)</span>
+<span class="kw">open</span> Brr
+
+<span class="kw">type</span> t = Jv.t
+<span class="kw">include</span> (Jv.Id : Jv.CONV <span class="kw">with type</span> t := t)
+
+<span class="kw">let</span> create (f : El.t list -&gt; unit) : t =
+  <span class="kw">let</span> on_resize entries _observer =
+    f (Jv.to_list (<span class="kw">fun</span> e -&gt; El.of_jv (Jv.get e <span class="kw">"target"</span>)) entries)
+  <span class="kw">in</span>
+  Jv.new' (Jv.get Jv.global <span class="kw">"ResizeObserver"</span>) [| Jv.callback ~arity:2 on_resize |]
+
+<span class="kw">let</span> observe o (el : El.t) = ignore (Jv.call o <span class="kw">"observe"</span> [| El.to_jv el |])
+<span class="kw">let</span> disconnect o = ignore (Jv.call o <span class="kw">"disconnect"</span> [||])</code></pre>
+  <p><code>Sub.resize ~key el</code> uses this binding. Its end action calls <code>disconnect</code>.</p>
+  <h3>Coverage of the APIs that version 1 needs</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Need</th><th>Brr module</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td>Elements, attributes, events</td><td><code>Brr.El</code>, <code>Brr.At</code>, <code>Brr.Ev</code></td><td><span class="sev low">Brr</span></td></tr>
+      <tr><td>Document, window, history</td><td class="wrap"><code>Brr.Document</code>, <code>Brr.Window</code>, <code>Brr.Window.History</code></td><td><span class="sev low">Brr</span></td></tr>
+      <tr><td>Fetch with a signal</td><td class="wrap"><code>Brr_io.Fetch</code>, <code>Request.init ?signal</code></td><td><span class="sev low">Brr</span></td></tr>
+      <tr><td>AbortController</td><td><code>Brr.Abort</code></td><td><span class="sev low">Brr</span></td></tr>
+      <tr><td>WebSocket, Web Storage</td><td><code>Brr_io.Websocket</code>, <code>Brr_io.Storage</code></td><td><span class="sev low">Brr</span></td></tr>
+      <tr><td>Promises</td><td><code>Fut</code>, <code>Jv.Promise</code></td><td><span class="sev low">Brr</span></td></tr>
+      <tr><td>Timers, animation frames</td><td class="wrap"><code>Brr.G.set_timeout</code>, <code>Brr.G.request_animation_frame</code></td><td><span class="sev low">Brr</span></td></tr>
+      <tr><td>Monotonic time</td><td><code>Brr.Performance.now_ms</code></td><td><span class="sev low">Brr</span></td></tr>
+      <tr><td>queueMicrotask</td><td>None found</td><td><span class="sev high">kilim.web</span></td></tr>
+      <tr><td>Resize, intersection, mutation observers</td><td>None</td><td><span class="sev high">kilim.web</span></td></tr>
+    </tbody>
+  </table></div>
+  <h3>The hot path under wasm_of_ocaml</h3>
+  <p>Under wasm_of_ocaml, each DOM operation is a call from Wasm to JavaScript, and each string is copied and decoded from UTF-8. Under js_of_ocaml, an ASCII string goes across with no copy. kilim has these rules for the hot path:</p>
+  <ul>
+    <li>The diff calls <code>Jv.call</code>, <code>Jv.get</code> and <code>Jv.set</code> with a literal method name and a literal array. js_of_ocaml changes such a call into a direct JS call with a constant name and no array. A test of the third review shows <code>d.setAttribute("data-x", ...)</code> in the output. Brr uses the same form on its own hot path.</li>
+    <li>The wasm_of_ocaml backend makes a fixed-arity JS fragment from the same form. The reviewer read this in the source of js_of_ocaml 6.4.1, not in a build. Phase 0 makes a check of the generated code.</li>
+    <li>kilim has no JS file with <code>external</code> functions. wasm_of_ocaml would need a second version of each such function in a <code>.wat</code> file.</li>
+    <li>A JS helper that the runtime needs (for example the walk of event delegation) is a <code>Jv.t</code> function, made one time from a JS expression.</li>
+    <li>The diff works on OCaml strings and converts a string only when it writes it.</li>
+    <li>Brr stays for the other APIs: fetch, history, storage, sockets and timers.</li>
+    <li><code>G.set_timeout</code> takes an <code>int</code> number of milliseconds. The browser host rounds a delay up.</li>
+  </ul>
+  <h3>Size of the bundle</h3>
+  <p>Some modules of the standard library link <code>CamlinternalFormat</code> (the engine of <code>Printf</code>). The third review measured these sizes with js_of_ocaml 6.4.1 (<code>--opt 3</code>, gzip -9):</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Program</th><th>gzip bytes</th><th>Links Printf</th></tr></thead>
+    <tbody>
+      <tr><td>Hello world</td><td>9,904</td><td>No</td></tr>
+      <tr><td><code>Type.Id</code></td><td>9,987</td><td>No</td></tr>
+      <tr><td><code>Queue</code></td><td>10,088</td><td>No</td></tr>
+      <tr><td><code>Map.Make</code></td><td>10,342</td><td>No</td></tr>
+      <tr><td><code>Printexc.to_string</code></td><td>23,292</td><td>Yes</td></tr>
+      <tr><td><code>Fun.protect</code></td><td>23,406</td><td>Yes</td></tr>
+      <tr><td><code>Random</code></td><td>24,851</td><td>Yes</td></tr>
+      <tr><td><code>Hashtbl</code></td><td>about 27,600</td><td>Yes</td></tr>
+    </tbody>
+  </table></div>
+  <p>Thus <code>kilim</code> and <code>kilim.browser</code> do not use <code>Printf</code>, <code>Format</code>, <code>Scanf</code>, <code>Str</code>, <code>Hashtbl</code>, <code>Random</code>, <code>Fun</code> or <code>Printexc</code>. The link check examines the full set of linked modules, not only the direct dependencies. But Brr itself links <code>Fun</code>: <code>Jv</code> and <code>Brr</code> use <code>Fun.id</code>, which is a <code>val</code> in OCaml 5.5, not an <code>external</code>, and <code>fun.ml</code> calls <code>Printexc.register_printer</code>. Measured: a hello world with only <code>Fun.id</code> is 23,394 bytes (gzip) against 9,904, and a minimal Brr app is 24,172 bytes. Thus the link check examines the units of kilim and their dependencies other than Brr. The size budget of the browser build starts from a baseline that includes Brr. kilim sends a small pull request to Brr that replaces <code>Fun.id</code> and <code>Fun.const</code> with local functions (this is not a fork). If Brr merges it, a minimal Brr app is about 14 KB (the reviewer measured 14,276 bytes with a patched copy), and the check then covers Brr too. The keyed diff and the keys of <code>Cmd.latest</code> use <code>Map.Make</code> or a small table of kilim. The tests and the test host can use all modules.</p>
+  <h3>DOM safety</h3>
+  <p>The escape rules of <code>caravan.html</code> are for HTML text. A DOM renderer has different risks. kilim has these rules:</p>
+  <ul>
+    <li>An allowlist of HTML and SVG element names. A name that is not on the list raises. The list does not contain <code>script</code>, <code>iframe</code>, <code>object</code>, <code>embed</code>, <code>base</code>, <code>meta</code> and <code>link</code>. It also does not contain the SVG animation elements (<code>set</code>, <code>animate</code>, <code>animateMotion</code>, <code>animateTransform</code>), because they can change a checked <code>href</code> after the check. kilim has no <code>El.script</code>.</li>
+    <li>All name checks ignore case, because HTML changes attribute names to lowercase.</li>
+    <li><code>At.v</code> refuses <code>on*</code> names and <code>srcdoc</code>. It also refuses a name that is not a valid XML name (for example <code>"data-a b"</code>), because <code>setAttribute</code> throws for such a name.</li>
+    <li>A URL check for each URL attribute and property: <code>href</code>, <code>src</code>, <code>action</code>, <code>formaction</code>, <code>poster</code>, <code>cite</code>, <code>data</code>, <code>background</code>, <code>xlink:href</code>, <code>ping</code>, and each URL of <code>srcset</code>. The permitted schemes are <code>http</code>, <code>https</code>, <code>mailto</code> and <code>tel</code>, and relative URLs.</li>
+    <li>The URL check finds the scheme as the WHATWG URL parser does. First it removes the C0 control characters and spaces at the start and at the end, and all tab and newline characters. Then it reads a scheme: an ASCII letter, then letters, digits, <code>+</code>, <code>-</code> or <code>.</code>, then <code>:</code>. It compares the scheme with no case. If it finds no scheme, the URL is relative. Thus <code>" javascript:"</code> and <code>"java\tscript:"</code> are refused.</li>
+    <li>Text nodes need no escape. The text of a <code>style</code> element is CSS: do not put data of a user in it.</li>
+    <li>The API has no <code>innerHTML</code> and no generic property setter, except an explicit <code>View.unsafe_html</code>. It takes a value of the type <code>Unsafe_html.t</code>. In the core, this type is a record of the HTML string and an optional native value. <code>Unsafe_html.of_string</code> (core) makes one for a page with no Trusted Types. <code>Kilim_browser.Unsafe_html.of_trusted</code> takes a <code>TrustedHTML</code> from the policy of the app (with its own sanitizer), and it stores the value and its string. A CSP with <code>require-trusted-types-for 'script'</code> refuses a plain string in <code>innerHTML</code>. kilim makes no HTML policy of its own. The diff compares the strings: if they are equal, it writes nothing. Thus a new <code>TrustedHTML</code> on each render does not reset the selection, the focus or the scroll inside the HTML. If the string changed, the diff writes the native value when it exists. The string renderer and the test host use the string. The Trusted Types CI test includes a <code>View.unsafe_html</code> node.</li>
+    <li>A refused name or URL raises <code>Invalid_argument</code> in <code>view</code>. The error scopes (<a href="#components">section 09</a>) then apply.</li>
+  </ul>
+  <div class="note"><strong>Later:</strong> webapi and webapi-gen come after version 1. Generated bindings can then extend or replace <code>kilim.web</code>.</div>
+</section>
+
+<section id="testing">
+  <h2>Testing</h2>
+  <ul>
+    <li><b><code>kilim.testing</code></b> comes in Phase 1 with the core. It has fake DOM operations that count each operation, a host with a virtual clock, queries by label, text and test id, and simulated events. The virtual clock does not move while <code>update</code> runs. Thus the test host gives a fixed virtual cost (0.01 ms by default) to each call of <code>update</code>, to the start of each drain, and to each 256 continuations of the run queue. A task request has no cost of its own. Thus the time limit gives the same result in each run. A test that does not yield on the test host can yield in a browser. The order of timers, microtasks and callbacks is deterministic. <code>Http_mock</code> comes in Phase 4 with <code>kilim.http</code>.</li>
+    <li><b>Component tests.</b> <code>Kilim_testing.mount (module Search) props</code> mounts one component. <code>Page.outputs page</code> gives the outputs with the type <code>Search.out list</code>.</li>
+    <li><b>Unit and property tests</b> with windtrap, native and fast. A property test examines <code>Component.shallow_equal</code> on all shapes of values. The same test runs under js_of_ocaml. It makes sure that a true result always means the same view, also for floats, strings and closures (top level and in fields).</li>
+    <li><b>Diff tests:</b> make random trees, apply the diff, then compare with a fresh render.</li>
+    <li><b>Async tests:</b> a chain of 100,000 synchronous <code>let*</code> steps in each build, a second <code>ok</code>, an error in a later step, the release of tokens, the order of end actions, errors in <code>first</code> and <code>and+</code>, an error before a cancel, an <code>ok</code> from a callback that kilim does not wrap, 100,000 nested <code>and+</code>.</li>
+    <li><b>Semantics tests:</b> stale results of <code>Cmd.latest</code>, a re-entrant event, an unmount during a fetch, a rejected controlled input, <code>compositionend</code>, an error in each row of the error table, a boundary that unmounts its subtree, a render in a hidden tab, a burst of host callbacks in a hidden tab (one render), a message to an instance with no token after its unmount, a synchronous task result in a click (one render), an <code>ok</code> and a <code>Sub.run</code> send from a raw callback, the limit of a turn, new props that change the subscriptions, a subscription of an instance that the render removes, a controlled checkbox, a radio group with a rejected change, a duplicate key in the prefix, the middle and the suffix, a Context reader below a skipped component, a provider in a keyed move, a provider that unmounts, a provider that appears or disappears at a place, a conditional read, an exception from a DOM operation of the diff, a message loop through microtasks, nested mounts with synchronous init tasks (render count), a removed subscription that sends before the render, an <code>update</code> that gives back the same model (no render), a model with a closure (no exception), and a change from <code>0.</code> to <code>-0.</code> in a model (one render).</li>
+    <li><b>Leak tests:</b> mount and unmount 1,000 times. Then the test host counts the live tokens, timers, listeners and reader registrations. Each count must be 0. A test with weak pointers, native and under js_of_ocaml (<code>node --expose-gc</code>), makes sure that a cancelled task with a pending promise does not keep the instance alive.</li>
+    <li><b>Browser tests</b> with Playwright for the js_of_ocaml and wasm_of_ocaml builds in Chromium and Firefox. The js_of_ocaml build also runs in Playwright WebKit, with the leak tests that count tokens, timers, listeners and links. If Safari has no <code>JSTag</code>, all browsers on iOS run the js_of_ocaml build, thus this path matters. Playwright WebKit is not Safari, thus the <code>JSTag</code> check of Phase 0 uses a real Safari.</li>
+    <li><b>Budget tests</b> (<a href="#phases">section 16</a>).</li>
+  </ul>
+<pre><code><span class="kw">let</span> test_search () =
+  Kilim_testing.mount (<span class="kw">module</span> Search) { Search.endpoint = <span class="kw">"/api/cities"</span> } (<span class="kw">fun</span> page -&gt;
+    Http_mock.get page <span class="kw">"/api/cities?q=par"</span> (`Json {|[<span class="kw">"Paris"</span>]|});
+    Page.type_ page (By.label <span class="kw">"City"</span>) <span class="kw">"par"</span>;
+    Page.advance page (Span.ms 300);           <span class="cm">(* virtual clock: no real wait *)</span>
+    Page.click page (By.text <span class="kw">"Paris"</span>);
+    assert (Page.outputs page = [Search.Picked <span class="kw">"Paris"</span>]);
+    Page.unmount page;
+    Page.expect_no_tasks page)                 <span class="cm">(* unmount cancels all tasks *)</span></code></pre>
+</section>
+
+<section id="layout">
+  <h2>Repository layout</h2>
+  <p>The repository is <code>github.com/ocaml-caravanserai/kilim</code>. It uses the conventions of caravan and weft: dune, a Nix flake, OCaml 5.5 or later, windtrap and a Makefile.</p>
+<pre><code>kilim/
+  dune-project  kilim.opam  flake.nix  Makefile  README.md  LICENSE (MPL-2.0)
+  src/core/        View, Cmd, Sub, Component, App, Context, Async, Cancel, instance tree, diff
+  src/browser/     DOM operations (Jv), events, dispatch, frames, browser host
+  src/web/         Jv bindings for the APIs that Brr does not have
+  src/http/  src/router/  src/storage/  src/websocket/
+  src/testing/     fake DOM operations, virtual clock host, queries, mocks
+  src/loader/      dune rule and template of the loader (file and inline forms), kilim dist
+  examples/        counter  todo  search  router  chat
+  test/            unit, property, diff and semantics tests
+  bench/           budgets: size, DOM operation counts, allocations, leaks, timing
+  docs/design.md  docs/budgets.md</code></pre>
+</section>
+
+<section id="phases">
+  <h2>Phases</h2>
+  <div class="phase"><div class="n">P0</div><div>
+    <h4>Spikes and budget targets</h4>
+    <p>Three spikes, in the js_of_ocaml and wasm_of_ocaml builds (default modes):</p>
+    <ul>
+      <li><code>Async</code> and <code>Cancel</code> with the trampoline: a chain of 100,000 synchronous steps, a timer, and a fetch with a cancel.</li>
+      <li><code>Component.v</code> with <code>Component.id</code> in a tree of two levels, with a reset by key and shallow equality.</li>
+      <li>The DOM hot path with <code>Jv</code>: a check that each DOM operation of the diff is a direct JS call in the generated code of each build, and the cost of one operation. A check of <code>WebAssembly.JSTag</code> in the supported versions of Safari, and the loader that picks the js_of_ocaml build where it is missing.</li>
+    </ul>
+    <p>Then set target numbers against references: the gzip size of an Elm counter app, and the js-framework-benchmark results of Elm and Preact.</p>
+    <div class="exit"><b>Exit:</b> the three spikes work in the two builds. <code>docs/budgets.md</code> has a target for each budget.</div>
+  </div></div>
+  <div class="phase"><div class="n">P1</div><div>
+    <h4>Synchronous core, renderer and test host</h4>
+    <p>View, the keyed diff, event and DOM rules, App, Cmd, Sub, Async, Cancel, the browser host, the loader, <code>kilim dist</code> and <code>kilim.testing</code> (fake DOM, virtual clock, queries by label, text and test id). The turn of section 11 works on an instance record from the start: the App is one instance. Thus Phase 2 adds instances and does not write the turn again. The CI budget gate starts.</p>
+    <div class="exit"><b>Exit:</b> the counter and todo examples work. The diff property tests, the Async tests and the count budgets pass. The turn tests that need no components pass: a synchronous result in a click, an <code>ok</code> from a raw callback, a microtask loop, promise results after idle time, a synchronous loop in the run queue, a yield with no restore, an exception in the render, and the limit on the virtual clock.</div>
+  </div></div>
+  <div class="phase"><div class="n">P2</div><div>
+    <h4>Components</h4>
+    <p>The instance tree, <code>Component.id</code>, shallow equality with the <code>Object.is</code> compare for js_of_ocaml, outputs, the token tree, the alive flag, error scopes and boundaries, and Context with reader lists and context environments.</p>
+    <div class="exit"><b>Exit:</b> examples with nested components work. The semantics tests, the leak tests and the partial-update budget pass.</div>
+  </div></div>
+  <div class="phase"><div class="n">P3</div><div>
+    <h4>Brr audit and kilim.web</h4>
+    <p>Map each Web API that kilim needs to a Brr module. Write <code>Jv</code> bindings in <code>kilim.web</code> for the gaps.</p>
+    <div class="exit"><b>Exit:</b> each binding in <code>kilim.web</code> has a Playwright test in the two builds.</div>
+  </div></div>
+  <div class="phase"><div class="n">P4</div><div>
+    <h4>Libraries</h4>
+    <p><code>kilim.http</code>, <code>kilim.router</code>, <code>kilim.storage</code> and <code>kilim.websocket</code>. <code>Http_mock</code> in <code>kilim.testing</code>.</p>
+    <div class="exit"><b>Exit:</b> the search and chat examples work, with tests on the virtual clock.</div>
+  </div></div>
+  <div class="phase"><div class="n">P5</div><div>
+    <h4>Quality and release</h4>
+    <p>Documentation and the first release, 0.1.0.</p>
+    <div class="exit"><b>Exit:</b> the README examples compile in CI, and all budgets pass.</div>
+  </div></div>
+  <div class="phase"><div class="n">Later</div><div>
+    <h4>After version 1</h4>
+    <p>Handles and <code>api</code>, <code>props_changed</code>, <code>Store</code>, <code>Component.any</code>, slots, <code>View.lazy_</code>, test queries by ARIA role. SSR with <code>caravan.html</code> and hydration. Devtools: a message log and time travel. A JSX-like PPX, if necessary. webapi and webapi-gen. When browsers ship Wasm stack switching, a new look at direct-style tasks.</p>
+  </div></div>
+  <h3>Budgets</h3>
+  <p>The CI checks only counts that do not change from one run to the next. Timing runs each night on fixed hardware, because timing on shared CI machines fails at random.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Budget</th><th>Check</th><th>When</th></tr></thead>
+    <tbody>
+      <tr><td>Bundle size (gzip), for each build</td><td class="wrap">The size of the build output</td><td>Each change</td></tr>
+      <tr><td>DOM operations for each action</td><td class="wrap">The exact count on the fake DOM: create 1,000 rows, change 1 row of 1,000, swap 2 rows, remove all rows</td><td>Each change</td></tr>
+      <tr><td>Allocations for each action</td><td class="wrap"><code>Gc.minor_words</code> in a native test of the same actions. This count only finds regressions. It has no target, because it does not show the cost under js_of_ocaml (<code>Gc.minor_words</code> gives 0 there).</td><td>Each change</td></tr>
+      <tr><td>Leaks</td><td class="wrap">After 1,000 mounts and unmounts: 0 live tokens, timers and listeners</td><td>Each change</td></tr>
+      <tr><td>Token release</td><td class="wrap">Remove 1,000 rows that each have a token: the count of operations on the token lists is linear</td><td>Each change</td></tr>
+      <tr><td>Linked modules</td><td class="wrap">None of <code>Printf</code>, <code>Format</code>, <code>Scanf</code>, <code>Str</code>, <code>Hashtbl</code>, <code>Random</code>, <code>Fun</code> or <code>Printexc</code> in the linked modules that <code>kilim</code> and <code>kilim.browser</code> bring, other than through Brr (a check at link time). The size budget starts from a Brr baseline of about 24 KB (gzip), or about 14 KB if Brr merges the pull request for <code>Fun.id</code>.</td><td>Each change</td></tr>
+      <tr><td>Time of the actions, wasm start-up time</td><td class="wrap">A browser benchmark on fixed hardware, for each build</td><td>Each night</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="risks">
+  <h2>Risks</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Level</th><th>Risk</th><th>Response</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev med">Medium</span></td><td class="wrap">A binding forgets an end action (<code>Cancel.on_end</code>). Then a timer or a request stays alive after an unmount.</td><td class="wrap"><code>Async.make</code> with a step token is the only way to bind a callback API. The leak tests count live timers, requests and listeners.</td></tr>
+      <tr><td><span class="sev med">Medium</span></td><td class="wrap">The trampoline and the run queue add a cost to each step.</td><td class="wrap">Phase 0 measures it. The depth limit keeps most steps direct.</td></tr>
+      <tr><td><span class="sev med">Medium</span></td><td class="wrap"><code>Component.shallow_equal</code> uses <code>Obj</code>. A mistake can give an incorrect result for some shapes of values, or a different result in each build.</td><td class="wrap">Property tests on all shapes (immediate values, strings, floats, records, float records, closures), in native code and under js_of_ocaml. wasm_of_ocaml in the browser tests.</td></tr>
+      <tr><td><span class="sev med">Medium</span></td><td class="wrap">The claims about wasm_of_ocaml (direct calls from <code>Jv</code>, the tags of strings and floats) come from the source, not from a build.</td><td class="wrap">Phase 0 makes a check of each claim in a wasm build.</td></tr>
+      <tr><td><span class="sev med">Medium</span></td><td class="wrap">Monadic async code is less direct. Users write complex flows with combinators.</td><td class="wrap">Good combinators (<code>first</code>, <code>timeout</code>, <code>and+</code>) and examples for retry and race.</td></tr>
+      <tr><td><span class="sev med">Medium</span></td><td class="wrap">Module-dependent functions are new. The error messages can surprise users.</td><td class="wrap">Examples and tests. The signatures type-check in OCaml 5.5.</td></tr>
+      <tr><td><span class="sev med">Medium</span></td><td class="wrap">Long synchronous work in <code>update</code> or <code>view</code> blocks input and paint.</td><td class="wrap">Budgets. The documentation tells users to move long work into tasks or Web Workers.</td></tr>
+      <tr><td><span class="sev low">Low</span></td><td class="wrap">Users need handles, <code>props_changed</code>, Store or slots before they come.</td><td class="wrap">Props, keys, Context and <code>match</code> patterns in the documentation. These features come after version 1.</td></tr>
+      <tr><td><span class="sev low">Low</span></td><td class="wrap">Brr does not have an API, or a Brr release is late.</td><td class="wrap">Bind it with <code>Jv</code> in <code>kilim.web</code>. No fork.</td></tr>
+      <tr><td><span class="sev low">Low</span></td><td class="wrap">App code that uses OCaml effects needs a compiler mode.</td><td class="wrap">kilim itself performs no effects. The documentation gives the modes.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="questions">
+  <h2>Answered questions</h2>
+  <p>You answered the four open questions of draft 7. The decisions section shows the answers too.</p>
+  <ol class="qs">
+    <li><b>License.</b> MPL-2.0 only, as caravan.</li>
+    <li><b>Render timing.</b> Agreed: a synchronous render for discrete events and one render for each frame for other events. In a hidden tab, the render runs in a new task (<a href="#runtime">section 11</a>).</li>
+    <li><b>Tasks and the model.</b> A task only sends messages. It cannot read the model of its instance. Thus <code>update</code> stays the only place that reads and changes the model.</li>
+    <li><b>Interop.</b> <code>Async.t</code> converts only from Brr <code>Fut.t</code>, with <code>Kilim_browser.Async.of_fut</code>. No conversion for Lwt or other promise libraries in version 1.</li>
+  </ol>
+  <p>The plan has no open question at this time.</p>
+</section>
+
+<footer>Draft 26, the final draft of the review loop. Sources: the local repositories in ~/projects (weft/src/core, caravan/html), github.com/ocaml-caravanserai, the <a href="https://ocaml.org/manual/5.5/firstclassmodules.html">OCaml 5.5 manual</a>, the <a href="https://ocaml.org/changelog/2026-06-19-ocaml-550">OCaml 5.5.0 release notes</a>, the <a href="https://ocaml.org/p/js_of_ocaml/6.5.0/effects.html">js_of_ocaml 6.5.0 effects manual</a>, the <a href="https://raw.githubusercontent.com/ocsigen/js_of_ocaml/master/README_wasm_of_ocaml.md">wasm_of_ocaml README</a>, the <a href="https://github.com/WebAssembly/stack-switching">Wasm stack switching proposal</a>, the <a href="https://erratique.ch/software/brr/doc/">Brr documentation</a> and the <a href="https://discuss.ocaml.org/t/ocaml-5-5-polymorphic-functions-as-function-arguments/18400">discussion of polymorphic parameters</a>.</footer>
+</main>
+</div>
+</body>
+</html>
