@@ -1,0 +1,8 @@
+; Spike 2 of Phase 0: Component.v as an OCaml 5.5 module-dependent function,
+; with the Component.id witness, a reset by key and the props compare, in the
+; three builds. The runtime is a small model with no DOM.
+
+(test
+ (name test_component)
+ (modes exe js wasm)
+ (libraries eq_spike))
