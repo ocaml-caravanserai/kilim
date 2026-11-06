@@ -8,6 +8,12 @@ on:
     branches: [main]
   pull_request:
 
+# A status line for each test, and a limit for each test: a test that hangs
+# fails with its name.
+env:
+  WINDTRAP_VERBOSE: "1"
+  WINDTRAP_TIMEOUT: "120"
+
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -21,3 +27,22 @@ jobs:
         run: nix develop -c dune build @fmt
       - name: Test
         run: nix develop -c dune runtest --force
+
+  # The mutation gate of a pull request. make mutate tests the mutants that
+  # test/core reaches on the lines that the pull request changes. It gives a
+  # failure if one of these mutants survives. A mutant that no test reaches
+  # gives no failure. The checkout of a pull request is a merge commit, and its
+  # first parent HEAD^1 is the base, thus the diff from HEAD^1 holds only the
+  # lines of the pull request.
+  mutation:
+    name: mutation (changed lines)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: cachix/install-nix-action@v31
+      - name: Test the mutants of the changed lines
+        run: nix develop -c make mutate BASE=HEAD^1
