@@ -1,0 +1,18 @@
+; Spike 3 of Phase 0: the DOM hot path with Jv, and the props compare, in the
+; three builds. The DOM is a fake JS object on node, thus the test measures the
+; cost of a call across the boundary, not the cost of a real DOM operation.
+
+(test
+ (name test_dom)
+ (modes js wasm)
+ (libraries brr))
+
+(test
+ (name test_equal)
+ (modes exe wasm)
+ (libraries eq_spike))
+
+(test
+ (name test_equal_js)
+ (modes js wasm)
+ (libraries eq_spike brr))
