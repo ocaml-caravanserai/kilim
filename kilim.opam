@@ -16,6 +16,7 @@ depends: [
   "js_of_ocaml-compiler" {>= "6.4"}
   "wasm_of_ocaml-compiler" {with-test & >= "6.4"}
   "windtrap" {with-test & >= "0.2.0"}
+  "ppx_windtrap" {with-test & >= "0.2.0"}
   "odoc" {with-doc}
 ]
 build: [
