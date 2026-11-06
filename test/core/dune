@@ -1,0 +1,7 @@
+; The tests of the core (design section 12), native only: windtrap runs here,
+; and `make mutate` tests the mutants of src/core with this suite. test/cross
+; runs the big tests in the three builds.
+
+(test
+ (name test_core)
+ (libraries kilim windtrap))
