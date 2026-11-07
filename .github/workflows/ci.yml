@@ -46,13 +46,14 @@ jobs:
           KILIM_REQUIRE_CHROME: "1"
         run: nix develop -c make test-release
       # The hand mutants of the loader text, on a pull request that changes
-      # the loader, its tests or the Chrome driver (browser.mjs, chrome.mjs). The checkout of a pull
-      # request is a merge commit, and its first parent HEAD^1 is the base.
+      # the loader, its tests or the browser driver (browser.mjs, chrome.mjs,
+      # playwright.mjs). The checkout of a pull request is a merge commit, and
+      # its first parent HEAD^1 is the base.
       - name: Changes of the loader
         id: loader
         if: github.event_name == 'pull_request'
         run: |
-          if git diff --quiet HEAD^1 HEAD -- src/loader test/loader test/dom/browser.mjs test/dom/chrome.mjs; then
+          if git diff --quiet HEAD^1 HEAD -- src/loader test/loader test/dom/browser.mjs test/dom/chrome.mjs test/dom/playwright.mjs; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -62,6 +63,26 @@ jobs:
         env:
           KILIM_REQUIRE_CHROME: "1"
         run: nix develop -c make mutate-loader
+
+  # The tests in Firefox and WebKit (Playwright), parallel to the job test.
+  # The tools come from the dev shell `browsers` of flake.nix: playwright-core
+  # and the two browsers of nixpkgs, from cache.nixos.org. With
+  # KILIM_REQUIRE_PLAYWRIGHT, a missing Playwright is a failure, not a skip.
+  # No test retries: a flaky test can hide a fault.
+  browsers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Install the shell browsers
+        run: nix develop .#browsers -c true
+      - name: Build
+        run: nix develop .#browsers -c dune build
+      - name: Test in Firefox and WebKit
+        env:
+          KILIM_REQUIRE_PLAYWRIGHT: "1"
+        run: nix develop .#browsers -c dune build --force @browsers
 
   # The mutation gate of a pull request. make mutate tests the mutants that
   # the suites (test/core, test/view, test/turn and test/dist) reach on the

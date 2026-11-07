@@ -599,54 +599,86 @@ let ime_app () =
               ~at:[At.data "testid" "i"; At.value s]
               ~ev:[Ev.input (fun v -> Typed v)]
               ()
-          ; El.span [txt (string_of_int n)] ] )
+          ; El.span
+              ~at:[At.data "testid" "n"]
+              ~ev:[Ev.mouseenter Tick]
+              [txt (string_of_int n)] ] )
       ~subs:(fun _ -> Sub.every (Span.ms 10) Tick)
       () )
 
-let d14 () =
-  let ticks, _, app = ime_app () in
-  let root, a = start app in
-  let i = q root "i" in
-  focus i ;
-  let starts = ref 0 and raw = ref [] in
-  let f1 = listen window "compositionstart" (fun _ -> incr starts) in
-  let f2 =
-    listen window "input" (fun ev ->
-        if Jv.to_bool (Jv.get ev "isComposing") then raw := value i :: !raw )
-  in
-  let w = writes "value" in
-  let* () = ime "k" in
-  let* () = ime "ka" in
-  let renders = (stats a).renders and t = !ticks in
-  let* () = sleep 60 in
-  check "D14 renders during the composition"
-    ((stats a).renders > renders && !ticks > t) ;
-  check "D14 no value write during the composition" (writes "value" = w) ;
-  check "D14 the raw text during the composition" (List.rev !raw = ["k"; "ka"]) ;
-  let* () = insert_text "ka" in
-  let* () = task () in
-  unlisten window "compositionstart" f1 ;
-  unlisten window "input" f2 ;
-  check "D14 one compositionstart" (!starts = 1) ;
-  check "D14 the uppercase text after compositionend"
-    (String.equal (value i) "KA") ;
-  B.stop a ;
+let no_ime name =
+  skip name "the driver has no composition command in this browser" ;
   Fut.return ()
 
-(* D39: a commit with a text that is not the last text of the composition. In
-   Chrome, the commit is an input with isComposing, then compositionend. Firefox
-   sends the input after compositionend. *)
+let d14 () =
+  if not facts.ime then no_ime "D14"
+  else
+    let ticks, _, app = ime_app () in
+    let root, a = start app in
+    let i = q root "i" in
+    focus i ;
+    let starts = ref 0 and raw = ref [] in
+    let f1 = listen window "compositionstart" (fun _ -> incr starts) in
+    let f2 =
+      listen window "input" (fun ev ->
+          if Jv.to_bool (Jv.get ev "isComposing") then raw := value i :: !raw )
+    in
+    let w = writes "value" in
+    let* () = ime "k" in
+    let* () = ime "ka" in
+    let renders = (stats a).renders and t = !ticks in
+    let* () = sleep 60 in
+    check "D14 renders during the composition"
+      ((stats a).renders > renders && !ticks > t) ;
+    check "D14 no value write during the composition" (writes "value" = w) ;
+    check "D14 the raw text during the composition" (List.rev !raw = ["k"; "ka"]) ;
+    let* () = insert_text "ka" in
+    let* () = task () in
+    unlisten window "compositionstart" f1 ;
+    unlisten window "input" f2 ;
+    check "D14 one compositionstart" (!starts = 1) ;
+    check "D14 the uppercase text after compositionend"
+      (String.equal (value i) "KA") ;
+    B.stop a ;
+    Fut.return ()
+
+(* D39: a commit with a text that is not the last text of the composition, with
+   a render that waits. In Chrome, the commit is an input with isComposing, then
+   compositionend. In Firefox, insert_text is a composition, and the input comes
+   after compositionend: at compositionend, the live value is the commit and the
+   view value is old. A render at compositionend thus writes the old value over
+   the commit. Sub.every renders each 10 ms, but the frame can render before
+   compositionend. Thus a listener on window makes the wait sure: at
+   compositionstart, a synthetic mouseenter gives a Tick in a turn that does not
+   render. A capture listener on window, before kilim, records the wait at
+   compositionend. In WebKit, insert_text is an input with no composition. *)
 let d39 () =
   let _, last, app = ime_app () in
   let root, a = start app in
   let i = q root "i" in
   focus i ;
-  let* () = ime "k" in
-  let* () = ime "ka" in
+  let waits = ref [] in
+  let fs =
+    listen window "compositionstart" (fun _ ->
+        dispatch (q root "n") (js "new MouseEvent('mouseenter')") )
+  in
+  let fe =
+    listen ~capture:true window "compositionend" (fun _ ->
+        waits := (ins a).pending :: !waits )
+  in
+  let w = writes "value" in
+  let* () = if facts.ime then ime "k" else Fut.return () in
+  let* () = if facts.ime then ime "ka" else Fut.return () in
   let* () = insert_text "kai" in
   let* () = task () in
-  check "D39 the commit text after one task"
-    (String.equal (value i) "KAI" && String.equal !last "kai") ;
+  unlisten window "compositionstart" fs ;
+  unlisten ~capture:true window "compositionend" fe ;
+  if facts.insert_composes then
+    check "D39 a render waits at compositionend" (!waits = [true]) ;
+  check "D39 the commit text after one task, one value write"
+    ( String.equal (value i) "KAI"
+    && String.equal !last "kai"
+    && writes "value" - w = 1 ) ;
   B.stop a ;
   Fut.return ()
 
@@ -682,22 +714,24 @@ let composing i =
   match B.cell i with Some c -> c.Private.Dom.composing | None -> false
 
 let d15 () =
-  let root, a = start (move_app ()) in
-  let i = q root "i" in
-  focus i ;
-  let* () = ime "ka" in
-  let composing () = composing i in
-  check "D15 composing before the move" (composing ()) ;
-  ignore (Jv.call (q root "sw") "click" [||]) ;
-  check "D15 the move ends the composition, and the restore writes the value"
-    ((not (composing ())) && String.equal (value i) "KA") ;
-  let* () = task () in
-  ignore (Jv.call (q root "more") "click" [||]) ;
-  let* () = task () in
-  check "D15 after the move and the focusout, a model change writes the value"
-    (String.equal (value i) "KA!") ;
-  B.stop a ;
-  Fut.return ()
+  if not facts.ime then no_ime "D15"
+  else
+    let root, a = start (move_app ()) in
+    let i = q root "i" in
+    focus i ;
+    let* () = ime "ka" in
+    let composing () = composing i in
+    check "D15 composing before the move" (composing ()) ;
+    ignore (Jv.call (q root "sw") "click" [||]) ;
+    check "D15 the move ends the composition, and the restore writes the value"
+      ((not (composing ())) && String.equal (value i) "KA") ;
+    let* () = task () in
+    ignore (Jv.call (q root "more") "click" [||]) ;
+    let* () = task () in
+    check "D15 after the move and the focusout, a model change writes the value"
+      (String.equal (value i) "KA!") ;
+    B.stop a ;
+    Fut.return ()
 
 (* D41: a composition needs the focus. A synthetic compositionstart on the
    focused input, an input, then a keyed move. Chrome sends focusout on the
@@ -977,8 +1011,11 @@ let d22 () =
     && writes "value" = w ) ;
   check "D22 one turn for the click, no nested turn"
     ((stats a).turns = turns + 1) ;
-  check "D22 at most one blur message" (!blurs <= 1) ;
-  log ("D22 blur messages (Chrome only): " ^ string_of_int !blurs) ;
+  check
+    ( "D22 blur messages: "
+    ^ string_of_int facts.removal_blurs
+    ^ " in this browser" )
+    (!blurs = facts.removal_blurs) ;
   B.stop a ;
   Fut.return ()
 
@@ -1408,7 +1445,7 @@ let d31 () =
              ; button ~id:"inc" Inc_t (string_of_int m) ] )
          () )
   in
-  if wasm then log "EXPECT EXCEPTION RuntimeError: illegal cast" ;
+  if wasm then log ("EXPECT EXCEPTION " ^ facts.trap) ;
   let* () = click (q root "trap") in
   let* () = task () in
   if wasm then log "EXPECT END" ;
@@ -1492,7 +1529,7 @@ let d33 () =
          () )
   in
   rootr := root ;
-  if wasm then log "EXPECT EXCEPTION RuntimeError: illegal cast" ;
+  if wasm then log ("EXPECT EXCEPTION " ^ facts.trap) ;
   let* () = click (q root "go") in
   let* () = sleep 50 in
   if wasm then log "EXPECT END" ;
@@ -1528,7 +1565,7 @@ let d34 () =
         ()
     in
     let root = container () in
-    if wasm then log "EXPECT EXCEPTION RuntimeError: illegal cast" ;
+    if wasm then log ("EXPECT EXCEPTION " ^ facts.trap) ;
     let go () = ignore (B.start (el root) app) in
     if promise then Fut.await (Fut.return ()) go else raw_after 0 go ;
     let* () = sleep 50 in
@@ -1578,7 +1615,7 @@ let d35 () =
          ~view:(fun m -> button Trap35 (string_of_int m))
          () )
   in
-  if wasm then log "EXPECT EXCEPTION RuntimeError: illegal cast" ;
+  if wasm then log ("EXPECT EXCEPTION " ^ facts.trap) ;
   (* The first ok asks for a microtask turn. The click traps in its turn, which
      also processes the first result. The second ok only queues: the run queue
      is in the dead turn. Then the microtask turn runs, then the abort. *)
@@ -1641,7 +1678,7 @@ let d36 () =
              ; button ~id:"inc" Inc_a (string_of_int m) ] )
          () )
   in
-  if wasm then log "EXPECT EXCEPTION RuntimeError: illegal cast" ;
+  if wasm then log ("EXPECT EXCEPTION " ^ facts.trap) ;
   let* () = click (q roota "go") in
   let* () = sleep 50 in
   if wasm then log "EXPECT END" ;
@@ -1660,7 +1697,8 @@ let d36 () =
   Fut.return ()
 
 (* D37: the error handler gets each trap one time. The update of A clicks B,
-   then C, and the two updates trap: two distinct errors. The update of A starts
+   then C, and the two updates trap: two distinct errors (one report with
+   null_traps: the two events do not carry their errors). The update of A starts
    D, and the init of D traps: the trap ends the turns of D and of A, one error.
    The test records the errors with its own handler, then gives the console
    back. *)
@@ -1695,12 +1733,26 @@ let d37 () =
          ~view:(fun () -> button () "go")
          () )
   in
-  if wasm then log "EXPECT EXCEPTION RuntimeError: illegal cast" ;
+  if wasm then log ("EXPECT EXCEPTION " ^ facts.trap) ;
   let* () = click (q roota "b") in
   let* () = sleep 50 in
   if wasm then log "EXPECT END" ;
-  let two = match !errs with [x; y] -> x != y | [] -> not wasm | _ -> false in
-  check "D37 two traps in one task: each error one time" two ;
+  let two =
+    match !errs with
+    | [x; y] ->
+        x != y && not facts.null_traps
+    | [_] ->
+        wasm && facts.null_traps
+    | [] ->
+        not wasm
+    | _ ->
+        false
+  in
+  check
+    ( "D37 two traps in one task: "
+    ^ if wasm && facts.null_traps then "one report" else "each error one time"
+    )
+    two ;
   B.stop a ;
   B.stop b ;
   B.stop c ;
@@ -1722,7 +1774,7 @@ let d37 () =
          ~view:(fun () -> button () "go")
          () )
   in
-  if wasm then log "EXPECT EXCEPTION RuntimeError: illegal cast" ;
+  if wasm then log ("EXPECT EXCEPTION " ^ facts.trap) ;
   let* () = click (q roota "b") in
   let* () = sleep 50 in
   if wasm then log "EXPECT END" ;

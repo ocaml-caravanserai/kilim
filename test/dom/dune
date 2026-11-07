@@ -14,6 +14,7 @@
   run.mjs
   browser.mjs
   chrome.mjs
+  playwright.mjs
   smoke.bc.js
   smoke.bc.wasm.js
   (glob_files smoke.bc.wasm.assets/*.wasm)
@@ -40,9 +41,99 @@
   run.mjs
   browser.mjs
   chrome.mjs
+  playwright.mjs
   smoke.bc.js
   test_dom.bc.js
   (env_var KILIM_CHROME)
   (env_var KILIM_REQUIRE_CHROME))
  (action
   (run node run.mjs --no-wasm smoke.bc.js test_dom.bc.js)))
+
+; The same pages in Firefox and WebKit, through Playwright (playwright.mjs),
+; in the alias browsers (`make browsers`). The tools come from the dev shell
+; `browsers` of flake.nix. With no Playwright, run.mjs writes "SKIP: no
+; Playwright", but the CI job `browsers` sets KILIM_REQUIRE_PLAYWRIGHT=1 and
+; fails. One rule for each browser: dune runs them at the same time, and a
+; failure has the name of its browser. The runtest alias includes the alias
+; browsers, thus in the shell `browsers`, `dune test` runs them too.
+
+(alias
+ (name runtest)
+ (deps
+  (alias browsers)))
+
+(rule
+ (alias browsers)
+ (deps
+  run.mjs
+  browser.mjs
+  chrome.mjs
+  playwright.mjs
+  smoke.bc.js
+  smoke.bc.wasm.js
+  (glob_files smoke.bc.wasm.assets/*.wasm)
+  test_dom.bc.js
+  test_dom.bc.wasm.js
+  (glob_files test_dom.bc.wasm.assets/*.wasm)
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+ (action
+  (run
+   node
+   run.mjs
+   --browser
+   firefox
+   smoke.bc.js
+   smoke.bc.wasm.js
+   test_dom.bc.js
+   test_dom.bc.wasm.js)))
+
+; The js_of_ocaml pages in a Firefox with the preference
+; javascript.options.wasm = false, thus with no WebAssembly. WebKit has no such
+; switch: the js pages run in WebKit in the rule after this one.
+
+(rule
+ (alias browsers)
+ (deps
+  run.mjs
+  browser.mjs
+  chrome.mjs
+  playwright.mjs
+  smoke.bc.js
+  test_dom.bc.js
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+ (action
+  (run node run.mjs --browser firefox --no-wasm smoke.bc.js test_dom.bc.js)))
+
+(rule
+ (alias browsers)
+ (deps
+  run.mjs
+  browser.mjs
+  chrome.mjs
+  playwright.mjs
+  smoke.bc.js
+  smoke.bc.wasm.js
+  (glob_files smoke.bc.wasm.assets/*.wasm)
+  test_dom.bc.js
+  test_dom.bc.wasm.js
+  (glob_files test_dom.bc.wasm.assets/*.wasm)
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+ (action
+  (run
+   node
+   run.mjs
+   --browser
+   webkit
+   smoke.bc.js
+   smoke.bc.wasm.js
+   test_dom.bc.js
+   test_dom.bc.wasm.js)))
