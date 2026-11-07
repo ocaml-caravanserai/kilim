@@ -41,8 +41,9 @@ MUTATE := --instrument-with ppx_windtrap.mutate
 # The suites of the libraries. test/core is the suite of Async and Cancel.
 # test/view is the suite of the view, the diff and the fake DOM of
 # kilim.testing. test/turn is the suite of the commands, the app, the turn
-# and the virtual host of kilim.testing.
-SUITES := test/core test/view test/turn
+# and the virtual host of kilim.testing. test/dist is the suite of kilim_dist
+# (src/loader: the executable kilim).
+SUITES := test/core test/view test/turn test/dist
 
 report = $(DUNE) exec $(MUTATE) windtrap -- mutants \
   $(if $(1),--since $(1)) $(if $(MIN_SCORE),--min-score $(MIN_SCORE))
