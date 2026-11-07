@@ -1594,6 +1594,97 @@ let d37 () =
                   Jv.of_string "error" ) |] ) ) ;
   Fut.return ()
 
+(* D38: Unsafe_html.of_trusted. Chrome has trustedTypes on each page, also with
+   no CSP. The view reads the value of [src] at each render. With no CSP, a
+   string in innerHTML gives the same DOM: test/loader runs the case with
+   require-trusted-types-for. *)
+let d38 () =
+  let policy =
+    js "trustedTypes.createPolicy('d38', { createHTML: (s) => s })"
+  in
+  let html s = Jv.call policy "createHTML" [|Jv.of_string s|] in
+  let src = ref (html "<i>x</i>") in
+  let app () =
+    App.make
+      ~init:(fun () -> (0, Cmd.none))
+      ~update:(fun m () -> (m + 1, Cmd.none))
+      ~view:(fun _ ->
+        El.div
+          [ View.unsafe_html
+              ~el:(El.div ~at:[At.data "testid" "h"])
+              (Kilim_browser.Unsafe_html.of_trusted !src)
+          ; button () "go" ] )
+      ~fallback:(fun _ -> El.p ~at:[At.data "testid" "fb"] [txt "fallback"])
+      ()
+  in
+  (* The HTML of the element, or "none" if the app has no such element. *)
+  let find root id =
+    let n =
+      Jv.call root "querySelector" [|Jv.of_string ("[data-testid=" ^ id ^ "]")|]
+    in
+    if Jv.is_null n then None else Some n
+  in
+  let inner root =
+    match find root "h" with
+    | Some n ->
+        Jv.to_string (Jv.get n "innerHTML")
+    | None ->
+        "none"
+  in
+  let root, a = start (app ()) in
+  check "D38 a TrustedHTML: the element has its HTML"
+    (String.equal (inner root) "<i>x</i>") ;
+  let records =
+    js
+      "(() => { const r = []; const o = new MutationObserver((l) => \
+       r.push(...l)); return { o, r }; })()"
+  in
+  ignore
+    (Jv.call (Jv.get records "o") "observe"
+       [| q root "h"
+        ; Jv.obj
+            [| ("childList", Jv.true')
+             ; ("subtree", Jv.true')
+             ; ("characterData", Jv.true') |] |] ) ;
+  let count () =
+    let o = Jv.get records "o" and r = Jv.get records "r" in
+    ignore (Jv.call r "push" (Jv.to_jv_array (Jv.call o "takeRecords" [||]))) ;
+    let n = int (Jv.get r "length") in
+    ignore (Jv.call r "splice" [|Jv.of_int 0|]) ;
+    n
+  in
+  src := html "<i>x</i>" ;
+  let* () = click (q root "b") in
+  check "D38 a new TrustedHTML with the same text: no write" (count () = 0) ;
+  src := html "<b>y</b>" ;
+  let* () = click (q root "b") in
+  check "D38 a new text: one write"
+    (count () = 1 && String.equal (inner root) "<b>y</b>") ;
+  src := Jv.of_string "<i>x</i>" ;
+  let e = console_errors () in
+  let* () = click (q root "b") in
+  check "D38 a JS string: Invalid_argument, the root fallback"
+    (find root "fb" <> None && console_errors () = e + 1) ;
+  B.stop a ;
+  (* With no trustedTypes (a browser with no Trusted Types), the text is
+     written. *)
+  let restore =
+    js
+      "(() => { const d = Object.getOwnPropertyDescriptor(window, \
+       'trustedTypes'); Object.defineProperty(window, 'trustedTypes', { value: \
+       undefined, configurable: true }); return () => { if (d) \
+       Object.defineProperty(window, 'trustedTypes', d); else delete \
+       window.trustedTypes; }; })()"
+  in
+  src := Jv.of_string "<u>z</u>" ;
+  let root, a = start (app ()) in
+  let shadowed = Jv.is_undefined (Jv.get Jv.global "trustedTypes") in
+  ignore (Jv.apply restore [||]) ;
+  check "D38 no trustedTypes: a JS string is written"
+    (shadowed && String.equal (inner root) "<u>z</u>") ;
+  B.stop a ;
+  Fut.return ()
+
 let tests =
   [ d2
   ; d3
@@ -1630,7 +1721,8 @@ let tests =
   ; d34
   ; d35
   ; d36
-  ; d37 ]
+  ; d37
+  ; d38 ]
 
 let () =
   ignore (Lazy.force spy) ;
