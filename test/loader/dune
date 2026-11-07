@@ -1,0 +1,79 @@
+; The loader tests in a real headless Chrome (docs/design.html, "The loader").
+; run.mjs makes the pages with `kilim page` and serves them with the builds of
+; app_a and app_b. With no Chrome, it writes "SKIP: no Chrome", but CI sets
+; KILIM_REQUIRE_CHROME=1 and fails.
+
+(executables
+ (names app_a app_b)
+ (modes js wasm)
+ (libraries kilim kilim.browser brr))
+
+; The dune rule of docs/loader.md, with the base /rule/: the scenario "rule"
+; serves its page.
+
+(rule
+ (targets index.html)
+ (deps
+  page.html
+  app_a.bc.js
+  app_a.bc.wasm.js
+  (glob_files app_a.bc.wasm.assets/*))
+ (action
+  (run
+   %{bin:kilim}
+   page
+   --template
+   page.html
+   --base
+   /rule/
+   --js
+   app_a.bc.js
+   --wasm
+   app_a.bc.wasm.js
+   -o
+   index.html)))
+
+(rule
+ (alias runtest)
+ (deps
+  run.mjs
+  ../dom/chrome.mjs
+  %{bin:kilim}
+  index.html
+  app_a.bc.js
+  app_a.bc.wasm.js
+  (glob_files app_a.bc.wasm.assets/*)
+  app_b.bc.js
+  app_b.bc.wasm.js
+  (glob_files app_b.bc.wasm.assets/*)
+  (env_var KILIM_CHROME)
+  (env_var KILIM_REQUIRE_CHROME))
+ (action
+  (run node run.mjs --kilim %{bin:kilim} --profile dev)))
+
+; The inline page in a Chrome with no JIT, thus with no WebAssembly: the
+; js_of_ocaml build starts.
+
+(rule
+ (alias runtest)
+ (deps
+  run.mjs
+  ../dom/chrome.mjs
+  %{bin:kilim}
+  app_a.bc.js
+  app_a.bc.wasm.js
+  (glob_files app_a.bc.wasm.assets/*)
+  (env_var KILIM_CHROME)
+  (env_var KILIM_REQUIRE_CHROME))
+ (action
+  (run
+   node
+   run.mjs
+   --kilim
+   %{bin:kilim}
+   --profile
+   dev
+   --only
+   no-wasm-real
+   --
+   --js-flags=--jitless)))
