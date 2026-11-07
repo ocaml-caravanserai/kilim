@@ -39,7 +39,7 @@
 //
 // skip(name) writes the skip line of a missing browser, then the process
 // exits. watch(page) collects the events of a page. until(test, ms) polls a
-// condition.
+// condition. sleep, mainWasm and preloadFaults are helpers of the runners.
 
 import * as chrome from './chrome.mjs';
 import * as playwright from './playwright.mjs';
@@ -112,4 +112,26 @@ export const until = async (test, limitMs) => {
     if (Date.now() > end) return false;
     await new Promise((ok) => setTimeout(ok, 20));
   }
+};
+
+export const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
+
+// The main .wasm of the output of `kilim dist`: the one .wasm file of an
+// .assets directory.
+export const mainWasm = (p) => /\.assets\/[^/]+\.wasm$/.test(p);
+
+// The log messages of the browser about a preload that are faults. A message
+// belongs to the longest path of paths in its text (a short path can be a
+// part of a URL), and limit(path) messages for that path are not a fault.
+export const preloadFaults = (logs, paths, limit) => {
+  const seen = new Map();
+  return logs
+    .map((l) => l.text)
+    .filter((m) => /preload/i.test(m))
+    .filter((m) => {
+      const p = paths.filter((x) => m.includes(x)).sort((x, y) => y.length - x.length)[0];
+      if (p === undefined) return true;
+      seen.set(p, (seen.get(p) || 0) + 1);
+      return seen.get(p) > limit(p);
+    });
 };

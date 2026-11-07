@@ -5,8 +5,8 @@
 //   node run.mjs --kilim PATH --profile dev|release [--browser NAME]
 //                [--no-wasm] [--only a,b] [--mutant FILE]
 //
-// --browser NAME: chrome (the default). --no-wasm: a browser with no
-// WebAssembly (browser.mjs).
+// --browser NAME: chrome (the default), firefox or webkit. --no-wasm: a
+// browser with no WebAssembly (browser.mjs).
 //
 // --mutant FILE: the text of FILE replaces the loader text in each page and
 // in loader.js, and the CSP has the hash of that text (node:crypto). Thus
@@ -40,9 +40,10 @@
 // (test/loader/app.ml), or 2 s for a scenario with no start. Then it clicks
 // the button of each app and reads its count. "Once": each app starts one
 // time, each URL gets at most one request (thus the inserted build used the
-// preload), and Chrome logs no message about a preload. Each scenario expects
-// no uncaught exception, no warning and no console error, except where it
-// says so.
+// preload), and the browser logs no message about a preload. Each scenario
+// expects no uncaught exception, no warning and no console error, except
+// where it says so. The table `browsers` holds the differences of Firefox and
+// WebKit.
 //
 // A browser configuration that is not valid is a failure. With no browser,
 // the runner writes the skip line of browser.mjs.
@@ -53,7 +54,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, wr
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
 import http from 'node:http';
-import { open, until, watch } from '../dom/browser.mjs';
+import { mainWasm, open, preloadFaults, sleep, until, watch } from '../dom/browser.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name) => {
@@ -131,7 +132,12 @@ const fixtures = {
 //   url       the path of the page after /sN/
 //   release   a scenario of the release profile (the others are of dev)
 //   repeat    a second visit of the page in the same target
-//   expect    the checks, in runScenario
+//   expect    the checks, in runScenario. A time bound is less than the
+//             delay of the slow fixture of the scenario: a wait for the
+//             fixture comes after the full delay. startBefore is 1,000 ms
+//             (slow.js and other.css: 2,000 ms). buildBefore and wasmBefore
+//             are 300 ms in Chrome (slow.css: 1,500 ms); the table
+//             `browsers` gives 750 ms for Firefox and WebKit.
 //
 // In the loader.js form, the async head part can run before or after the
 // defer start part: the order depends on the time of the requests. Thus a
@@ -184,9 +190,10 @@ const scenarios = [
   { name: 'css-other',
     after: '<link rel="stylesheet" media="print" href="x/other.css?print">' +
       '<link rel="alternate stylesheet" title="alt" href="x/other.css?alternate">' +
-      '<link rel="stylesheet" disabled href="x/other.css?disabled"><link rel="stylesheet" href="">' +
-      '<script src="x/insert.js"></script>',
+      '<link rel="stylesheet" disabled href="x/other.css?disabled"><link rel="stylesheet" href="">',
     expect: { startBefore: 1000 } },
+  // A stylesheet that a script inserts (2 s late).
+  { name: 'css-inserted', after: '<script src="x/insert.js"></script>', expect: { startBefore: 1000 } },
   { name: 'warn-css', before: '<link rel="stylesheet" href="x/fast.css">', expect: { warnings: 1 } },
   { name: 'warn-meta', before: '<meta http-equiv="content-security-policy" content="img-src *">',
     after: '<meta http-equiv="Content-Security-Policy" content="img-src *">', expect: { warnings: 1 } },
@@ -217,6 +224,9 @@ const scenarios = [
   { name: 'rel-preload', release: true, after: '<link rel="stylesheet" href="x/slow.css">',
     expect: { build: 'wasm', height: 300, wasmBefore: 300 } },
   { name: 'rel-repeat', release: true, form: 'file', repeat: true, expect: { build: 'wasm', probes: 1 } },
+  // The Trusted Types case in the loader.js form, on a repeat visit.
+  { name: 'rel-tt-repeat', release: true, form: 'file', repeat: true, ...tt,
+    expect: { build: 'wasm', probes: 1, html: '<i>x</i>', reports: 0 } },
   { name: 'rel-silent', release: true, before: '<link rel="stylesheet" href="x/fast.css">',
     expect: { build: 'wasm', path: null } },
   { name: 'rel-two', release: true, apps: [['a', 'a'], ['b', 'b']], expect: { build: 'wasm' } },
@@ -229,8 +239,86 @@ const scenarios = [
   { name: 'rel-wait', release: true, expect: { build: 'wasm', wait: 4000 } },
 ];
 
+// The differences of the browsers: the one table of the loader tests. The
+// values are facts of the Playwright browsers of flake.lock (Firefox 157,
+// WebKit 27.2), not of Safari. The fields:
+//   skip      the scenarios that do not run in the browser
+//   expect    by scenario: keys that replace the keys of its expect
+//   limit     the most requests for a path (a function of the path), in each
+//             visit; the default is 1
+//   repeat    the most requests for a file of the build or of the loader on
+//             a repeat visit (a function of the path); the default is 0
+//   preloads  the most preload messages of the browser for a path (a
+//             function of the path); the default is 0
+const main = (p) => release && mainWasm(p);
+// Firefox and WebKit get 750 ms (half of the delay of slow.css) for the
+// bounds of the build and of the .wasm request: with 32 busy processes,
+// Firefox took up to 307 ms from the first request to the .wasm request.
+// Firefox 157 gives no message for a preload that the page does not use:
+// there, only the count of the requests finds a preload fault.
+const slowRequests = { 'css-inline': { buildBefore: 750 }, 'css-file': { buildBefore: 750 },
+  'rel-preload': { wasmBefore: 750 } };
+const browsers = {
+  chrome: {},
+  firefox: {
+    expect: {
+      ...slowRequests,
+      // The dev server sends no-cache, and Firefox requests loader.js for the
+      // async tag and again for the defer tag.
+      file: { requests: { 'loader.js': [1, 2] } },
+      // A stylesheet that a script inserts holds the fetch of the .wasm files
+      // until it loads: the start comes after it.
+      'css-inserted': { startBefore: 4000, startAfter: 2000 },
+    },
+    limit: (p) => (!release && p === 'loader.js' ? 2 : 1),
+  },
+  webkit: {
+    // WebKit has no switch that removes WebAssembly.
+    skip: ['no-wasm-real'],
+    expect: {
+      ...slowRequests,
+      // WebKit refuses the compile with no 'wasm-unsafe-eval', but it sends
+      // no securitypolicyviolation event for it.
+      'csp-header': { reports: 0 },
+      'csp-meta': { reports: 0 },
+      'rel-csp-header': { reports: 0 },
+      // A defer script does not wait for the stylesheets: in the loader.js
+      // form, the app starts with no CSS layout.
+      'css-file': { height: 0, buildBefore: 750 },
+      // The head part comes 500 ms late, after the defer start part that
+      // does not wait for the stylesheet: the hand-off, with no CSS layout.
+      'css-late': { path: 'head', height: 0 },
+      // An async script can run after the defer scripts: then the head part
+      // starts the build after the slow defer script (2 s). In other runs,
+      // it runs first. Thus no check of slowRan, and a start before 4 s.
+      'defer-file': { startBefore: 4000, slowRan: undefined },
+      // A stylesheet that a script inserts holds the scripts and the fetches
+      // until it loads.
+      'css-inserted': { startBefore: 4000, startAfter: 2000 },
+    },
+    // WebKit does not use the preload as=fetch of the main .wasm for the
+    // fetch of the launcher: two requests, and one preload message when the
+    // scenario waits. On a repeat visit, it requests the main .wasm again.
+    limit: (p) => (main(p) ? 2 : 1),
+    repeat: (p) => (main(p) ? 2 : 0),
+    preloads: (p) => (main(p) ? 1 : 0),
+  },
+};
+const differences = browsers[name] ?? {};
+const limit = differences.limit ?? (() => 1);
+const repeatLimit = differences.repeat ?? (() => 0);
+const preloadLimit = differences.preloads ?? (() => 0);
+
 const mine = scenarios.filter((sc) => !sc.release === !release);
-const chosen = mine.filter((sc) => (only ? only.includes(sc.name) : !sc.alone));
+const chosen = mine
+  .filter((sc) => (only ? only.includes(sc.name) : !sc.alone))
+  .filter((sc) => !(differences.skip || []).includes(sc.name));
+// For example --only no-wasm-real in WebKit: a run with no scenario is a
+// fault of the rule.
+if (chosen.length === 0) {
+  console.log(`FAIL: no scenario to run in ${name}`);
+  process.exit(1);
+}
 if (only) for (const o of only) if (!mine.some((sc) => sc.name === o)) {
   console.log(`FAIL: no scenario ${o} in the ${profile} profile`);
   process.exit(1);
@@ -390,7 +478,6 @@ await new Promise((ok) => other.listen(0, '127.0.0.1', ok));
 const otherOrigin = `http://127.0.0.1:${other.address().port}`;
 
 const browser = await backend.launch({ noWasm });
-const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
 // The state of the page, as JSON.
 const stateJs = `JSON.stringify({
@@ -430,11 +517,16 @@ const runScenario = async (sc, n) => {
   const site = { sc, dir, log: [], t0: Date.now(), visit: 0, page: makePage(sc, prefix, dir) };
   sites.set(key, site);
   const ids = [...new Set((sc.apps || [['a']]).map(([a]) => a))];
-  const e = sc.expect;
+  const e = { ...sc.expect, ...differences.expect?.[sc.name] };
   let events;
   const faults = [];
   const fault = (s) => faults.push(s);
   // The start time of each app, for the log: the time bounds have a margin.
+  // A time bound counts from the first request of the page after the page
+  // itself (the first script of the head): a slow machine can parse the
+  // head late (measured: 433 ms in Firefox with 32 busy processes), and the
+  // bounds are for the waits of the loader, not for the parse.
+  const head = () => site.log.find((r) => r.visit === 1)?.t ?? 0;
   let starts = '';
   await browser.withPage(30000, async (page) => {
     events = watch(page);
@@ -474,8 +566,11 @@ const runScenario = async (sc, n) => {
         if (v.html !== (e.html ?? '<i>x</i>')) fault(`${id}: html ${v.html}`);
       }
       if (e.height !== undefined && r.height !== e.height) fault(`${id}: height ${r.height}, expected ${e.height}`);
-      if (e.startBefore !== undefined && !(r.time < e.startBefore))
-        fault(`${id}: start at ${Math.round(r.time)} ms, expected before ${e.startBefore} ms`);
+      const t = Math.round(r.time - head());
+      if (e.startBefore !== undefined && !(t < e.startBefore))
+        fault(`${id}: start ${t} ms after the first request, expected before ${e.startBefore} ms`);
+      if (e.startAfter !== undefined && !(t > e.startAfter))
+        fault(`${id}: start ${t} ms after the first request, expected after ${e.startAfter} ms`);
       if (e.slowRan !== undefined && r.slowRan !== e.slowRan) fault(`${id}: slowRan ${r.slowRan}`);
     });
     for (const k of ['probes', 'policies', 'path'])
@@ -496,27 +591,32 @@ const runScenario = async (sc, n) => {
       st = JSON.parse(await read(stateJs));
       if (st.probes !== 1) fault(`second visit: probes ${st.probes}, expected 1`);
       if (st.loaded.a.build !== e.build) fault(`second visit: build ${st.loaded.a.build}`);
+      const again = {};
       for (const r of site.log)
-        if (r.visit === 2 && /^(loader|app_)|\.wasm$/.test(r.path)) fault(`second visit: a request for ${r.path}`);
+        if (r.visit === 2 && /^(loader|app_)|\.wasm$/.test(r.path)) again[r.path] = (again[r.path] || 0) + 1;
+      for (const [p, c] of Object.entries(again))
+        if (c > repeatLimit(p)) fault(`second visit: ${c} requests for ${p}`);
     }
   });
-  // The requests of the first visit: each URL at most one time, and the
-  // expected counts.
+  // The requests of the first visit: each URL at most one time (or the limit
+  // of the browser), and the expected counts.
   const first = site.log.filter((r) => r.visit === 1);
   const counts = {};
   for (const r of first) counts[r.path] = (counts[r.path] || 0) + 1;
   if (e.start !== false) {
-    for (const [p, c] of Object.entries(counts)) if (c > 1) fault(`${c} requests for ${p}`);
+    for (const [p, c] of Object.entries(counts)) if (c > limit(p)) fault(`${c} requests for ${p}`);
     for (const [p, c] of Object.entries(e.requests || {}))
-      if ((counts[p] || 0) !== c) fault(`${counts[p] || 0} requests for ${p}, expected ${c}`);
+      if (![c].flat().includes(counts[p] || 0)) fault(`${counts[p] || 0} requests for ${p}, expected ${c}`);
     if (e.none) for (const p of Object.keys(counts)) if (e.none.test(p)) fault(`a request for ${p}`);
     if (e.buildBefore !== undefined) {
       const b = first.find((r) => /^app_a\.bc\.(wasm\.)?js$/.test(r.path));
-      if (!b || !(b.t < e.buildBefore)) fault(`the build request at ${b?.t} ms, expected before ${e.buildBefore} ms`);
+      if (!b || !(b.t - head() < e.buildBefore))
+        fault(`the build request ${b && b.t - head()} ms after the first request, expected before ${e.buildBefore} ms`);
     }
     if (e.wasmBefore !== undefined) {
       const w = first.find((r) => /\.wasm$/.test(r.path));
-      if (!w || !(w.t < e.wasmBefore)) fault(`the .wasm request at ${w?.t} ms, expected before ${e.wasmBefore} ms`);
+      if (!w || !(w.t - head() < e.wasmBefore))
+        fault(`the .wasm request ${w && w.t - head()} ms after the first request, expected before ${e.wasmBefore} ms`);
     }
     // Each build file has a content name, and the bytes of the build.
     if (sc.names)
@@ -536,8 +636,8 @@ const runScenario = async (sc, n) => {
     fault(`${events.exceptions.length} exceptions, expected ${e.exceptions}: ${JSON.stringify(events.exceptions)}`);
   // For example a preload that the request does not use, because its
   // credentials mode is not the same. A file from the cache then gives no
-  // second request.
-  const preloads = events.logs.filter((l) => /preload/i.test(l.text)).map((l) => l.text);
+  // second request. A browser can permit messages for a path (preloads).
+  const preloads = preloadFaults(events.logs, Object.keys(counts).map((p) => prefix + p), preloadLimit);
   if (preloads.length) fault(`preload messages: ${JSON.stringify(preloads)}`);
   sites.delete(key);
   return { faults, log: site.log, starts };
