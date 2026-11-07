@@ -320,16 +320,28 @@ module Ev : sig
   val blur : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
   (** [blur] uses [focusout], which bubbles. *)
 
-  (** {1 Events that do not bubble}
+  (** {1 Events with a listener on the element}
 
       These events use a listener on their element, not delegation at the root.
-      The listener is passive if the handler has no [~prevent_default]. *)
+      The listener is passive if the handler has no [~prevent_default]: a
+      passive listener cannot prevent the default, and the browser does not wait
+      for it before it scrolls. A listener does nothing for an element that is
+      not in the document. *)
 
   val mouseenter : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
 
   val mouseleave : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
 
   val scroll : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
+
+  val wheel : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
+  (** [wheel] has no payload in this version. *)
+
+  val touchstart : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
+  (** [touchstart] has no payload in this version. *)
+
+  val touchmove : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
+  (** [touchmove] has no payload in this version. *)
 end
 
 (** Elements (design sections 08 and 13).

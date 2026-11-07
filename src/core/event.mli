@@ -6,7 +6,16 @@ val discrete : string -> bool
     renders at once. *)
 
 val bubbles : string -> bool
-(** [false] for mouseenter, mouseleave and scroll. *)
+(** [false] for the names of {!direct_events}: a listener on the element. *)
+
+val delegated_events : string list
+(** The names that use delegation: one listener on the mount element for each
+    name. They are the names of {!Kilim.Ev} that bubble, and [compositionstart]
+    and [compositionend]. *)
+
+val direct_events : string list
+(** The names that use a listener on the element: mouseenter, mouseleave,
+    scroll, wheel, touchstart and touchmove. *)
 
 val walk :
      parent:('node -> 'node option)

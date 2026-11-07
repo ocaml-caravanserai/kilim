@@ -1,6 +1,10 @@
 type cost = Update | Drain
 
-type env = {host: Host.t; hidden: unit -> bool; cost: cost -> unit}
+type env =
+  { host: Host.t
+  ; hidden: unit -> bool
+  ; cost: cost -> unit
+  ; same: 'a. 'a -> 'a -> bool }
 
 let limit_ms = 50.
 
@@ -311,7 +315,7 @@ and update : type msg. _ -> msg Instance.t -> msg Instance.state -> msg -> unit
   | model, cmd -> (
       (* A root catch or a stop during [update] (a re-entrant event) unmounts
          the instance: then the model does not change. *)
-      if model != s.model && inst.alive then begin
+      if (not (rt.env.same model s.model)) && inst.alive then begin
         s.model <- model ;
         Instance.changed inst
       end ;

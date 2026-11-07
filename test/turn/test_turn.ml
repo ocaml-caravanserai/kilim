@@ -248,6 +248,38 @@ let model_compare () =
   P.click p (By.test_id "c") ;
   equal int 2 (stats p).renders
 
+(* The compare comes from the env: [same] of the platform. An env whose [same]
+   always gives [false] renders for the same model. An env whose [same] always
+   gives [true] does not render for a new model. *)
+type same = {f: 'a. 'a -> 'a -> bool}
+
+let env_same () =
+  let check (same : same) id ~renders ~views =
+    let h = H.create () in
+    let root = F.element "div" in
+    let rt =
+      R.start
+        {(H.env h) with same= same.f}
+        (F.ops (F.create ()))
+        ~parent:root
+        (compare_app ~init:[1] ~change:(fun m -> 2 :: m))
+    in
+    let b =
+      List.find
+        (fun n ->
+          Option.equal String.equal (F.attribute n "data-testid") (Some id) )
+        (F.children (List.hd (F.children root)))
+    in
+    R.event rt R.Discrete (fun () -> F.fire b "click" Private.Dom.Unit ()) ;
+    equal int ~msg:"renders" renders (R.stats rt).renders ;
+    equal int ~msg:"views" views (R.stats rt).views ;
+    equal int ~msg:"messages" 1 (R.stats rt).messages
+  in
+  check {f= (fun _ _ -> false)} "s" ~renders:2 ~views:2 ;
+  check {f= (fun _ _ -> true)} "c" ~renders:1 ~views:1 ;
+  check {f= ( == )} "s" ~renders:1 ~views:1 ;
+  check {f= ( == )} "c" ~renders:2 ~views:2
+
 (* A re-entrant event only puts its message in the queue, and the same turn
    processes it. *)
 type rmsg = Outer | Inner
@@ -402,6 +434,7 @@ let tests =
       ; test "a page that becomes hidden renders at once" hidden_now
       ; test "a click with a pending render renders at once" click_pending
       ; test "the model compare is physical" model_compare
+      ; test "the model compare uses the same of the env" env_same
       ; test "a re-entrant event goes to the queue" reentrant
       ; test "the stop" stop
       ; test "at most 3 renders in one turn" render_cap

@@ -48,7 +48,11 @@ type env =
   { host: Host.t
   ; hidden: unit -> bool  (** [document.visibilityState = "hidden"]. *)
   ; cost: cost -> unit
-        (** The test host moves its virtual clock. A browser does nothing. *) }
+        (** The test host moves its virtual clock. A browser does nothing. *)
+  ; same: 'a. 'a -> 'a -> bool
+        (** The identity of the platform. An instance is dirty after [update] if
+            [same model old_model] is [false]. [( == )] in native code and in
+            the wasm_of_ocaml build, [Object.is] in the js_of_ocaml build. *) }
 
 (** The kind of a turn. *)
 type kind =

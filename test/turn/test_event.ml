@@ -19,10 +19,41 @@ let discrete () =
   List.iter
     (fun n -> is_true ~msg:n (E.bubbles n))
     ["click"; "focusin"; "keydown"; "input"] ;
-  (* Ev uses the same list. *)
-  is_false (Ev.scroll ()).bubbles ;
-  is_false (Ev.mouseenter ()).bubbles ;
-  is_true (Ev.focus ()).bubbles
+  (* Ev uses the same list. Each name of Ev is in exactly one of the two lists,
+     and [bubbles] is false exactly for the direct names. *)
+  let evs : unit Ev.t list =
+    [ Ev.click ()
+    ; Ev.check ignore
+    ; Ev.input ignore
+    ; Ev.change ignore
+    ; Ev.submit ()
+    ; Ev.keydown ignore
+    ; Ev.keyup ignore
+    ; Ev.focus ()
+    ; Ev.blur ()
+    ; Ev.mouseenter ()
+    ; Ev.mouseleave ()
+    ; Ev.scroll ()
+    ; Ev.wheel ()
+    ; Ev.touchstart ()
+    ; Ev.touchmove () ]
+  in
+  List.iter
+    (fun (h : unit Ev.t) ->
+      let d = List.mem h.event E.delegated_events
+      and r = List.mem h.event E.direct_events in
+      is_true ~msg:h.event (d <> r) ;
+      equal bool ~msg:h.event (not r) h.bubbles ;
+      equal bool ~msg:h.event (not r) (E.bubbles h.event) )
+    evs ;
+  List.iter
+    (fun n -> is_false ~msg:n (E.bubbles n))
+    ["wheel"; "touchstart"; "touchmove"] ;
+  equal int 10 (List.length E.delegated_events) ;
+  equal int 6 (List.length E.direct_events) ;
+  List.iter
+    (fun n -> is_true ~msg:n (E.bubbles n && not (E.discrete n)))
+    ["keyup"; "focusin"; "focusout"; "compositionstart"; "compositionend"]
 
 (* A tree of three elements: the outer one, the middle one and the target. *)
 let tree name =

@@ -451,7 +451,23 @@ let listeners () =
   equal ops [("listen", 1)] (counts p) ;
   patch p (El.div []) ;
   equal ops [("unlisten", 2)] (counts p) ;
-  equal (list (pair string bool)) [] (F.listeners n)
+  equal (list (pair string bool)) [] (F.listeners n) ;
+  (* wheel, touchstart and touchmove: passive with no prevent_default. A patch
+     that adds prevent_default removes the listener and adds it again. *)
+  List.iter
+    (fun (name, ev) ->
+      patch p (El.div ~ev:[ev ~prevent_default:false name] []) ;
+      equal ops ~msg:name [("listen", 1)] (counts p) ;
+      equal (list (pair string bool)) [(name, true)] (F.listeners n) ;
+      patch p (El.div ~ev:[ev ~prevent_default:true name] []) ;
+      equal ops ~msg:name [("listen", 1); ("unlisten", 1)] (counts p) ;
+      equal (list (pair string bool)) [(name, false)] (F.listeners n) ;
+      patch p (El.div []) ;
+      equal ops [("unlisten", 1)] (counts p) )
+    [ ("wheel", fun ~prevent_default m -> Ev.wheel ~prevent_default m)
+    ; ("touchstart", fun ~prevent_default m -> Ev.touchstart ~prevent_default m)
+    ; ("touchmove", fun ~prevent_default m -> Ev.touchmove ~prevent_default m)
+    ]
 
 let namespaces () =
   let v =

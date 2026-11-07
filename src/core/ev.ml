@@ -46,3 +46,12 @@ let mouseleave ?(prevent_default = false) ?(stop = false) m =
 
 let scroll ?(prevent_default = false) ?(stop = false) m =
   make "scroll" Dom.Unit prevent_default stop (fun () -> m)
+
+let wheel ?(prevent_default = false) ?(stop = false) m =
+  make "wheel" Dom.Unit prevent_default stop (fun () -> m)
+
+let touchstart ?(prevent_default = false) ?(stop = false) m =
+  make "touchstart" Dom.Unit prevent_default stop (fun () -> m)
+
+let touchmove ?(prevent_default = false) ?(stop = false) m =
+  make "touchmove" Dom.Unit prevent_default stop (fun () -> m)
