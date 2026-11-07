@@ -3,7 +3,7 @@
 #   make build          Build all.
 #   make fmt            Format the code.
 #   make test           Run the tests: native code, js_of_ocaml and
-#                       wasm_of_ocaml (on node).
+#                       wasm_of_ocaml (on node, and in Chrome for test/dom).
 #   make mutate         Test the mutants on the lines that changed since BASE.
 #   make mutate-all     Test all the mutants of the libraries.
 #   make mutate-report  Merge the verdicts of the last run of mutate or

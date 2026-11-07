@@ -1,4 +1,5 @@
-(* The async tasks of kilim on a real host on Brr (design section 12). *)
+(* The async tasks of kilim on the host of kilim.browser (design section 12),
+   and the order of its queues. *)
 
 open Brr
 open Kilim
@@ -13,31 +14,10 @@ let check name ok =
   print_endline ((if ok then "ok   " else "FAIL ") ^ name) ;
   if not ok then incr failures
 
-let queue_microtask f =
-  ignore
-    (Jv.call Jv.global "queueMicrotask"
-       [|Jv.callback ~arity:1 (fun _ -> f ())|] )
+(* The host of kilim.browser: the checks test the shipped host. *)
+let host = Kilim_browser.Private.host ()
 
-let set_timer ~ms f =
-  let id = G.set_timeout ~ms f in
-  fun () -> G.stop_timer id
-
-(* A macrotask: one MessageChannel message. *)
-let post_task f =
-  let ch = Jv.new' (Jv.get Jv.global "MessageChannel") [||] in
-  let port1 = Jv.get ch "port1" and port2 = Jv.get ch "port2" in
-  Jv.set port1 "onmessage"
-    (Jv.callback ~arity:1 (fun _ ->
-         ignore (Jv.call port1 "close" [||]) ;
-         f () ) ) ;
-  ignore (Jv.call port2 "postMessage" [|Jv.of_int 0|])
-
-let host =
-  { Private.Host.now_ms= (fun () -> Performance.now_ms G.performance)
-  ; set_timer
-  ; request_frame= (fun f -> ignore (G.request_animation_frame (fun _ -> f ())))
-  ; queue_microtask
-  ; post_task }
+let queue_microtask = host.queue_microtask
 
 let rec run = lazy (Q.create ~schedule:(fun () -> queue_microtask turn_now))
 
@@ -117,10 +97,40 @@ let later ms f =
            print_endline
              ( if !failures = 0 then "all browser checks pass"
                else "browser checks FAILED" ) ;
-           if !failures > 0 then exit 1
+           (* The MessageChannel port of the host keeps node alive. *)
+           exit (if !failures > 0 then 1 else 0)
          end ) )
 
+(* The queues of the host: three tasks run in order, each in its own task. A
+   microtask from a task runs before the next task. The count of the live
+   timers. *)
+let queues () =
+  let log = ref [] in
+  let add s = log := s :: !log in
+  host.post_task (fun () ->
+      add "t1" ;
+      host.queue_microtask (fun () -> add "m1") ) ;
+  host.post_task (fun () -> add "t2") ;
+  host.post_task (fun () -> add "t3") ;
+  later 50 (fun () ->
+      check "three tasks in order, and a microtask before the next task"
+        (List.rev !log = ["t1"; "m1"; "t2"; "t3"]) ) ;
+  let live = Kilim_browser.Private.live_timers in
+  let base = live () in
+  let clear = host.set_timer ~ms:10 ignore in
+  let one = live () = base + 1 in
+  clear () ;
+  clear () ;
+  let cleared = live () = base in
+  let ran = ref false in
+  let (_ : unit -> unit) = host.set_timer ~ms:10 (fun () -> ran := true) in
+  let set = live () = base + 1 in
+  later 60 (fun () ->
+      check "the live timers: 1 after a set, 0 after a clear, 0 after a run"
+        (one && cleared && set && !ran && live () = base) )
+
 let () =
+  queues () ;
   (* A real timer. *)
   let fired = ref false in
   start (C.root ())

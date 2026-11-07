@@ -1,6 +1,7 @@
 # The tests on each push to main and on each pull request. The tools come from
 # the dev shell of flake.nix, as on a local machine. The tests run in three
-# builds: native code, js_of_ocaml and wasm_of_ocaml (on node).
+# builds: native code, js_of_ocaml and wasm_of_ocaml (on node and in a
+# headless Chrome).
 name: CI
 
 on:
@@ -25,7 +26,11 @@ jobs:
         run: nix develop -c dune build
       - name: Format
         run: nix develop -c dune build @fmt
+      # The DOM tests need Chrome: the runner image has it in /usr/bin. With
+      # this variable, a missing Chrome is a failure, not a skip.
       - name: Test
+        env:
+          KILIM_REQUIRE_CHROME: "1"
         run: nix develop -c dune runtest --force
 
   # The mutation gate of a pull request. make mutate tests the mutants that

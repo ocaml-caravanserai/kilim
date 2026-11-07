@@ -1,0 +1,11 @@
+; The browser library (design sections 11 and 13): the real DOM on Jv, the
+; browser host, the listeners and Kilim_browser.run. It uses kilim and Brr
+; only, and none of Printf, Format, Scanf, Str, Hashtbl, Random, Fun or
+; Printexc. windtrap runs only native code, thus no instrumentation: the event
+; rules are in Kilim.Private.Event, and test/dom/guards.txt lists the guards of
+; this library with their tests.
+
+(library
+ (name kilim_browser)
+ (public_name kilim.browser)
+ (libraries kilim brr))
