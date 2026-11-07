@@ -84,6 +84,16 @@ mount.ml    traps      a WebAssembly.RuntimeError       true: D32 (a JS error of
                                                         false: D31 (wasm build).
 mount.ml    traps      the abort in a microtask         at once: D33 (wasm build, the
                                                         model is 100).
+mount.ml    traps      a null error: abort_open         true (each error event): D37 in
+                                                        Chrome (two traps give one
+                                                        report). false: D31 to D37 in
+                                                        WebKit, which gives a trap of
+                                                        a wasm:js-string function
+                                                        with a null error. PR 6c-2
+                                                        runs the pages in WebKit.
+mount.ml    traps      abort_open, not abort            abort: D37 in WebKit (two
+                                                        traps with a null error give
+                                                        one report). PR 6c-2.
 mount.ml    traps      the unhandledrejection listener  removed: D34 (a start in a
                                                         promise reaction, wasm
                                                         build).

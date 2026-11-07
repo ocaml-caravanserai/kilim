@@ -483,6 +483,51 @@ let abort_once () =
   is_false ~msg:"no second end of B" (ins pb).tick_pending ;
   is_false ~msg:"no second end of C" (ins pc).tick_pending
 
+(* Runtime.abort_open: the abort of an error event whose error is null (WebKit
+   gives a trap of a wasm:js-string function so). It aborts only if a turn is
+   still open: with no open turn, no report and no turn. With an open turn (left
+   by an effect, as a trap), one report, and the turn ends. A second abort_open
+   finds no open turn. *)
+let abort_open () =
+  let leave = ref true in
+  let pb =
+    P.start
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(fun m () ->
+           if !leave then begin
+             leave := false ;
+             Effect.perform Leave
+           end ;
+           (m + 1, Cmd.none) )
+         ~view:(fun m -> button () (string_of_int m))
+         () )
+  in
+  let turns = (stats pb).turns in
+  R.abort_open E1 ;
+  equal int ~msg:"no open turn: no report" 0 (List.length (errors pb)) ;
+  equal int ~msg:"no open turn: no turn" turns (stats pb).turns ;
+  is_false (ins pb).turn_requested ;
+  Effect.Deep.match_with
+    (fun () -> P.click pb (By.test_id "b"))
+    ()
+    { retc= Fun.id
+    ; exnc= raise
+    ; effc=
+        (fun (type a) (e : a Effect.t) ->
+          match e with
+          | Leave ->
+              Some (fun (_ : (a, unit) Effect.Deep.continuation) -> ())
+          | _ ->
+              None ) } ;
+  is_true ~msg:"an open turn" (ins pb).in_turn ;
+  R.abort_open E1 ;
+  R.abort_open E2 ;
+  is_false ~msg:"the abort ends the turn" (ins pb).in_turn ;
+  is_true ~msg:"one report" (match errors pb with [E1] -> true | _ -> false) ;
+  P.click pb (By.test_id "b") ;
+  equal string "1" (F.text (P.find pb (By.test_id "b")))
+
 let tests =
   [ group "faults"
       [ test "a fault at each clock read" sweep
@@ -494,4 +539,5 @@ let tests =
       ; test "a second fault in the catch of the turn" double
       ; test "an abort ends the open turns" abort
       ; test "a turn removes its own entry from the open turns" open_turns
-      ; test "an abort gives its error one time" abort_once ] ]
+      ; test "an abort gives its error one time" abort_once
+      ; test "abort_open aborts only an open turn" abort_open ] ]
