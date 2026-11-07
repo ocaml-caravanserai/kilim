@@ -1,7 +1,9 @@
-// The Chrome part of the runners of test/dom and test/loader: find Chrome,
-// start it with a minimal environment, and talk to it over the DevTools pipe
-// (no port, no WebSocket). The import has no side effect: the caller decides
-// what a missing Chrome gives (the skip rules of KILIM_REQUIRE_CHROME).
+// The Chrome part of the runners of test/dom, test/loader and test/examples:
+// find Chrome, start it with a minimal environment, and talk to it over the
+// DevTools pipe (no port, no WebSocket). It also collects the events of a
+// target and polls a condition. The import has no side effect: the caller
+// decides what a missing Chrome gives (the skip rules of
+// KILIM_REQUIRE_CHROME).
 
 import { spawn } from 'node:child_process';
 import { accessSync, constants, mkdtempSync, rmSync } from 'node:fs';
@@ -149,3 +151,42 @@ export const withPage = async (browser, limitMs, body) => {
 
 // The text of a console argument of the protocol.
 export const text = (a) => (a.value !== undefined ? String(a.value) : a.description ?? a.type);
+
+// Enables the Runtime, Log and Page domains of a target of withPage, and
+// collects its events. The result has these lists, which grow while the
+// target lives:
+//   warnings, errors   the text of each console.warn and console.error call
+//   exceptions         each uncaught exception
+//   logs               each Chrome log entry: { level, text, url }
+export const watch = async (page) => {
+  const events = { warnings: [], errors: [], exceptions: [], logs: [] };
+  page.on((m) => {
+    if (m.method === 'Runtime.consoleAPICalled') {
+      const line = m.params.args.map(text).join(' ');
+      if (m.params.type === 'warning') events.warnings.push(line);
+      else if (m.params.type === 'error') events.errors.push(line);
+    } else if (m.method === 'Runtime.exceptionThrown') {
+      const d = m.params.exceptionDetails;
+      events.exceptions.push(d.exception?.description ?? d.text);
+    } else if (m.method === 'Log.entryAdded') {
+      const e = m.params.entry;
+      events.logs.push({ level: e.level, text: e.text, url: e.url });
+    }
+  });
+  await page.send('Runtime.enable');
+  await page.send('Log.enable');
+  await page.send('Page.enable');
+  return events;
+};
+
+// Calls test every 20 ms until it gives a true value. The result is true, or
+// false after limitMs. A test that throws or rejects gives false for that
+// call: for example, a read of the page during a navigation.
+export const until = async (test, limitMs) => {
+  const end = Date.now() + limitMs;
+  for (;;) {
+    if (await Promise.resolve().then(test).catch(() => false)) return true;
+    if (Date.now() > end) return false;
+    await new Promise((ok) => setTimeout(ok, 20));
+  }
+};
