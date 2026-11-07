@@ -1,0 +1,17 @@
+; The allocation budget (docs/budgets.md): the words that the diff allocates
+; in the four actions of the DOM operation budget, against budget. The count
+; depends on the compiler, thus the test runs only in the dev profile and with
+; no flambda. It is not in test/view: `make mutate` builds test/view with the
+; mutation instrumentation, and the instrumentation changes the counts.
+
+(test
+ (name alloc)
+ (modes native)
+ (enabled_if
+  (and
+   (= %{profile} dev)
+   (= %{ocaml-config:flambda} false)))
+ (libraries kilim)
+ (deps budget)
+ (action
+  (run %{test} budget)))
