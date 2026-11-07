@@ -722,6 +722,7 @@ let restore_law (cost, actions) =
       | R_compose (i, l) ->
           P.compose p (id i) l
       | R_compstart (i, s) ->
+          P.focus p (id i) ;
           P.event p (id i) "compositionstart" ;
           P.input p (id i) s
       | R_blur i ->

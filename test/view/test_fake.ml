@@ -591,6 +591,69 @@ let fire () =
   misuse (fun () -> F.fire e "scroll" Dom.Unit ()) ;
   ignore t
 
+(* The focus: a move or a removal of the focused element or of one of its
+   ancestors takes the focus away. A move of a sibling does not. *)
+let focus () =
+  let t, o, root = setup () in
+  let div = o.create_element Dom.Html "div" in
+  let a = o.create_element Dom.Html "input" in
+  let b = o.create_element Dom.Html "input" in
+  o.insert_before root div None ;
+  o.insert_before div a None ;
+  o.insert_before div b None ;
+  let has n = match F.focused t with Some f -> f == n | None -> false in
+  let focus n =
+    F.focus t (Some n) ;
+    is_true (o.focused n)
+  in
+  is_true (F.focused t = None) ;
+  is_false (o.focused a) ;
+  focus a ;
+  is_false (o.focused b) ;
+  equal int ~msg:"a count for each read" 3
+    (Option.value ~default:0 (List.assoc_opt "focused" (F.counts t))) ;
+  o.insert_before div b (Some a) ;
+  is_true ~msg:"a move of a sibling" (has a) ;
+  o.insert_before div a None ;
+  is_false ~msg:"a move of the element" (o.focused a) ;
+  focus a ;
+  o.insert_before root (o.create_text "x") (Some div) ;
+  o.insert_before root div None ;
+  is_true ~msg:"a move of the parent" (F.focused t = None) ;
+  focus a ;
+  o.remove div b ;
+  is_true ~msg:"a removal of a sibling" (has a) ;
+  o.remove div a ;
+  is_true ~msg:"a removal of the element" (F.focused t = None) ;
+  o.insert_before div a None ;
+  focus a ;
+  o.remove root div ;
+  is_true ~msg:"a removal of the parent" (F.focused t = None) ;
+  o.insert_before root div None ;
+  focus a ;
+  o.replace div b a ;
+  is_true ~msg:"a replace of the element" (F.focused t = None) ;
+  focus div ;
+  o.clear div ;
+  is_true ~msg:"a clear of the element itself" (has div) ;
+  o.insert_before div a None ;
+  focus a ;
+  o.clear div ;
+  is_true ~msg:"a clear of the parent" (F.focused t = None) ;
+  o.insert_before div a None ;
+  focus div ;
+  o.set_inner_html div (Unsafe_html.of_string "<b></b>") ;
+  is_true ~msg:"inner HTML of the element itself" (has div) ;
+  o.clear div ;
+  o.insert_before div a None ;
+  focus a ;
+  o.set_inner_html div (Unsafe_html.of_string "<b></b>") ;
+  is_true ~msg:"inner HTML of the parent" (F.focused t = None) ;
+  F.focus t (Some a) ;
+  F.focus t None ;
+  is_false (o.focused a) ;
+  misuse (fun () -> o.focused (o.create_text "t"))
+
 let tests =
   [ group "fake DOM"
       [ test "insert, move, remove, replace and clear" tree
@@ -604,4 +667,5 @@ let tests =
           radio_model
       ; test "the reads of the live properties" reads
       ; test "a fault raises one time, with no effect" faults
-      ; test "fire calls the handler with its payload" fire ] ]
+      ; test "fire calls the handler with its payload" fire
+      ; test "the focus and the moves and removals" focus ] ]

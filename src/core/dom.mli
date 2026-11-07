@@ -48,9 +48,9 @@ type cell =
   ; mutable checked: bool option
         (** The value of the [checked] property in the last view. *)
   ; mutable composing: bool
-        (** An IME composition is active in the element. The diff and
-            [Diff.restore] do not write [value]: a write stops the composition.
-        *) }
+        (** An IME composition is active in the element. While the element has
+            the focus, the diff and [Diff.restore] do not write [value]: a write
+            stops the composition. *) }
 
 val handler : cell -> string -> handler option
 (** [handler cell name] is the handler for the DOM event name [name], for
@@ -71,6 +71,9 @@ type 'node t =
         (** The live [value] property. The browser can change it with no write
             of the diff, thus the diff compares with it. *)
   ; get_checked: 'node -> bool  (** The live [checked] property. *)
+  ; focused: 'node -> bool
+        (** The node is the focused element of its document or shadow root. The
+            diff reads it only for an element with an IME composition. *)
   ; insert_before: 'node -> 'node -> 'node option -> unit
         (** [insert_before parent node ref] inserts or moves [node] before the
             child [ref] of [parent], or at the end with [None]. *)

@@ -161,32 +161,51 @@ let properties () =
   equal ops [("get_checked", 1); ("set_property", 1)] (counts p) ;
   is_true (cell.value = None && cell.checked = Some false)
 
-(* While the cell is composing (an IME composition), the patch and the restore
-   do not write [value]: the cell keeps the new view value. A [checked] change
-   is still written. *)
+(* While the cell is composing (an IME composition) and the element has the
+   focus, the patch and the restore do not write [value]: the cell keeps the new
+   view value. A [checked] change is still written. With no focus, the first
+   write site clears the flag and writes. *)
 let composing () =
   let p = mount (El.input ~at:[At.value "a"; At.checked false] ()) in
   let n = node p in
   let cell = Option.get (F.cell n) in
   is_false cell.composing ;
   cell.composing <- true ;
+  F.focus p.doc (Some n) ;
   patch p (El.input ~at:[At.value "b"; At.checked true] ()) ;
-  equal ops [("get_checked", 1); ("set_property", 1)] (counts p) ;
+  equal ops [("focused", 1); ("get_checked", 1); ("set_property", 1)] (counts p) ;
   equal string "a" (F.value n) ;
   is_true (F.checked n) ;
   is_true (cell.value = Some "b") ;
   (* The restore: no value write while composing. *)
   F.reset p.doc ;
   Diff.restore (F.ops p.doc) n cell ;
-  equal ops [("get_checked", 1)] (counts p) ;
+  equal ops [("focused", 1); ("get_checked", 1)] (counts p) ;
   equal string "a" (F.value n) ;
   (* With no composition, one write. *)
   cell.composing <- false ;
   Diff.restore (F.ops p.doc) n cell ;
   equal ops
-    [("get_checked", 2); ("get_value", 1); ("set_property", 1)]
+    [("focused", 1); ("get_checked", 2); ("get_value", 1); ("set_property", 1)]
     (counts p) ;
-  equal string "b" (F.value n)
+  equal string "b" (F.value n) ;
+  (* With the flag and no focus: the restore clears the flag and writes. *)
+  cell.composing <- true ;
+  F.focus p.doc None ;
+  F.browser_set n (Value "x") ;
+  F.reset p.doc ;
+  Diff.restore (F.ops p.doc) n cell ;
+  is_false cell.composing ;
+  equal string "b" (F.value n) ;
+  equal ops
+    [("focused", 1); ("get_checked", 1); ("get_value", 1); ("set_property", 1)]
+    (counts p) ;
+  (* The flag is clear: the next patch reads no focus. *)
+  patch p (El.input ~at:[At.value "c"; At.checked true] ()) ;
+  equal string "c" (F.value n) ;
+  equal ops
+    [("get_checked", 1); ("get_value", 1); ("set_property", 1)]
+    (counts p)
 
 (* A patch from [a] to [b] gives the DOM of a fresh mount of [b], with the
    counts [expected]. *)

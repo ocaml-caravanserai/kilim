@@ -576,16 +576,19 @@ let d13 () =
   B.stop a ;
   Fut.return ()
 
-(* D14: an IME composition on an uppercase input, with Sub.every. *)
+(* D14: an IME composition on an uppercase input, with Sub.every. [last] is the
+   text of the last message of the input. *)
 type imsg = Typed of string | Tick
 
 let ime_app () =
-  let ticks = ref 0 in
+  let ticks = ref 0 and last = ref "" in
   ( ticks
+  , last
   , App.make
       ~init:(fun () -> (("", 0), Cmd.none))
       ~update:(fun (s, n) -> function
         | Typed v ->
+            last := v ;
             ((String.uppercase_ascii v, n), Cmd.none)
         | Tick ->
             incr ticks ;
@@ -601,7 +604,7 @@ let ime_app () =
       () )
 
 let d14 () =
-  let ticks, app = ime_app () in
+  let ticks, _, app = ime_app () in
   let root, a = start app in
   let i = q root "i" in
   focus i ;
@@ -630,43 +633,60 @@ let d14 () =
   B.stop a ;
   Fut.return ()
 
+(* D39: a commit with a text that is not the last text of the composition. In
+   Chrome, the commit is an input with isComposing, then compositionend. Firefox
+   sends the input after compositionend. *)
+let d39 () =
+  let _, last, app = ime_app () in
+  let root, a = start app in
+  let i = q root "i" in
+  focus i ;
+  let* () = ime "k" in
+  let* () = ime "ka" in
+  let* () = insert_text "kai" in
+  let* () = task () in
+  check "D39 the commit text after one task"
+    (String.equal (value i) "KAI" && String.equal !last "kai") ;
+  B.stop a ;
+  Fut.return ()
+
 (* D15: a keyed move of the composing input. Chrome sends focusout, but no
    compositionend. *)
 type mmsg = Swap | Typed_m of string | More
 
+let move_app () =
+  App.make
+    ~init:(fun () -> ((false, ""), Cmd.none))
+    ~update:(fun (sw, s) -> function
+      | Swap ->
+          ((not sw, s), Cmd.none)
+      | Typed_m v ->
+          ((sw, String.uppercase_ascii v), Cmd.none)
+      | More ->
+          ((sw, s ^ "!"), Cmd.none) )
+    ~view:(fun (sw, s) ->
+      let rows =
+        [ ( Key.int 1
+          , El.input
+              ~at:[At.data "testid" "i"; At.value s]
+              ~ev:[Ev.input (fun v -> Typed_m v)]
+              () )
+        ; (Key.int 2, button ~id:"sw" Swap "swap")
+        ; (Key.int 3, button ~id:"more" More "more") ]
+      in
+      (* The swap moves only the input: the two buttons keep their order. *)
+      View.keyed El.div (if sw then List.tl rows @ [List.hd rows] else rows) )
+    ()
+
+let composing i =
+  match B.cell i with Some c -> c.Private.Dom.composing | None -> false
+
 let d15 () =
-  let root, a =
-    start
-      (App.make
-         ~init:(fun () -> ((false, ""), Cmd.none))
-         ~update:(fun (sw, s) -> function
-           | Swap ->
-               ((not sw, s), Cmd.none)
-           | Typed_m v ->
-               ((sw, String.uppercase_ascii v), Cmd.none)
-           | More ->
-               ((sw, s ^ "!"), Cmd.none) )
-         ~view:(fun (sw, s) ->
-           let rows =
-             [ ( Key.int 1
-               , El.input
-                   ~at:[At.data "testid" "i"; At.value s]
-                   ~ev:[Ev.input (fun v -> Typed_m v)]
-                   () )
-             ; (Key.int 2, button ~id:"sw" Swap "swap")
-             ; (Key.int 3, button ~id:"more" More "more") ]
-           in
-           (* The swap moves only the input: the two buttons keep their
-              order. *)
-           View.keyed El.div (if sw then List.tl rows @ [List.hd rows] else rows) )
-         () )
-  in
+  let root, a = start (move_app ()) in
   let i = q root "i" in
   focus i ;
   let* () = ime "ka" in
-  let composing () =
-    match B.cell i with Some c -> c.Private.Dom.composing | None -> false
-  in
+  let composing () = composing i in
   check "D15 composing before the move" (composing ()) ;
   ignore (Jv.call (q root "sw") "click" [||]) ;
   check "D15 the move ends the composition, and the restore writes the value"
@@ -678,6 +698,44 @@ let d15 () =
     (String.equal (value i) "KA!") ;
   B.stop a ;
   Fut.return ()
+
+(* D41: a composition needs the focus. A synthetic compositionstart on the
+   focused input, an input, then a keyed move. Chrome sends focusout on the
+   move. Firefox and WebKit send no focusout and no compositionend: the render
+   of the move writes the value, because the input has no focus. The second run
+   has the app in a shadow root, whose activeElement is the input. *)
+let d41_in name root =
+  let a = B.start (el root) (move_app ()) in
+  let i = q root "i" in
+  focus i ;
+  dispatch i (js "new CompositionEvent('compositionstart', {bubbles: true})") ;
+  Jv.set i "value" (Jv.of_string "ka") ;
+  dispatch i (js "new InputEvent('input', {bubbles: true, isComposing: true})") ;
+  check
+    (name ^ " no value write while the input has the focus")
+    (composing i && String.equal (value i) "ka") ;
+  ignore (Jv.call (q root "sw") "click" [||]) ;
+  let* () = task () in
+  check
+    (name ^ " the move ends the composition and writes the value")
+    ((not (composing i)) && String.equal (value i) "KA") ;
+  ignore (Jv.call (q root "more") "click" [||]) ;
+  let* () = task () in
+  check
+    (name ^ " a model change after the move writes the value")
+    (String.equal (value i) "KA!") ;
+  B.stop a ;
+  Fut.return ()
+
+let d41 () =
+  let* () = d41_in "D41" (container ()) in
+  let host = container () in
+  let shadow =
+    Jv.call host "attachShadow" [|Jv.obj [|("mode", Jv.of_string "open")|]|]
+  in
+  let root = Jv.call document "createElement" [|Jv.of_string "div"|] in
+  ignore (Jv.call shadow "appendChild" [|root|]) ;
+  d41_in "D41 in a shadow root" root
 
 (* D16: a synthetic keydown with isComposing. *)
 let d16 () =
@@ -1054,6 +1112,82 @@ let d25 () =
     && count ~name:"visibilitychange" document = doc_vis
     && B.live_timers () = 0
     && children root = 0 ) ;
+  Fut.return ()
+
+(* D40: tasks that wait for browser promises. 1,000 Cmd.latest tasks with
+   different keys, then each promise resolves: no key and no child of the root
+   token stays. Then 1,000 starts and stops of an app whose task waits for a
+   promise that never resolves: no timer, no listener and no DOM stays after
+   each stop. *)
+type pmsg = Resolved of int
+
+(* A task that waits for a new promise. [keep] gets its resolve function. *)
+let promise keep =
+  Async.make (fun _ ~ok ~error:_ ->
+      let p =
+        Jv.new'
+          (Jv.get Jv.global "Promise")
+          [|Jv.callback ~arity:2 (fun resolve _ -> keep resolve)|]
+      in
+      ignore
+        (Jv.call p "then" [|Jv.callback ~arity:1 (fun v -> ok (Jv.to_int v))|]) )
+
+let d40 () =
+  let resolves = ref [] in
+  let root, a =
+    start
+      (App.make
+         ~init:(fun () ->
+           ( 0
+           , Cmd.batch
+               (List.init 1000 (fun k ->
+                    Cmd.latest
+                      ~key:("k" ^ string_of_int k)
+                      (Async.map
+                         (fun v -> Resolved v)
+                         (promise (fun r -> resolves := r :: !resolves)) ) ) )
+           ) )
+         ~update:(fun m (Resolved v) -> (m + v, Cmd.none))
+         ~view:(fun m ->
+           El.span ~at:[At.data "testid" "b"] [txt (string_of_int m)] )
+         () )
+  in
+  check "D40 1,000 keys and promises before the results"
+    ((ins a).latest_keys = 1000 && List.length !resolves = 1000) ;
+  List.iter (fun r -> ignore (Jv.apply r [|Jv.of_int 1|])) !resolves ;
+  (* The results run in microtask turns, thus the render waits for the frame.
+     The frame of kilim was asked for first, thus it runs first. *)
+  let* () = task () in
+  let* () = frame () in
+  check "D40 after the results: no key and no child of the root token"
+    ( (ins a).latest_keys = 0 && (ins a).token_children = 0
+    && String.equal (text (q root "b")) "1000" ) ;
+  B.stop a ;
+  let doc_vis = count ~name:"visibilitychange" document in
+  let root = container () in
+  let clean = ref true in
+  for _ = 1 to 1000 do
+    let a =
+      B.start (el root)
+        (App.make
+           ~init:(fun () -> (0, Cmd.task (promise ignore)))
+           ~update:(fun _ v -> (v, Cmd.none))
+           ~view:(fun m -> El.span [txt (string_of_int m)])
+           () )
+    in
+    let started = (ins a).token_children = 1 in
+    B.stop a ;
+    clean :=
+      !clean && started
+      && count root = 0
+      && count ~name:"visibilitychange" document = doc_vis
+      && B.live_timers () = 0
+      && children root = 0
+  done ;
+  check
+    "D40 1,000 starts and stops with a promise that never resolves: each count \
+     0"
+    !clean ;
   Fut.return ()
 
 (* D26: At.value on a progress element: its value property is a number. *)
@@ -1726,7 +1860,10 @@ let tests =
   ; d35
   ; d36
   ; d37
-  ; d38 ]
+  ; d38
+  ; d39
+  ; d40
+  ; d41 ]
 
 let () =
   ignore (Lazy.force spy) ;

@@ -262,6 +262,16 @@ let control ctx d (cell : Dom.cell) (ve : _ View.element) =
   | Some _, _ | _, Some _ ->
       ctx.controlled := (d, cell) :: !(ctx.controlled)
 
+(* The composition flag stops a [value] write only while the element has the
+   focus. A composition cannot go on in an element with no focus. A move or a
+   removal takes the focus away, and Firefox and WebKit then send no
+   compositionend and no focusout. Thus a write site that finds the flag on an
+   element with no focus clears the flag. The focus is read only when the flag
+   is set. *)
+let composing (ops : _ Dom.t) d (cell : Dom.cell) =
+  if cell.composing && not (ops.focused d) then cell.composing <- false ;
+  cell.composing
+
 (* The browser can change [value] and [checked] with no write of the diff: the
    user types, a radio button unchecks the other buttons of its group, a select
    selects an option. Thus the diff compares the view value with the live
@@ -269,7 +279,8 @@ let control ctx d (cell : Dom.cell) (ve : _ View.element) =
    composition, thus no [value] write while the cell is composing. *)
 let set_props (ops : _ Dom.t) (d, (cell : Dom.cell)) =
   ( match cell.value with
-  | Some x when (not cell.composing) && not (String.equal x (ops.get_value d))
+  | Some x
+    when (not (composing ops d cell)) && not (String.equal x (ops.get_value d))
     ->
       ops.set_property d (Value x)
   | Some _ | None ->

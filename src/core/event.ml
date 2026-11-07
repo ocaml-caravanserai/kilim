@@ -92,6 +92,12 @@ let dispatch env rt ev =
   let discrete_turn () =
     Runtime.event rt Runtime.Discrete ~restore:(restore env ev.target) walk
   in
+  (* A task with a discrete turn that only restores the target. *)
+  let restore_task () =
+    env.post_task (fun () ->
+        Runtime.event rt Runtime.Discrete ~restore:(restore env ev.target)
+          ignore )
+  in
   ( match ev.name with
   | ("keydown" | "keyup") when ev.composing ->
       (* The Enter that commits an IME candidate does not submit. *)
@@ -99,8 +105,14 @@ let dispatch env rt ev =
   | "compositionstart" ->
       set_composing env ev.target true
   | "compositionend" ->
+      (* Firefox sends the last input after compositionend, and the live value
+         is then the commit. A render here writes the old view value over the
+         commit. Thus a Macro turn, which does not render, and a task that
+         restores the target. In the order of Firefox, the last input renders
+         first. *)
       set_composing env ev.target false ;
-      discrete_turn ()
+      Runtime.event rt Runtime.Macro walk ;
+      restore_task ()
   | ("focusin" | "focusout") when composing env ev.target ->
       (* Chrome sends no compositionend when it moves or removes the composing
          element, but it sends focusout. A composition starts after a focus,
@@ -117,8 +129,5 @@ let dispatch env rt ev =
   (* The browser undoes a prevented toggle after the dispatch, and a listener
      above the mount element can prevent the default too. A microtask runs
      before the undo, and a new task after it. *)
-  if String.equal ev.name "click" && env.toggles ev.target then
-    env.post_task (fun () ->
-        Runtime.event rt Runtime.Discrete ~restore:(restore env ev.target)
-          ignore ) ;
+  if String.equal ev.name "click" && env.toggles ev.target then restore_task () ;
   !prevented

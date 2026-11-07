@@ -71,20 +71,32 @@ val keyup : t -> ?composing:bool -> By.t -> string -> unit
 (** As {!keydown}, for [keyup]: a [Macro] turn. *)
 
 val focus : t -> By.t -> unit
-(** A [focusin] event: a [Macro] turn. On an element with an IME composition, it
-    ends the composition and gives a discrete turn with the restore. *)
+(** Gives the focus of the document to the target (see {!Fake_dom.focus}), then
+    sends a [focusin] event: a [Macro] turn. On an element with an IME
+    composition, it ends the composition and gives a discrete turn with the
+    restore. It sends no [focusout] to the element that had the focus. *)
 
 val blur : t -> By.t -> unit
-(** A [focusout] event: a [Macro] turn. On an element with an IME composition,
-    it ends the composition and gives a discrete turn with the restore. *)
+(** Takes the focus away from the target if it has the focus, then sends a
+    [focusout] event: a [Macro] turn. On an element with an IME composition, it
+    ends the composition and gives a discrete turn with the restore. *)
 
-val compose : t -> By.t -> string list -> unit
-(** [compose t q texts] is an IME composition in the order of Chrome:
-    [compositionstart], then for each text the live value becomes the start
-    value and the text, and an [input] event with [isComposing] runs (the last
-    text is the commit), then [compositionend]. During the composition, the diff
-    does not write [value]. At [compositionend], the restore writes the view
-    value. *)
+val compose : t -> ?order:[`Chrome | `Firefox] -> By.t -> string list -> unit
+(** [compose t ~order q texts] is an IME composition. It gives the focus to the
+    target with no event, then sends [compositionstart]. For each text, the live
+    value becomes the start value and the text, then an [input] event runs. The
+    last text is the commit. One task for each event, except the commit of
+    [`Firefox]. The two orders:
+    - [`Chrome] (the default): an [input] event with [isComposing] for each
+      text, then [compositionend].
+    - [`Firefox]: an [input] event with [isComposing] for each text before the
+      last. Then in one task: the live value of the commit, [compositionend],
+      then an [input] event with [isComposing] false.
+
+    During the composition, the diff does not write [value] while the target has
+    the focus. [compositionend] runs its handlers in a [Macro] turn, which does
+    not render, and it posts a task that restores the target. In the order of
+    Firefox, the last [input] event renders first. *)
 
 val event : t -> By.t -> string -> unit
 (** [event t q name] sends the event [name] with the payloads of the target and

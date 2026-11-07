@@ -71,8 +71,11 @@ val dispatch : 'node env -> 'node Runtime.t -> 'node event -> bool
       commits an IME candidate does not submit.
     + [compositionstart] sets [composing] in the cell of the target, with no
       turn.
-    + [compositionend] clears [composing], then runs a discrete turn with the
-      restore of the target.
+    + [compositionend] clears [composing], runs the walk in a [Macro] turn,
+      which does not render, then posts a task with a discrete turn that only
+      restores the target. Firefox sends the last [input] after
+      [compositionend], and a render at [compositionend] writes the old view
+      value over the commit.
     + [focusin] or [focusout] on a target with [composing]: clears it, then runs
       the walk in a discrete turn with the restore of the target. Chrome sends
       no [compositionend] when it moves or removes the composing element.

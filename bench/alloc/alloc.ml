@@ -27,6 +27,7 @@ let null : unit Private.Dom.t =
   ; set_property= (fun _ _ -> ())
   ; get_value= (fun _ -> "")
   ; get_checked= (fun _ -> false)
+  ; focused= (fun _ -> false)
   ; insert_before= (fun _ _ _ -> ())
   ; remove= (fun _ _ -> ())
   ; replace= (fun _ _ _ -> ())
