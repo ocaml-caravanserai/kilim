@@ -1,20 +1,25 @@
 // The Chrome runner of the loader tests (docs/design.html, "The loader"). It
 // uses only the built-in modules of node, and test/dom/chrome.mjs.
 //
-//   node run.mjs --kilim PATH --profile dev [--only a,b] [-- chrome flags]
+//   node run.mjs --kilim PATH --profile dev|release [--only a,b] [-- chrome flags]
 //
-// For each scenario, the runner writes a template to a temporary directory,
-// and runs `kilim page` with the base /sN/ (N: the number of the scenario).
-// Thus each scenario also tests the commands. The server answers:
+// For each scenario, the runner writes a template to a temporary directory.
+// In the dev profile, it runs `kilim page` with the base /sN/ (N: the number
+// of the scenario), and `kilim loader` for the loader.js form. In the release
+// profile, it runs `kilim dist` on the release builds into a directory of the
+// scenario. Thus each scenario also tests the commands. The server answers:
 //   /sN/x/NAME      a fixture of the scenario (CSS, page scripts), with an
 //                   optional delay
-//   /sN/loader.js   the output of `kilim loader` (the loader.js form)
-//   /sN/FILE        a file of the build directory (the current directory)
+//   /sN/loader.js   the output of `kilim loader` (dev, the loader.js form)
+//   /sN/FILE        a file of the build directory (the current directory) in
+//                   dev, or of the directory of `kilim dist` in release
 //   /sN/...         else the page (a deep link)
 // The server records each request with its time from the page request. The
 // page can send its head at once and its body later, and its CSP in a header.
 //
-// Each response has "cache-control: no-cache", as a dev server.
+// In dev, each response has "cache-control: no-cache", as a dev server. In
+// release, a file with a content name is immutable, and the rest has
+// "no-cache".
 //
 // Page scripts before the head part: the fixtures of the scenario, then
 // count.js. count.js counts the securitypolicyviolation events, the calls of
@@ -25,9 +30,10 @@
 // A scenario waits until window.kilimLoaded has each app of the scenario
 // (test/loader/app.ml), or 2 s for a scenario with no start. Then it clicks
 // the button of each app and reads its count. "Once": each app starts one
-// time, and each URL gets at most one request (thus the inserted build used
-// the preload). Each scenario expects no uncaught exception, no warning and no
-// console error, except where it says so.
+// time, each URL gets at most one request (thus the inserted build used the
+// preload), and Chrome logs no message about a preload. Each scenario expects
+// no uncaught exception, no warning and no console error, except where it
+// says so.
 //
 // Chrome: see chrome.mjs. With no Chrome, the runner writes "SKIP: no Chrome"
 // and gives exit status 0, but 1 if KILIM_REQUIRE_CHROME is 1 (CI).
@@ -50,8 +56,9 @@ const opt = (name) => {
 const kilim = opt('--kilim');
 const profile = opt('--profile');
 const only = opt('--only')?.split(',');
-if (!kilim || profile !== 'dev') {
-  console.log('usage: node run.mjs --kilim PATH --profile dev [--only a,b] [-- chrome flags]');
+const release = profile === 'release';
+if (!kilim || !(release || profile === 'dev')) {
+  console.log('usage: node run.mjs --kilim PATH --profile dev|release [--only a,b] [-- chrome flags]');
   process.exit(2);
 }
 
@@ -110,9 +117,11 @@ const fixtures = {
 //   end       HTML after the start marker
 //   inject    HTML at the start of the body
 //   nest      the start marker in a div at the end of the body
-//   headDelay the async tag loads loader.js?head, 500 ms late
+//   headDelay the async tag loads the loader with "?head", 500 ms late
 //   bodyDelay the server sends the body this many ms after the head
 //   url       the path of the page after /sN/
+//   release   a scenario of the release profile (the others are of dev)
+//   repeat    a second visit of the page in the same target
 //   expect    the checks, in runScenario
 //
 // In the loader.js form, the async head part can run before or after the
@@ -190,11 +199,31 @@ const scenarios = [
   { name: 'dup', apps: [['a', 'x'], ['a', 'y']], expect: { build: 'wasm' } },
   { name: 'rule', prebuilt: true, expect: { build: 'wasm', path: 'start' } },
   { name: 'no-wasm-real', alone: true, expect: { build: 'js' } },
+  // The release profile. A page with the js_of_ocaml build makes no request
+  // for a Wasm file: thus the loader preloads the main .wasm only for the
+  // wasm_of_ocaml build.
+  { name: 'rel-csp-header', release: true, csp: cspNoWasm, expect: { build: 'js', reports: 1, none: /wasm/ } },
+  { name: 'rel-no-jstag', release: true, pre: ['no-jstag.js'], expect: { build: 'js', none: /wasm/ } },
+  { name: 'rel-no-gc', release: true, pre: ['no-gc.js'], expect: { build: 'js', probes: 1, none: /wasm/ } },
+  { name: 'rel-preload', release: true, after: '<link rel="stylesheet" href="x/slow.css">',
+    expect: { build: 'wasm', height: 300, wasmBefore: 300 } },
+  { name: 'rel-repeat', release: true, form: 'file', repeat: true, expect: { build: 'wasm', probes: 1 } },
+  { name: 'rel-silent', release: true, before: '<link rel="stylesheet" href="x/fast.css">',
+    expect: { build: 'wasm', path: null } },
+  { name: 'rel-two', release: true, apps: [['a', 'a'], ['b', 'b']], expect: { build: 'wasm' } },
+  { name: 'rel-names', release: true, names: true, expect: { build: 'wasm' } },
+  // The head part runs second, after the defer start part: no dev check.
+  { name: 'rel-late', release: true, form: 'file', headDelay: true, before: '<link rel="stylesheet" href="x/fast.css">',
+    expect: { build: 'wasm', path: null } },
+  // Chrome logs a preload that the page does not use about 3 s after the
+  // load: the scenario waits 4 s.
+  { name: 'rel-wait', release: true, expect: { build: 'wasm', wait: 4000 } },
 ];
 
-const chosen = scenarios.filter((sc) => (only ? only.includes(sc.name) : !sc.alone));
-if (only) for (const o of only) if (!scenarios.some((sc) => sc.name === o)) {
-  console.log(`FAIL: no scenario ${o}`);
+const mine = scenarios.filter((sc) => !sc.release === !release);
+const chosen = mine.filter((sc) => (only ? only.includes(sc.name) : !sc.alone));
+if (only) for (const o of only) if (!mine.some((sc) => sc.name === o)) {
+  console.log(`FAIL: no scenario ${o} in the ${profile} profile`);
   process.exit(1);
 }
 
@@ -232,29 +261,38 @@ const template = (sc, prefix) => {
     (sc.end || '') + '</body></html>';
 };
 
-// The page of a scenario: one run of `kilim page` for each app, each on the
-// output of the run before it.
+// The page of a scenario: one run of `kilim page` (dev) or `kilim dist`
+// (release) for each app, each on the output of the run before it. The runs
+// of `kilim dist` write into one directory.
 const makePage = (sc, prefix, dir) => {
   if (sc.prebuilt) return readFileSync(join(builds, 'index.html'), 'utf8');
   let input = join(dir, 'template.html');
   writeFileSync(input, template(sc, prefix));
   (sc.apps || [['a']]).forEach(([app, name], i) => {
     const out = join(dir, `page${i}.html`);
-    const build = sc.build === 'js' ? ['--build', 'js'] : ['--wasm', `app_${app}.bc.wasm.js`];
-    execFileSync(kilim, ['page', '--template', input, '-o', out, '--base', prefix, '--js', `app_${app}.bc.js`,
-      ...build, ...(sc.form === 'file' ? ['--form', 'file'] : []), ...(name ? ['--name', name] : [])]);
+    const at = (f) => (release ? join(builds, f) : f);
+    const build = sc.build === 'js' ? ['--build', 'js'] : ['--wasm', at(`app_${app}.bc.wasm.js`)];
+    const common = ['--template', input, '--base', prefix, '--js', at(`app_${app}.bc.js`), ...build,
+      ...(sc.form === 'file' ? ['--form', 'file'] : []), ...(name ? ['--name', name] : [])];
+    if (release) execFileSync(kilim, ['dist', ...common, '--page', out, '-o', join(dir, 'dist')]);
+    else execFileSync(kilim, ['page', ...common, '-o', out]);
     input = out;
   });
   let page = readFileSync(input, 'utf8');
+  if (sc.form === 'file' && !release) execFileSync(kilim, ['loader', '-o', join(dir, 'loader.js')]);
   if (sc.form === 'file') {
-    execFileSync(kilim, ['loader', '-o', join(dir, 'loader.js')]);
-    const asyncTag = `<script src="${prefix}loader.js" async`;
-    if (sc.headDelay) page = page.replace(asyncTag, `<script src="${prefix}loader.js?head" async`);
-    const deferTag = `<script src="${prefix}loader.js" defer`;
+    const src = page.match(/<script src="([^"]*)" async/)[1];
+    if (sc.headDelay) page = page.replace(`<script src="${src}" async`, `<script src="${src}?head" async`);
+    const deferTag = `<script src="${src}" defer`;
     if (sc.between) page = page.replace(deferTag, sc.between + deferTag);
   }
   return page;
 };
+
+// A content name of `kilim dist` (16 hexadecimal characters before the last
+// extension), or a file of an .assets directory of wasm_of_ocaml (its names
+// already have a hash).
+const contentName = (p) => /\.[0-9a-f]{16}\.js$/.test(p) || /\.assets\//.test(p);
 
 // The server. Each scenario has a state: its page, its directory, its
 // request log and the time of its page request.
@@ -271,8 +309,8 @@ const server = http.createServer(async (req, res) => {
   }
   const rest = m[2];
   const sc = site.sc;
-  const send = (status, type, body) => {
-    res.writeHead(status, { 'content-type': type, 'cache-control': 'no-cache' });
+  const send = (status, type, body, cache = 'no-cache') => {
+    res.writeHead(status, { 'content-type': type, 'cache-control': cache });
     res.end(body);
   };
   const file = (base, name) => {
@@ -285,16 +323,17 @@ const server = http.createServer(async (req, res) => {
     }
   };
   const fixture = rest.startsWith('x/') && fixtures[rest.slice(2)];
-  const loader = rest === 'loader.js' && sc.form === 'file' ? join(site.dir, 'loader.js') : null;
-  const built = !fixture && !loader && rest !== '' && file(builds, rest);
+  const loader = rest === 'loader.js' && sc.form === 'file' && !release ? join(site.dir, 'loader.js') : null;
+  const built = !fixture && !loader && rest !== '' && file(release ? join(site.dir, 'dist') : builds, rest);
   if (!fixture && !loader && !built) {
     if (rest.startsWith('x/')) {
-      site.log.push({ path: rest + url.search, t: Date.now() - site.t0 });
+      site.log.push({ path: rest + url.search, t: Date.now() - site.t0, visit: site.visit });
       send(404, 'text/plain', '');
       return;
     }
     // The page.
     site.t0 = Date.now();
+    site.visit++;
     const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' };
     if (sc.csp && sc.cspIn !== 'meta') headers['content-security-policy'] = sc.csp;
     res.writeHead(200, headers);
@@ -306,16 +345,18 @@ const server = http.createServer(async (req, res) => {
     } else res.end(site.page);
     return;
   }
-  site.log.push({ path: rest + url.search, t: Date.now() - site.t0 });
+  site.log.push({ path: rest + url.search, t: Date.now() - site.t0, visit: site.visit });
+  // The async tag of a scenario with headDelay.
+  if (url.search === '?head') await new Promise((ok) => setTimeout(ok, 500));
   if (fixture) {
     if (fixture.delay) await new Promise((ok) => setTimeout(ok, fixture.delay));
     send(200, fixture.type, fixture.body);
   } else if (loader) {
-    if (url.search === '?head') await new Promise((ok) => setTimeout(ok, 500));
     send(200, 'text/javascript', readFileSync(loader));
   } else {
     const ext = built.slice(built.lastIndexOf('.'));
-    send(200, types[ext] || 'application/octet-stream', readFileSync(built));
+    const cache = release && contentName(rest) ? 'public, max-age=31536000, immutable' : 'no-cache';
+    send(200, types[ext] || 'application/octet-stream', readFileSync(built), cache);
   }
 });
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
@@ -369,11 +410,11 @@ const runScenario = async (sc, n) => {
   const prefix = `/${key}/`;
   const dir = join(work, key);
   mkdirSync(dir, { recursive: true });
-  const site = { sc, dir, log: [], t0: Date.now(), page: makePage(sc, prefix, dir) };
+  const site = { sc, dir, log: [], t0: Date.now(), visit: 0, page: makePage(sc, prefix, dir) };
   sites.set(key, site);
   const ids = [...new Set((sc.apps || [['a']]).map(([a]) => a))];
   const e = sc.expect;
-  const events = { warnings: [], errors: [], exceptions: [] };
+  const events = { warnings: [], errors: [], exceptions: [], preloads: [] };
   const faults = [];
   const fault = (s) => faults.push(s);
   // The start time of each app, for the log: the time bounds have a margin.
@@ -387,9 +428,15 @@ const runScenario = async (sc, n) => {
       } else if (m.method === 'Runtime.exceptionThrown') {
         const d = m.params.exceptionDetails;
         events.exceptions.push(d.exception?.description ?? d.text);
+      } else if (m.method === 'Log.entryAdded' && /preload/i.test(m.params.entry.text)) {
+        // For example a preload that the request does not use, because its
+        // credentials mode is not the same. A file from the cache then
+        // gives no second request.
+        events.preloads.push(m.params.entry.text);
       }
     });
     await page.send('Runtime.enable');
+    await page.send('Log.enable');
     await page.send('Page.enable');
     await page.send('Page.navigate', { url: origin + prefix + (sc.url || '') });
     const read = async (expr, awaitPromise = false) =>
@@ -401,19 +448,22 @@ const runScenario = async (sc, n) => {
       if (Object.keys(st.loaded).length) fault('an app started');
       return;
     }
-    const until = Date.now() + 10000;
-    for (;;) {
-      // A read during the navigation can fail: then the poll goes on.
-      st = JSON.parse((await read(stateJs).catch(() => undefined)) ?? '{"loaded":{}}');
-      if (ids.every((id) => st.loaded[id]?.starts === 1)) break;
-      if (Date.now() > until) {
-        fault(`no start in 10 s: ${JSON.stringify(st.loaded)}`);
-        return;
+    const started = async () => {
+      const until = Date.now() + 10000;
+      for (;;) {
+        // A read during the navigation can fail: then the poll goes on.
+        st = JSON.parse((await read(stateJs).catch(() => undefined)) ?? '{"loaded":{}}');
+        if (ids.every((id) => st.loaded[id]?.starts === 1)) return true;
+        if (Date.now() > until) {
+          fault(`no start in 10 s: ${JSON.stringify(st.loaded)}`);
+          return false;
+        }
+        await sleep(20);
       }
-      await sleep(20);
-    }
+    };
+    if (!(await started())) return;
     // Late requests and late errors.
-    await sleep(100);
+    await sleep(e.wait ?? 100);
     st = JSON.parse(await read(stateJs));
     starts = ids.map((id) => `${id} ${Math.round(st.loaded[id].time)} ms`).join(', ');
     const views = JSON.parse(await read(clickJs(ids), true));
@@ -442,19 +492,45 @@ const runScenario = async (sc, n) => {
       if (await read('window.otherRan')) fault('a script of another origin ran');
       if (otherLog.length) fault(`requests to another origin: ${otherLog.join(' ')}`);
     }
+    if (sc.repeat) {
+      // The second visit: the files with a content name come from the cache.
+      await page.send('Page.navigate', { url: origin + prefix });
+      await sleep(50);
+      if (!(await started())) return;
+      await sleep(100);
+      st = JSON.parse(await read(stateJs));
+      if (st.probes !== 1) fault(`second visit: probes ${st.probes}, expected 1`);
+      if (st.loaded.a.build !== e.build) fault(`second visit: build ${st.loaded.a.build}`);
+      for (const r of site.log)
+        if (r.visit === 2 && /^(loader|app_)|\.wasm$/.test(r.path)) fault(`second visit: a request for ${r.path}`);
+    }
   });
-  // The requests: each URL at most one time, and the expected counts.
+  // The requests of the first visit: each URL at most one time, and the
+  // expected counts.
+  const first = site.log.filter((r) => r.visit === 1);
   const counts = {};
-  for (const r of site.log) counts[r.path] = (counts[r.path] || 0) + 1;
+  for (const r of first) counts[r.path] = (counts[r.path] || 0) + 1;
   if (e.start !== false) {
     for (const [p, c] of Object.entries(counts)) if (c > 1) fault(`${c} requests for ${p}`);
     for (const [p, c] of Object.entries(e.requests || {}))
       if ((counts[p] || 0) !== c) fault(`${counts[p] || 0} requests for ${p}, expected ${c}`);
     if (e.none) for (const p of Object.keys(counts)) if (e.none.test(p)) fault(`a request for ${p}`);
     if (e.buildBefore !== undefined) {
-      const b = site.log.find((r) => /^app_a\.bc\.(wasm\.)?js$/.test(r.path));
+      const b = first.find((r) => /^app_a\.bc\.(wasm\.)?js$/.test(r.path));
       if (!b || !(b.t < e.buildBefore)) fault(`the build request at ${b?.t} ms, expected before ${e.buildBefore} ms`);
     }
+    if (e.wasmBefore !== undefined) {
+      const w = first.find((r) => /\.wasm$/.test(r.path));
+      if (!w || !(w.t < e.wasmBefore)) fault(`the .wasm request at ${w?.t} ms, expected before ${e.wasmBefore} ms`);
+    }
+    // Each build file has a content name, and the bytes of the build.
+    if (sc.names)
+      for (const r of first.filter((x) => /^app_/.test(x.path))) {
+        const orig = r.path.replace(/\.[0-9a-f]{16}\.js$/, '.js');
+        if (!contentName(r.path)) fault(`${r.path}: not a content name`);
+        else if (!readFileSync(join(dir, 'dist', r.path)).equals(readFileSync(join(builds, orig))))
+          fault(`${r.path}: not the bytes of ${orig}`);
+      }
   }
   const warnings = events.warnings.length;
   if (warnings !== (e.warnings ?? 0)) fault(`${warnings} warnings: ${JSON.stringify(events.warnings)}`);
@@ -463,6 +539,7 @@ const runScenario = async (sc, n) => {
   if (thrown.length) fault(`exceptions: ${JSON.stringify(thrown)}`);
   if (e.exceptions !== undefined && events.exceptions.length !== e.exceptions)
     fault(`${events.exceptions.length} exceptions, expected ${e.exceptions}: ${JSON.stringify(events.exceptions)}`);
+  if (events.preloads.length) fault(`preload messages: ${JSON.stringify(events.preloads)}`);
   sites.delete(key);
   return { faults, log: site.log, starts };
 };
