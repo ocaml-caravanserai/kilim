@@ -4,8 +4,8 @@
 //
 //   node run.mjs [--browser NAME] [--no-wasm] prog.bc.js prog.bc.wasm.js ...
 //
-// --browser NAME: chrome (the default). --no-wasm: a browser with no
-// WebAssembly (browser.mjs).
+// --browser NAME: chrome (the default), firefox or webkit. --no-wasm: a
+// browser with no WebAssembly (browser.mjs).
 //
 // For each program, the runner opens a new page, with the query
 // ?browser=NAME: thus a page knows its browser. The server sends the head of the
@@ -23,7 +23,9 @@
 // or 60 s with no DONE is a failure. The console lines "EXPECT EXCEPTION <text>"
 // and "EXPECT END" permit the uncaught exceptions whose first line is <text>
 // between them, and need at least one (a test of an error that no OCaml catch
-// sees; Chrome can report one such exception two times).
+// sees; Chrome and Firefox can report one such exception two times). A line
+// "SKIP <name>: <reason>" is a check that does not run in this browser (no
+// failure): the runner writes the count of these lines at the end.
 //
 // A browser configuration that is not valid is a failure. With no browser,
 // the runner writes the skip line of browser.mjs.
@@ -102,7 +104,8 @@ const runPage = async (prog) => {
     page.on((e) => {
       if (e.kind === 'console') {
         console.log(`${prog}: ${e.text}`);
-        if (e.text.startsWith('EXPECT EXCEPTION ')) {
+        if (e.text.startsWith('SKIP ')) skips++;
+        else if (e.text.startsWith('EXPECT EXCEPTION ')) {
           expected = e.text.slice('EXPECT EXCEPTION '.length);
           seen = 0;
         } else if (e.text === 'EXPECT END') {
@@ -150,6 +153,7 @@ const runPage = async (prog) => {
 };
 
 let failures = 0;
+let skips = 0;
 try {
   for (const prog of programs) {
     const r = await runPage(prog);
@@ -163,5 +167,6 @@ try {
   failures++;
 }
 await cleanup();
-console.log(failures === 0 ? `all ${programs.length} pages pass` : `${failures} pages FAILED`);
+console.log((failures === 0 ? `all ${programs.length} pages pass` : `${failures} pages FAILED`) +
+  ` in ${name}${skips ? `, ${skips} checks skipped` : ''}`);
 process.exit(failures === 0 ? 0 : 1);

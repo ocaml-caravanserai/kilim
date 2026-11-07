@@ -13,6 +13,7 @@
   run.mjs
   ../dom/browser.mjs
   ../dom/chrome.mjs
+  ../dom/playwright.mjs
   ../../examples/serve.mjs
   %{bin:kilim}
   ../../examples/counter/index.html

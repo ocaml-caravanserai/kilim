@@ -13,6 +13,70 @@ let check name ok =
 (* The last line of the page: run.mjs waits for it. *)
 let finish () = log (if !failures = 0 then "DONE ok" else "DONE FAIL")
 
+(* The browser of the page: run.mjs gives it in the query ?browser=NAME. A page
+   with no query (for example a page that you open by hand) is in Chrome. *)
+type browser = Chrome | Firefox | Webkit
+
+let browser =
+  let search = Jv.to_string (Jv.get (Jv.get Jv.global "location") "search") in
+  match search with
+  | "?browser=firefox" ->
+      Firefox
+  | "?browser=webkit" ->
+      Webkit
+  | _ ->
+      Chrome
+
+(* The differences of the browsers that the pages expect: the one table of the
+   DOM tests. The values are facts of Chrome and of the Playwright browsers of
+   flake.lock (Firefox 157, WebKit 27.2). A page uses only these values for a
+   difference of the browsers. *)
+type facts =
+  { ime: bool
+        (** The driver has a composition command (Input.imeSetComposition).
+            Playwright has none for Firefox and WebKit. *)
+  ; insert_composes: bool
+        (** Input.insertText is a real composition, and the last input comes
+            after compositionend (Firefox). In Chrome and WebKit, it is an input
+            with no composition. *)
+  ; trap: string
+        (** The first line of the exception of an illegal cast in the
+            wasm_of_ocaml build. The cast of the pages is a cast of a
+            wasm:js-string function: WebKit gives "Illegal argument" for it, and
+            "ref.cast failed ..." for a ref.cast. *)
+  ; null_traps: bool
+        (** A trap gives an error event with a null error (a trap of a
+            wasm:js-string function in WebKit). kilim then aborts only an open
+            turn, thus two traps in one task give one report. *)
+  ; removal_blurs: int
+        (** The Ev.blur messages when a render removes the focused input.
+            Firefox and WebKit send no blur, no focusout and no change on a
+            removal. *) }
+
+let facts =
+  match browser with
+  | Chrome ->
+      { ime= true
+      ; insert_composes= false
+      ; trap= "RuntimeError: illegal cast"
+      ; null_traps= false
+      ; removal_blurs= 1 }
+  | Firefox ->
+      { ime= false
+      ; insert_composes= true
+      ; trap= "RuntimeError: bad cast"
+      ; null_traps= false
+      ; removal_blurs= 0 }
+  | Webkit ->
+      { ime= false
+      ; insert_composes= false
+      ; trap= "RuntimeError: Illegal argument"
+      ; null_traps= true
+      ; removal_blurs= 0 }
+
+(* A check that does not run in this browser. run.mjs counts these lines. *)
+let skip name reason = log ("SKIP " ^ name ^ ": " ^ reason)
+
 (* The drives that wait for kilimDriven, by id. *)
 let next = ref 0
 
@@ -118,14 +182,19 @@ let container () =
 
 let el n = Brr.El.of_jv n
 
-(* A listener on [target] for [name], with no option. *)
-let listen target name f =
+(* A listener on [target] for [name], in the bubble phase or with [~capture] in
+   the capture phase. *)
+let listen ?(capture = false) target name f =
   let fn = Jv.callback ~arity:1 f in
-  ignore (Jv.call target "addEventListener" [|Jv.of_string name; fn|]) ;
+  ignore
+    (Jv.call target "addEventListener"
+       [|Jv.of_string name; fn; Jv.of_bool capture|] ) ;
   fn
 
-let unlisten target name fn =
-  ignore (Jv.call target "removeEventListener" [|Jv.of_string name; fn|])
+let unlisten ?(capture = false) target name fn =
+  ignore
+    (Jv.call target "removeEventListener"
+       [|Jv.of_string name; fn; Jv.of_bool capture|] )
 
 (* The spy of the listeners: it counts the live listeners by target and name,
    with the passive flag, and the writes of the properties value and checked of

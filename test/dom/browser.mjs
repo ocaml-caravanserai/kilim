@@ -1,14 +1,18 @@
 // The browser interface of the runners of test/dom, test/loader and
-// test/examples. The runners use only this interface. chrome.mjs is the back
-// end of Chrome, over the DevTools pipe. The import has no side effect.
+// test/examples. The runners use only this interface. It has two back ends:
+// chrome.mjs (Chrome, over the DevTools pipe) and playwright.mjs (Firefox and
+// WebKit). The import has no side effect.
 //
-//   pick(name)                 the back end of the browser NAME (chrome), or
-//                              null if the browser is not on this machine. A
-//                              configuration that is not valid (for example a
-//                              KILIM_CHROME that is not an executable) throws.
+//   pick(name)                 the back end of the browser NAME (chrome,
+//                              firefox or webkit), or null if the browser is
+//                              not on this machine. A configuration that is
+//                              not valid (for example a KILIM_CHROME that is
+//                              not an executable) throws.
 //   backend.launch(options)    starts the browser, a promise of a browser.
 //                              options.noWasm: a browser with no WebAssembly
-//                              (Chrome: --js-flags=--jitless).
+//                              (Chrome: --js-flags=--jitless, Firefox: a
+//                              preference, WebKit: simulated, see
+//                              playwright.mjs).
 //   browser.withPage(ms, body) runs body(page) in a new page, with one time
 //                              limit for the whole run. At the end, the page
 //                              closes.
@@ -38,22 +42,28 @@
 // condition.
 
 import * as chrome from './chrome.mjs';
+import * as playwright from './playwright.mjs';
 
-export const names = ['chrome'];
+export const names = ['chrome', 'firefox', 'webkit'];
 
 export const pick = async (name) => {
   if (name === 'chrome') {
     const exe = chrome.findChrome();
     return exe && { name, launch: (options = {}) => chrome.start(exe, options) };
   }
+  if (names.includes(name)) {
+    const pw = await playwright.load();
+    return pw && { name, launch: (options = {}) => playwright.start(pw, name, options) };
+  }
   throw new Error(`unknown browser ${name}: give one of ${names.join(', ')}`);
 };
 
-// "SKIP: no Chrome" and exit status 0, but 1 if KILIM_REQUIRE_CHROME is 1
-// (CI).
+// "SKIP: no Chrome" or "SKIP: no Playwright", and exit status 0, but 1 if
+// KILIM_REQUIRE_CHROME or KILIM_REQUIRE_PLAYWRIGHT is 1 (CI).
 export const skip = (name) => {
-  console.log('SKIP: no Chrome');
-  process.exit(process.env.KILIM_REQUIRE_CHROME === '1' ? 1 : 0);
+  const [what, variable] = name === 'chrome' ? ['Chrome', 'KILIM_REQUIRE_CHROME'] : ['Playwright', 'KILIM_REQUIRE_PLAYWRIGHT'];
+  console.log(`SKIP: no ${what}`);
+  process.exit(process.env[variable] === '1' ? 1 : 0);
 };
 
 // The back end of the browser NAME. A configuration that is not valid writes

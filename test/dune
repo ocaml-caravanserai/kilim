@@ -1,0 +1,8 @@
+; In the dev shell `browsers` of flake.nix, `dune test` also runs the rules of
+; Firefox and WebKit of each directory (the alias browsers). In the default
+; shell, these rules write "SKIP: no Playwright".
+
+(alias
+ (name runtest)
+ (deps
+  (alias_rec browsers)))
