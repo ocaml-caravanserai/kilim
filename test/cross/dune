@@ -1,8 +1,8 @@
 ; The big tests in the three builds: native code, js_of_ocaml and
-; wasm_of_ocaml (on node). They are not in the mutation suite, because each
-; mutant would run them.
+; wasm_of_ocaml (on node). The keyed diffs use the fake DOM of kilim.testing.
+; They are not in the mutation suite, because each mutant would run them.
 
 (test
  (name test_cross)
  (modes exe js wasm)
- (libraries kilim))
+ (libraries kilim kilim.testing))

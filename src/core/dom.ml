@@ -1,0 +1,70 @@
+type ns = Html | Svg
+
+type prop = Value of string | Checked of bool
+
+type _ payload =
+  | Unit : unit payload
+  | String : string payload
+  | Key : string payload
+  | Bool : bool payload
+
+type 'msg decode = Decode : 'a payload * ('a -> 'msg) -> 'msg decode
+
+type 'msg event =
+  { event: string
+  ; bubbles: bool
+  ; prevent_default: bool
+  ; stop: bool
+  ; decode: 'msg decode }
+
+type handler =
+  | Handler :
+      {payload: 'a payload; prevent_default: bool; stop: bool; fire: 'a -> unit}
+      -> handler
+
+type events = Events : 'msg event list * ('msg -> unit) -> events
+
+type cell =
+  { mutable events: events
+  ; mutable value: string option
+  ; mutable checked: bool option }
+
+let bind dispatch (h : _ event) =
+  match h.decode with
+  | Decode (payload, f) ->
+      Handler
+        { payload
+        ; prevent_default= h.prevent_default
+        ; stop= h.stop
+        ; fire= (fun x -> dispatch (f x)) }
+
+let handler cell name =
+  match cell.events with
+  | Events (evs, dispatch) ->
+      List.find_map
+        (fun (h : _ event) ->
+          if String.equal h.event name then Some (bind dispatch h) else None )
+        evs
+
+let handlers cell =
+  match cell.events with
+  | Events (evs, dispatch) ->
+      List.map (fun (h : _ event) -> (h.event, bind dispatch h)) evs
+
+type 'node t =
+  { create_element: ns -> string -> 'node
+  ; create_text: string -> 'node
+  ; set_text: 'node -> string -> unit
+  ; set_attribute: 'node -> string -> string -> unit
+  ; remove_attribute: 'node -> string -> unit
+  ; set_property: 'node -> prop -> unit
+  ; get_value: 'node -> string
+  ; get_checked: 'node -> bool
+  ; insert_before: 'node -> 'node -> 'node option -> unit
+  ; remove: 'node -> 'node -> unit
+  ; replace: 'node -> 'node -> 'node -> unit
+  ; clear: 'node -> unit
+  ; set_inner_html: 'node -> Unsafe_html.t -> unit
+  ; attach: 'node -> cell -> unit
+  ; listen: 'node -> string -> passive:bool -> unit
+  ; unlisten: 'node -> string -> unit }
