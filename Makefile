@@ -3,12 +3,14 @@
 #   make build          Build all.
 #   make fmt            Format the code.
 #   make test           Run the tests: native code, js_of_ocaml and
-#                       wasm_of_ocaml (on node, and in Chrome for test/dom).
+#                       wasm_of_ocaml (on node, and in Chrome for test/dom,
+#                       test/loader and test/examples).
 #   make size           Build the counter of bench/size in the release
 #                       profile, and compare its gzip size with
 #                       bench/size/budget (docs/budgets.md).
-#   make test-release   Run the loader tests of the release files in Chrome
-#                       (test/loader: kilim dist on the release builds).
+#   make test-release   Run the tests of the release files in Chrome:
+#                       kilim dist on the release builds of the loader tests
+#                       (test/loader) and of the examples (test/examples).
 #   make mutate-loader  Test the hand mutants of the loader text
 #                       (test/loader/mutants.txt) in Chrome, in the dev and
 #                       the release profile.
@@ -71,7 +73,7 @@ size:
 	$(DUNE) build --force @bench/size/size --profile release
 
 test-release:
-	$(DUNE) build --force @test/loader/runtest --profile release
+	$(DUNE) build --force @test/loader/runtest @test/examples/runtest --profile release
 
 mutate-loader:
 	$(DUNE) build --force @test/loader/mutants

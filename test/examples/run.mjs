@@ -2,7 +2,7 @@
 // uses only the built-in modules of node, test/dom/chrome.mjs and
 // examples/serve.mjs.
 //
-//   node run.mjs --kilim PATH --profile dev DIR...
+//   node run.mjs --kilim PATH --profile dev|release DIR...
 //
 // DIR is the build directory of an example. Its name selects the script of
 // the example. For each example, the runner does two runs: a default Chrome
@@ -10,8 +10,11 @@
 // WebAssembly: the js_of_ocaml build). Each run has a new target and a time
 // limit of 30 s.
 //
-// examples/serve.mjs serves DIR at /, with "no-cache". The page is the
-// index.html of the rule of docs/loader.md.
+// dev: examples/serve.mjs serves DIR at /, with "no-cache". The page is the
+// index.html of the rule of docs/loader.md. release: the runner runs the
+// command of docs/loader.md, `kilim dist --base /static/`, into a temporary
+// directory, and serves it at /static/ with the CSP of docs/loader.md
+// (Trusted Types included).
 //
 // The input is trusted input of DevTools: a click is a mouse press and a
 // release at the center of the element, text is Input.insertText after a
@@ -19,16 +22,19 @@
 // up. After each action, the runner polls the DOM until the expected state
 // comes, with a time limit.
 //
-// After the script, the runner waits 200 ms for late errors and warnings. A
-// self-test run of the first example makes the page write a warning 50 ms
-// after the script: the run must see it.
+// After the script, the runner waits 200 ms for late errors and warnings.
+// Chrome logs a preload that the page does not use about 3 s after the load,
+// thus a release run lasts at least 4 s. In dev, a self-test run of the first
+// example makes the page write a warning 50 ms after the script: the run must
+// see it.
 //
 // The checks of each run, after the wait:
 //   - The build: the default Chrome requests a .wasm file and not the
 //     js_of_ocaml build. The Chrome with no JIT requests the js_of_ocaml
 //     build, and not the launcher.
 //   - Each URL gets at most one request (the build uses the preload).
-//   - data-kilim-started is "start" (the inline form).
+//   - dev: data-kilim-started is "start" (the inline form). release: the
+//     attribute is not set.
 //   - No uncaught exception, no console error, no console warning, no
 //     securitypolicyviolation event, no Chrome log message about a preload,
 //     and no Chrome log error or warning other than a 404 for /favicon.ico.
@@ -36,7 +42,10 @@
 // Chrome: see chrome.mjs. With no Chrome, the runner writes "SKIP: no Chrome"
 // and gives exit status 0, but 1 if KILIM_REQUIRE_CHROME is 1 (CI).
 
-import { basename, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join, resolve } from 'node:path';
 import { findChrome, launch, until, watch, withPage } from '../dom/chrome.mjs';
 import { serve } from '../../examples/serve.mjs';
 
@@ -47,9 +56,10 @@ const opt = (name) => {
 };
 const kilim = opt('--kilim');
 const profile = opt('--profile');
+const release = profile === 'release';
 const dirs = argv.filter((a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')).map((d) => resolve(d));
-if (!kilim || profile !== 'dev' || dirs.length === 0) {
-  console.log('usage: node run.mjs --kilim PATH --profile dev DIR...');
+if (!kilim || !(release || profile === 'dev') || dirs.length === 0) {
+  console.log('usage: node run.mjs --kilim PATH --profile dev|release DIR...');
   process.exit(2);
 }
 
@@ -57,6 +67,7 @@ const runMs = 30000;
 const startMs = 10000;
 const stepMs = 5000;
 const afterMs = 200;
+const releaseMinMs = 4000;
 
 // The queries: JS expressions that give one element, or a false value.
 const q = {
@@ -144,6 +155,11 @@ if (!chrome) {
   process.exit(process.env.KILIM_REQUIRE_CHROME === '1' ? 1 : 0);
 }
 
+const csp = release
+  ? `script-src 'self' 'wasm-unsafe-eval' ${execFileSync(kilim, ['csp']).toString().trim()}; ` +
+    "require-trusted-types-for 'script'; trusted-types kilim-loader"
+  : null;
+
 // Runs before each script of the page: the CSP reports, and the length of
 // the longest value of an input event (a capture listener runs before the
 // handlers of the app, and before the restore).
@@ -155,6 +171,17 @@ document.addEventListener('input', (e) => {
   window.kilimTest.longest = Math.max(window.kilimTest.longest, e.target.value.length);
 }, true);`;
 
+const work = mkdtempSync(join(tmpdir(), 'kilim-examples-'));
+
+// The release files of an example: `kilim dist` of docs/loader.md.
+const dist = (dir) => {
+  mkdirSync(join(work, basename(dir)), { recursive: true });
+  const out = join(work, basename(dir), 'dist');
+  execFileSync(kilim, ['dist', '--template', join(dir, 'page.html'), '--base', '/static/',
+    '--js', join(dir, 'main.bc.js'), '--wasm', join(dir, 'main.bc.wasm.js'), '-o', out]);
+  return out;
+};
+
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
 // selfTest: after the script, the page writes a console warning 50 ms late.
@@ -165,7 +192,9 @@ const runExample = async (browser, dir, jitless, selfTest = false) => {
   const fault = (s) => faults.push(s);
   const log = [];
   const site = await serve({
-    dir,
+    dir: release ? dist(dir) : dir,
+    base: release ? '/static/' : null,
+    csp,
     port: 0,
     onRequest: (path, status) => log.push({ path, status }),
   });
@@ -174,6 +203,7 @@ const runExample = async (browser, dir, jitless, selfTest = false) => {
     await withPage(browser, runMs, async (page) => {
       events = await watch(page);
       await page.send('Page.addScriptToEvaluateOnNewDocument', { source: probe });
+      const t0 = Date.now();
       await page.send('Page.navigate', { url: `${site.origin}/` });
       const read = async (expr) => {
         const r = await page.send('Runtime.evaluate', { expression: expr, returnByValue: true });
@@ -215,9 +245,9 @@ const runExample = async (browser, dir, jitless, selfTest = false) => {
       await scripts[name](ui);
       if (selfTest) await read("setTimeout(() => console.warn('kilim self-test'), 50), 0");
       // Late errors and warnings.
-      await sleep(afterMs);
+      await sleep(Math.max(afterMs, release ? releaseMinMs - (Date.now() - t0) : 0));
       const started = await read("document.documentElement.getAttribute('data-kilim-started')");
-      if (started !== 'start') fault(`data-kilim-started: ${started}`);
+      if (started !== (release ? null : 'start')) fault(`data-kilim-started: ${started}`);
       const reports = await read('window.kilimTest.reports');
       if (reports.length) fault(`CSP reports: ${JSON.stringify(reports)}`);
     });
@@ -257,33 +287,37 @@ const runExample = async (browser, dir, jitless, selfTest = false) => {
 
 let failures = 0;
 let runs = 0;
-for (const jitless of [false, true]) {
-  const browser = launch(chrome, jitless ? ['--js-flags=--jitless'] : []);
-  try {
-    for (const dir of dirs) {
-      const label = `${basename(dir)} (${profile}, ${jitless ? 'no JIT: js_of_ocaml' : 'wasm_of_ocaml'})`;
-      runs++;
-      const r = await runExample(browser, dir, jitless);
-      if (r.faults.length) {
-        failures++;
-        console.log(`FAIL ${label}: ${r.faults.join('; ')}`);
-        console.log(`  requests: ${r.log.map((x) => `${x.path} ${x.status}`).join(', ')}`);
-      } else console.log(`ok   ${label}`);
-    }
-    // The self-test of the runner: a warning after the script is a fault.
-    if (!jitless) {
-      runs++;
-      const r = await runExample(browser, dirs[0], false, true);
-      const expected = 'console warnings: ["kilim self-test"]';
-      if (r.faults.length === 1 && r.faults[0] === expected) console.log('ok   self-test: a late warning is a fault');
-      else {
-        failures++;
-        console.log(`FAIL self-test: faults ${JSON.stringify(r.faults)}, expected only ${expected}`);
+try {
+  for (const jitless of [false, true]) {
+    const browser = launch(chrome, jitless ? ['--js-flags=--jitless'] : []);
+    try {
+      for (const dir of dirs) {
+        const label = `${basename(dir)} (${profile}, ${jitless ? 'no JIT: js_of_ocaml' : 'wasm_of_ocaml'})`;
+        runs++;
+        const r = await runExample(browser, dir, jitless);
+        if (r.faults.length) {
+          failures++;
+          console.log(`FAIL ${label}: ${r.faults.join('; ')}`);
+          console.log(`  requests: ${r.log.map((x) => `${x.path} ${x.status}`).join(', ')}`);
+        } else console.log(`ok   ${label}`);
       }
+      // The self-test of the runner: a warning after the script is a fault.
+      if (!jitless && !release) {
+        runs++;
+        const r = await runExample(browser, dirs[0], false, true);
+        const expected = 'console warnings: ["kilim self-test"]';
+        if (r.faults.length === 1 && r.faults[0] === expected) console.log('ok   self-test: a late warning is a fault');
+        else {
+          failures++;
+          console.log(`FAIL self-test: faults ${JSON.stringify(r.faults)}, expected only ${expected}`);
+        }
+      }
+    } finally {
+      browser.close();
     }
-  } finally {
-    browser.close();
   }
+} finally {
+  rmSync(work, { recursive: true, force: true });
 }
 console.log(failures === 0 ? `all ${runs} runs pass` : `${failures} runs FAILED`);
 process.exit(failures === 0 ? 0 : 1);

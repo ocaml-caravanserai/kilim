@@ -38,9 +38,9 @@ jobs:
       # bench/size/budget, and the check of the generated code.
       - name: Size budget
         run: nix develop -c make size
-      # The loader tests of the release files: kilim dist on the release
-      # builds, in Chrome.
-      - name: Release loader tests
+      # The tests of the release files: kilim dist on the release builds of
+      # the loader tests and of the examples, in Chrome.
+      - name: Release tests
         env:
           KILIM_REQUIRE_CHROME: "1"
         run: nix develop -c make test-release
