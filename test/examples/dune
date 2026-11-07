@@ -11,6 +11,7 @@
  (alias runtest)
  (deps
   run.mjs
+  ../dom/browser.mjs
   ../dom/chrome.mjs
   ../../examples/serve.mjs
   %{bin:kilim}

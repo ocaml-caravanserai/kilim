@@ -46,13 +46,13 @@ jobs:
           KILIM_REQUIRE_CHROME: "1"
         run: nix develop -c make test-release
       # The hand mutants of the loader text, on a pull request that changes
-      # the loader, its tests or the Chrome driver. The checkout of a pull
+      # the loader, its tests or the Chrome driver (browser.mjs, chrome.mjs). The checkout of a pull
       # request is a merge commit, and its first parent HEAD^1 is the base.
       - name: Changes of the loader
         id: loader
         if: github.event_name == 'pull_request'
         run: |
-          if git diff --quiet HEAD^1 HEAD -- src/loader test/loader test/dom/chrome.mjs; then
+          if git diff --quiet HEAD^1 HEAD -- src/loader test/loader test/dom/browser.mjs test/dom/chrome.mjs; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"

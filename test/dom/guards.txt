@@ -98,8 +98,8 @@ mount.ml    traps      the unhandledrejection listener  removed: D34 (a start in
                                                         promise reaction, wasm
                                                         build).
 mount.ml    traps      the wasm_of_ocaml build, and     the two removed: the run with
-                       typeof WebAssembly is "object"   --js-flags=--jitless (the js
-                                                        pages). One removed: no test,
+                       typeof WebAssembly is "object"   --no-wasm (the js pages).
+                                                        One removed: no test,
                                                         the other check covers it
                                                         (the js build has no traps,
                                                         and the wasm build has
