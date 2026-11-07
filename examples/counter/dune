@@ -1,0 +1,37 @@
+; The counter example. The app is a library with only kilim, thus the native
+; test links it with kilim.testing. main.ml starts it in the browser. The rule
+; of index.html is a copy of the rule in docs/loader.md. test/readme makes sure
+; that its tokens stay the same.
+
+(library
+ (name counter)
+ (modules counter)
+ (libraries kilim))
+
+(executable
+ (name main)
+ (modules main)
+ (modes js wasm)
+ (libraries counter kilim.browser))
+
+(rule
+ (targets index.html)
+ (deps
+  page.html
+  main.bc.js
+  main.bc.wasm.js
+  (glob_files main.bc.wasm.assets/*))
+ (action
+  (run
+   kilim
+   page
+   --template
+   page.html
+   --base
+   /
+   --js
+   main.bc.js
+   --wasm
+   main.bc.wasm.js
+   -o
+   index.html)))
