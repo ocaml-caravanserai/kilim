@@ -1,0 +1,27 @@
+; The size budget (docs/budgets.md): the gzip size of a counter in the release
+; profile, in the two builds, and the check of the generated code. `make size`
+; runs it.
+
+(executable
+ (name counter)
+ (modes js wasm)
+ (libraries kilim kilim.browser))
+
+(rule
+ (alias size)
+ (enabled_if
+  (= %{profile} release))
+ (deps
+  size.mjs
+  budget
+  counter.bc.js
+  counter.bc.wasm.js
+  (glob_files counter.bc.wasm.assets/*.wasm))
+ (action
+  (run
+   node
+   size.mjs
+   budget
+   counter.bc.js
+   counter.bc.wasm.js
+   counter.bc.wasm.assets)))

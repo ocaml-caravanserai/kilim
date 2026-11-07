@@ -32,6 +32,10 @@ jobs:
         env:
           KILIM_REQUIRE_CHROME: "1"
         run: nix develop -c dune runtest --force
+      # The gzip size of the counter in the release profile, against
+      # bench/size/budget, and the check of the generated code.
+      - name: Size budget
+        run: nix develop -c make size
 
   # The mutation gate of a pull request. make mutate tests the mutants that
   # the suites (test/core, test/view and test/turn) reach on the lines that
