@@ -15,7 +15,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findChrome } from '../dom/chrome.mjs';
+import { open } from '../dom/browser.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name) => {
@@ -29,17 +29,9 @@ if (!kilim || !['dev', 'release'].includes(profile)) {
   process.exit(2);
 }
 
-let chrome;
-try {
-  chrome = findChrome();
-} catch (e) {
-  console.log(`FAIL: ${e.message}`);
-  process.exit(1);
-}
-if (!chrome) {
-  console.log('SKIP: no Chrome');
-  process.exit(process.env.KILIM_REQUIRE_CHROME === '1' ? 1 : 0);
-}
+// The mutants run in Chrome only: the loader text has no branch for a
+// browser.
+await open('chrome');
 
 const here = dirname(fileURLToPath(import.meta.url));
 const work = mkdtempSync(join(tmpdir(), 'kilim-mutants-'));

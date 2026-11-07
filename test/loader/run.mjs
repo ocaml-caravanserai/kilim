@@ -1,8 +1,12 @@
-// The Chrome runner of the loader tests (docs/design.html, "The loader"). It
-// uses only the built-in modules of node, and test/dom/chrome.mjs.
+// The runner of the loader tests (docs/design.html, "The loader"). It uses
+// only the built-in modules of node, and the browser interface
+// test/dom/browser.mjs.
 //
-//   node run.mjs --kilim PATH --profile dev|release [--only a,b]
-//                [--mutant FILE] [-- chrome flags]
+//   node run.mjs --kilim PATH --profile dev|release [--browser NAME]
+//                [--no-wasm] [--only a,b] [--mutant FILE] [-- chrome flags]
+//
+// --browser NAME: chrome (the default). --no-wasm: a browser with no
+// WebAssembly (browser.mjs). The flags after -- go to Chrome.
 //
 // --mutant FILE: the text of FILE replaces the loader text in each page and
 // in loader.js, and the CSP has the hash of that text (node:crypto). Thus
@@ -40,8 +44,8 @@
 // no uncaught exception, no warning and no console error, except where it
 // says so.
 //
-// Chrome: see chrome.mjs. With no Chrome, the runner writes "SKIP: no Chrome"
-// and gives exit status 0, but 1 if KILIM_REQUIRE_CHROME is 1 (CI).
+// A browser configuration that is not valid is a failure. With no browser,
+// the runner writes the skip line of browser.mjs.
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -49,7 +53,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, wr
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
 import http from 'node:http';
-import { findChrome, launch, until, watch, withPage } from '../dom/chrome.mjs';
+import { open, until, watch } from '../dom/browser.mjs';
 
 const argv = process.argv.slice(2);
 const dash = argv.indexOf('--');
@@ -62,9 +66,12 @@ const opt = (name) => {
 const kilim = opt('--kilim');
 const profile = opt('--profile');
 const only = opt('--only')?.split(',');
+const name = opt('--browser') ?? 'chrome';
+const noWasm = own.includes('--no-wasm');
 const release = profile === 'release';
-if (!kilim || !(release || profile === 'dev')) {
-  console.log('usage: node run.mjs --kilim PATH --profile dev|release [--only a,b] [--mutant FILE] [-- chrome flags]');
+if (!kilim || !(release || profile === 'dev') || (flags.length && name !== 'chrome')) {
+  console.log('usage: node run.mjs --kilim PATH --profile dev|release [--browser NAME] [--no-wasm] [--only a,b] ' +
+    '[--mutant FILE] [-- chrome flags]');
   process.exit(2);
 }
 
@@ -245,19 +252,7 @@ const hash = mutant
   : execFileSync(kilim, ['csp']).toString().trim();
 const withText = (page) => page.split(realText).join(loaderText);
 
-let chrome;
-try {
-  chrome = findChrome();
-} catch (e) {
-  rmSync(work, { recursive: true, force: true });
-  console.log(`FAIL: ${e.message}`);
-  process.exit(1);
-}
-if (!chrome) {
-  rmSync(work, { recursive: true, force: true });
-  console.log('SKIP: no Chrome');
-  process.exit(process.env.KILIM_REQUIRE_CHROME === '1' ? 1 : 0);
-}
+const backend = await open(name, () => rmSync(work, { recursive: true, force: true }));
 
 const builds = process.cwd();
 
@@ -397,7 +392,7 @@ const other = http.createServer((req, res) => {
 await new Promise((ok) => other.listen(0, '127.0.0.1', ok));
 const otherOrigin = `http://127.0.0.1:${other.address().port}`;
 
-const browser = launch(chrome, flags);
+const browser = await backend.launch({ noWasm, flags });
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
 // The state of the page, as JSON.
@@ -444,11 +439,10 @@ const runScenario = async (sc, n) => {
   const fault = (s) => faults.push(s);
   // The start time of each app, for the log: the time bounds have a margin.
   let starts = '';
-  await withPage(browser, 30000, async (page) => {
-    events = await watch(page);
-    await page.send('Page.navigate', { url: origin + prefix + (sc.url || '') });
-    const read = async (expr, awaitPromise = false) =>
-      (await page.send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise })).result.value;
+  await browser.withPage(30000, async (page) => {
+    events = watch(page);
+    await page.goto(origin + prefix + (sc.url || ''));
+    const read = (expr) => page.evaluate(expr);
     let st;
     if (e.start === false) {
       await sleep(2000);
@@ -470,7 +464,7 @@ const runScenario = async (sc, n) => {
     await sleep(e.wait ?? 100);
     st = JSON.parse(await read(stateJs));
     starts = ids.map((id) => `${id} ${Math.round(st.loaded[id].time)} ms`).join(', ');
-    const views = JSON.parse(await read(clickJs(ids), true));
+    const views = JSON.parse(await read(clickJs(ids)));
     ids.forEach((id, i) => {
       const r = st.loaded[id];
       const v = views[i];
@@ -498,7 +492,7 @@ const runScenario = async (sc, n) => {
     }
     if (sc.repeat) {
       // The second visit: the files with a content name come from the cache.
-      await page.send('Page.navigate', { url: origin + prefix });
+      await page.goto(origin + prefix);
       await sleep(50);
       if (!(await started())) return;
       await sleep(100);
@@ -569,7 +563,7 @@ try {
     } else console.log(`ok   ${sc.name}${r.starts ? ` (start: ${r.starts})` : ''}`);
   }
 } finally {
-  browser.close();
+  await browser.close();
   server.close();
   other.close();
   server.closeAllConnections();

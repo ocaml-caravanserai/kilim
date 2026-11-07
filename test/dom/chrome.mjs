@@ -1,9 +1,7 @@
-// The Chrome part of the runners of test/dom, test/loader and test/examples:
-// find Chrome, start it with a minimal environment, and talk to it over the
-// DevTools pipe (no port, no WebSocket). It also collects the events of a
-// target and polls a condition. The import has no side effect: the caller
-// decides what a missing Chrome gives (the skip rules of
-// KILIM_REQUIRE_CHROME).
+// The Chrome back end of the browser interface (browser.mjs): find Chrome,
+// start it with a minimal environment, and talk to it over the DevTools pipe
+// (no port, no WebSocket). The import has no side effect: the caller decides
+// what a missing Chrome gives (the skip rules of browser.mjs).
 
 import { spawn } from 'node:child_process';
 import { accessSync, constants, mkdtempSync, rmSync } from 'node:fs';
@@ -44,7 +42,7 @@ export const findChrome = () => {
 //                                     with the end of the stderr of Chrome
 //   gone()                            that error, or null
 //   close()                           stops Chrome and removes its directory
-export const launch = (chrome, flags = []) => {
+const launch = (chrome, flags = []) => {
   const home = mkdtempSync(join(tmpdir(), 'kilim-chrome-'));
   const env = { HOME: home, TMPDIR: tmpdir(), PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' };
   const proc = spawn(
@@ -118,7 +116,7 @@ export const launch = (chrome, flags = []) => {
 // page.on(f) gives each event of the target to f. The result is the result of
 // body. It rejects at the time limit, when Chrome exits, or when body rejects.
 // At the end, the target closes.
-export const withPage = async (browser, limitMs, body) => {
+const withPage = async (browser, limitMs, body) => {
   let sessionId;
   let targetId;
   let timer;
@@ -150,43 +148,56 @@ export const withPage = async (browser, limitMs, body) => {
 };
 
 // The text of a console argument of the protocol.
-export const text = (a) => (a.value !== undefined ? String(a.value) : a.description ?? a.type);
+const text = (a) => (a.value !== undefined ? String(a.value) : a.description ?? a.type);
 
-// Enables the Runtime, Log and Page domains of a target of withPage, and
-// collects its events. The result has these lists, which grow while the
-// target lives:
-//   warnings, errors   the text of each console.warn and console.error call
-//   exceptions         each uncaught exception
-//   logs               each Chrome log entry: { level, text, url }
-export const watch = async (page) => {
-  const events = { warnings: [], errors: [], exceptions: [], logs: [] };
-  page.on((m) => {
-    if (m.method === 'Runtime.consoleAPICalled') {
-      const line = m.params.args.map(text).join(' ');
-      if (m.params.type === 'warning') events.warnings.push(line);
-      else if (m.params.type === 'error') events.errors.push(line);
-    } else if (m.method === 'Runtime.exceptionThrown') {
-      const d = m.params.exceptionDetails;
-      events.exceptions.push(d.exception?.description ?? d.text);
-    } else if (m.method === 'Log.entryAdded') {
-      const e = m.params.entry;
-      events.logs.push({ level: e.level, text: e.text, url: e.url });
-    }
+// The page of browser.mjs on a target of withPage. It enables the Runtime,
+// Log and Page domains of the target.
+const adapt = async (raw) => {
+  const handlers = [];
+  const bindings = new Map();
+  const emit = (e) => {
+    for (const h of handlers) h(e);
+  };
+  raw.on((m) => {
+    const p = m.params;
+    if (m.method === 'Runtime.consoleAPICalled') emit({ kind: 'console', type: p.type, text: p.args.map(text).join(' ') });
+    else if (m.method === 'Runtime.exceptionThrown') {
+      const d = p.exceptionDetails;
+      emit({ kind: 'exception', text: d.exception?.description ?? d.text });
+    } else if (m.method === 'Log.entryAdded') emit({ kind: 'log', level: p.entry.level, text: p.entry.text, url: p.entry.url });
+    else if (m.method === 'Runtime.bindingCalled' && bindings.has(p.name)) bindings.get(p.name)(p.payload);
   });
-  await page.send('Runtime.enable');
-  await page.send('Log.enable');
-  await page.send('Page.enable');
-  return events;
+  await raw.send('Runtime.enable');
+  await raw.send('Log.enable');
+  await raw.send('Page.enable');
+  return {
+    goto: (url) => raw.send('Page.navigate', { url }),
+    evaluate: async (expression) => {
+      const r = await raw.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+      if (r.exceptionDetails) {
+        const d = r.exceptionDetails;
+        throw new Error(d.exception?.description ?? d.text);
+      }
+      return r.result.value;
+    },
+    input: (method, params) => raw.send(method, params),
+    bind: (name, f) => {
+      bindings.set(name, f);
+      return raw.send('Runtime.addBinding', { name });
+    },
+    initScript: (source) => raw.send('Page.addScriptToEvaluateOnNewDocument', { source }),
+    on: (f) => handlers.push(f),
+  };
 };
 
-// Calls test every 20 ms until it gives a true value. The result is true, or
-// false after limitMs. A test that throws or rejects gives false for that
-// call: for example, a read of the page during a navigation.
-export const until = async (test, limitMs) => {
-  const end = Date.now() + limitMs;
-  for (;;) {
-    if (await Promise.resolve().then(test).catch(() => false)) return true;
-    if (Date.now() > end) return false;
-    await new Promise((ok) => setTimeout(ok, 20));
-  }
+// The browser of browser.mjs: Chrome at the path exe. options.noWasm gives
+// --js-flags=--jitless: with no JIT, Chrome has no WebAssembly (as Chrome with
+// "JavaScript optimization" off). options.flags are more flags.
+export const start = async (exe, options = {}) => {
+  const flags = [...(options.noWasm ? ['--js-flags=--jitless'] : []), ...(options.flags || [])];
+  const browser = launch(exe, flags);
+  return {
+    withPage: (limitMs, body) => withPage(browser, limitMs, async (raw) => body(await adapt(raw))),
+    close: async () => browser.close(),
+  };
 };

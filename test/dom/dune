@@ -1,7 +1,7 @@
 ; The DOM tests in a real headless Chrome (design section 14), in the
 ; js_of_ocaml and wasm_of_ocaml builds. run.mjs drives Chrome over the DevTools
-; pipe, with node only. With no Chrome, it writes "SKIP: no Chrome", but CI
-; sets KILIM_REQUIRE_CHROME=1 and fails.
+; pipe (browser.mjs, chrome.mjs), with node only. With no Chrome, it writes
+; "SKIP: no Chrome", but CI sets KILIM_REQUIRE_CHROME=1 and fails.
 
 (executables
  (names smoke test_dom)
@@ -12,6 +12,7 @@
  (alias runtest)
  (deps
   run.mjs
+  browser.mjs
   chrome.mjs
   smoke.bc.js
   smoke.bc.wasm.js
@@ -37,10 +38,11 @@
  (alias runtest)
  (deps
   run.mjs
+  browser.mjs
   chrome.mjs
   smoke.bc.js
   test_dom.bc.js
   (env_var KILIM_CHROME)
   (env_var KILIM_REQUIRE_CHROME))
  (action
-  (run node run.mjs --js-flags=--jitless smoke.bc.js test_dom.bc.js)))
+  (run node run.mjs --no-wasm smoke.bc.js test_dom.bc.js)))

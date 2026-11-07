@@ -1,14 +1,14 @@
-// The Chrome test of the examples (examples/counter and examples/todo). It
-// uses only the built-in modules of node, test/dom/chrome.mjs and
-// examples/serve.mjs.
+// The browser test of the examples (examples/counter and examples/todo). It
+// uses only the built-in modules of node, the browser interface
+// test/dom/browser.mjs and examples/serve.mjs.
 //
-//   node run.mjs --kilim PATH --profile dev|release DIR...
+//   node run.mjs --kilim PATH --profile dev|release [--browser NAME] DIR...
 //
-// DIR is the build directory of an example. Its name selects the script of
-// the example. For each example, the runner does two runs: a default Chrome
-// (the wasm_of_ocaml build) and a Chrome with --js-flags=--jitless (no
-// WebAssembly: the js_of_ocaml build). Each run has a new target and a time
-// limit of 30 s.
+// --browser NAME: chrome (the default). DIR is the build directory of an
+// example. Its name selects the script of the example. For each example, the
+// runner does two runs: a default browser (the wasm_of_ocaml build) and a
+// browser with no WebAssembly (browser.mjs, noWasm: the js_of_ocaml build).
+// Each run has a new page and a time limit of 30 s.
 //
 // dev: examples/serve.mjs serves DIR at /, with "no-cache". The page is the
 // index.html of the rule of docs/loader.md. release: the runner runs the
@@ -39,14 +39,14 @@
 //     securitypolicyviolation event, no Chrome log message about a preload,
 //     and no Chrome log error or warning other than a 404 for /favicon.ico.
 //
-// Chrome: see chrome.mjs. With no Chrome, the runner writes "SKIP: no Chrome"
-// and gives exit status 0, but 1 if KILIM_REQUIRE_CHROME is 1 (CI).
+// A browser configuration that is not valid is a failure. With no browser,
+// the runner writes the skip line of browser.mjs.
 
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { findChrome, launch, until, watch, withPage } from '../dom/chrome.mjs';
+import { open, until, watch } from '../dom/browser.mjs';
 import { serve } from '../../examples/serve.mjs';
 
 const argv = process.argv.slice(2);
@@ -56,10 +56,11 @@ const opt = (name) => {
 };
 const kilim = opt('--kilim');
 const profile = opt('--profile');
+const name = opt('--browser') ?? 'chrome';
 const release = profile === 'release';
 const dirs = argv.filter((a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')).map((d) => resolve(d));
 if (!kilim || !(release || profile === 'dev') || dirs.length === 0) {
-  console.log('usage: node run.mjs --kilim PATH --profile dev|release DIR...');
+  console.log('usage: node run.mjs --kilim PATH --profile dev|release [--browser NAME] DIR...');
   process.exit(2);
 }
 
@@ -143,17 +144,7 @@ for (const d of dirs)
     process.exit(1);
   }
 
-let chrome;
-try {
-  chrome = findChrome();
-} catch (e) {
-  console.log(`FAIL: ${e.message}`);
-  process.exit(1);
-}
-if (!chrome) {
-  console.log('SKIP: no Chrome');
-  process.exit(process.env.KILIM_REQUIRE_CHROME === '1' ? 1 : 0);
-}
+const backend = await open(name);
 
 const csp = release
   ? `script-src 'self' 'wasm-unsafe-eval' ${execFileSync(kilim, ['csp']).toString().trim()}; ` +
@@ -200,16 +191,12 @@ const runExample = async (browser, dir, jitless, selfTest = false) => {
   });
   let events;
   try {
-    await withPage(browser, runMs, async (page) => {
-      events = await watch(page);
-      await page.send('Page.addScriptToEvaluateOnNewDocument', { source: probe });
+    await browser.withPage(runMs, async (page) => {
+      events = watch(page);
+      await page.initScript(probe);
       const t0 = Date.now();
-      await page.send('Page.navigate', { url: `${site.origin}/` });
-      const read = async (expr) => {
-        const r = await page.send('Runtime.evaluate', { expression: expr, returnByValue: true });
-        if (r.exceptionDetails) throw new Error(`${expr}: ${r.exceptionDetails.exception?.description}`);
-        return r.result.value;
-      };
+      await page.goto(`${site.origin}/`);
+      const read = (expr) => page.evaluate(expr);
       // A read during the navigation can fail: then the poll goes on.
       const poll = async (what, expr, limit = stepMs) => {
         if (!(await until(() => read(`!!(${expr})`), limit)))
@@ -223,9 +210,9 @@ const runExample = async (browser, dir, jitless, selfTest = false) => {
           return [r.left + r.width / 2, r.top + r.height / 2];
         })(${el})`);
         for (const type of ['mousePressed', 'mouseReleased'])
-          await page.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+          await page.input('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
       };
-      const insert = (s) => page.send('Input.insertText', { text: s });
+      const insert = (s) => page.input('Input.insertText', { text: s });
       const key = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 };
       const ui = {
         read,
@@ -238,8 +225,8 @@ const runExample = async (browser, dir, jitless, selfTest = false) => {
           await insert(s);
         },
         enter: async () => {
-          await page.send('Input.dispatchKeyEvent', { type: 'keyDown', ...key, text: '\r', unmodifiedText: '\r' });
-          await page.send('Input.dispatchKeyEvent', { type: 'keyUp', ...key });
+          await page.input('Input.dispatchKeyEvent', { type: 'keyDown', ...key, text: '\r', unmodifiedText: '\r' });
+          await page.input('Input.dispatchKeyEvent', { type: 'keyUp', ...key });
         },
       };
       await scripts[name](ui);
@@ -289,7 +276,7 @@ let failures = 0;
 let runs = 0;
 try {
   for (const jitless of [false, true]) {
-    const browser = launch(chrome, jitless ? ['--js-flags=--jitless'] : []);
+    const browser = await backend.launch({ noWasm: jitless });
     try {
       for (const dir of dirs) {
         const label = `${basename(dir)} (${profile}, ${jitless ? 'no JIT: js_of_ocaml' : 'wasm_of_ocaml'})`;
@@ -313,7 +300,7 @@ try {
         }
       }
     } finally {
-      browser.close();
+      await browser.close();
     }
   }
 } finally {

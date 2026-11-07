@@ -1,14 +1,20 @@
-// The Chrome runner of the DOM tests (design section 14). It uses only the
-// built-in modules of node: Chrome over the DevTools pipe (chrome.mjs), and an
-// HTTP server for the build directory.
+// The runner of the DOM tests (design section 14). It uses only the built-in
+// modules of node: the browser interface (browser.mjs), and an HTTP server for
+// the build directory.
 //
-//   node run.mjs [--chrome-flag ...] prog.bc.js prog.bc.wasm.js ...
+//   node run.mjs [--browser NAME] [--no-wasm] prog.bc.js prog.bc.wasm.js ...
 //
-// For each program, the runner opens a new page. The server sends the head of
-// the page at once: a <meta charset> and a synchronous <script> of the program.
-// It sends the body only when the program asks for it: thus the document is
-// "loading" when the program starts, in the two builds. The program calls the
-// binding kilimDrive with a JSON text:
+// --browser NAME: chrome (the default). --no-wasm: a browser with no
+// WebAssembly (browser.mjs).
+//
+// For each program, the runner opens a new page, with the query
+// ?browser=NAME: thus a page knows its browser. The server sends the head of the
+// page at once: a <meta charset>, a comment of 1,024 spaces and a synchronous
+// <script> of the program. It sends the body only when the program asks for
+// it: thus the document is "loading" when the program starts, in the two
+// builds. WebKit runs the script of a short head only when more bytes come
+// (measured: the script ran with 600 bytes more), thus the comment. The
+// program calls the binding kilimDrive with a JSON text:
 //   {"id": n, "release": true}           the server sends the body
 //   {"id": n, "steps": [[method, params], ...]}
 //                                        DevTools input commands (trusted)
@@ -19,33 +25,30 @@
 // between them, and need at least one (a test of an error that no OCaml catch
 // sees; Chrome can report one such exception two times).
 //
-// chrome.mjs finds Chrome. A KILIM_CHROME that is not an executable is a
-// failure. With no Chrome, the runner writes "SKIP: no Chrome" and gives exit
-// status 0, but 1 if KILIM_REQUIRE_CHROME is 1 (CI).
+// A browser configuration that is not valid is a failure. With no browser,
+// the runner writes the skip line of browser.mjs.
 
 import { readFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import http from 'node:http';
-import { findChrome, launch, text, withPage } from './chrome.mjs';
+import { open } from './browser.mjs';
 
-// An argument that starts with -- is a flag for Chrome, for example
-// --js-flags=--jitless (a Chrome with no WebAssembly).
 const args = process.argv.slice(2);
-const flags = args.filter((a) => a.startsWith('--'));
-const programs = args.filter((a) => !a.startsWith('--'));
+const opt = (name) => {
+  const i = args.indexOf(name);
+  return i < 0 ? undefined : args[i + 1];
+};
+const name = opt('--browser') ?? 'chrome';
+const noWasm = args.includes('--no-wasm');
+const programs = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--browser');
+const flags = args.filter((a, i) => a.startsWith('--') && !['--browser', '--no-wasm'].includes(a));
+if (flags.length || programs.length === 0) {
+  console.log('usage: node run.mjs [--browser NAME] [--no-wasm] PROGRAM...');
+  process.exit(2);
+}
 const limitMs = 60000;
 
-let chrome;
-try {
-  chrome = findChrome();
-} catch (e) {
-  console.log(`FAIL: ${e.message}`);
-  process.exit(1);
-}
-if (!chrome) {
-  console.log('SKIP: no Chrome');
-  process.exit(process.env.KILIM_REQUIRE_CHROME === '1' ? 1 : 0);
-}
+const backend = await open(name);
 
 // The server of the build directory. /page/<prog> is the page of a program.
 // The launcher of wasm_of_ocaml fetches its assets, thus no file: URL.
@@ -60,7 +63,7 @@ const server = http.createServer((req, res) => {
     const prog = path.slice('/page/'.length);
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
     res.write(`<!doctype html><html><head><meta charset="utf-8"><title>${prog}</title>` +
-      `<script src="/${prog}"></script></head>`);
+      `<!--${' '.repeat(1024)}--><script src="/${prog}"></script></head>`);
     held.set(prog, res);
     return;
   }
@@ -82,65 +85,60 @@ const server = http.createServer((req, res) => {
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
 const port = server.address().port;
 
-const browser = launch(chrome, flags);
-const cleanup = () => {
-  browser.close();
+const browser = await backend.launch({ noWasm });
+const cleanup = async () => {
+  await browser.close();
   server.close();
   server.closeAllConnections();
 };
 
-// The run of one page, with one time limit from the creation of its target.
+// The run of one page, with one time limit from the creation of its page.
 const runPage = async (prog) => {
   let done;
   const finished = new Promise((ok) => { done = ok; });
   let expected = null;
   let seen = 0;
-  const open = async (page) => {
-    page.on(async (m) => {
-      if (m.method === 'Runtime.consoleAPICalled') {
-        const line = m.params.args.map(text).join(' ');
-        console.log(`${prog}: ${line}`);
-        if (line.startsWith('EXPECT EXCEPTION ')) {
-          expected = line.slice('EXPECT EXCEPTION '.length);
+  const run = async (page) => {
+    page.on((e) => {
+      if (e.kind === 'console') {
+        console.log(`${prog}: ${e.text}`);
+        if (e.text.startsWith('EXPECT EXCEPTION ')) {
+          expected = e.text.slice('EXPECT EXCEPTION '.length);
           seen = 0;
-        } else if (line === 'EXPECT END') {
+        } else if (e.text === 'EXPECT END') {
           if (seen === 0) done('DONE FAIL (the expected exception did not come)');
           expected = null;
-        } else if (line.startsWith('DONE')) done(expected === null ? line : 'DONE FAIL (no EXPECT END)');
-      } else if (m.method === 'Runtime.exceptionThrown') {
-        const d = m.params.exceptionDetails;
-        const what = d.exception?.description ?? d.text;
-        if (expected !== null && what.split('\n')[0] === expected) {
+        } else if (e.text.startsWith('DONE')) done(expected === null ? e.text : 'DONE FAIL (no EXPECT END)');
+      } else if (e.kind === 'exception') {
+        if (expected !== null && e.text.split('\n')[0] === expected) {
           seen++;
           console.log(`${prog}: expected exception: ${expected}`);
         } else {
-          console.log(`${prog}: EXCEPTION ${what}`);
-          done('DONE FAIL');
-        }
-      } else if (m.method === 'Runtime.bindingCalled' && m.params.name === 'kilimDrive') {
-        try {
-          const req = JSON.parse(m.params.payload);
-          if (req.release) {
-            const res = held.get(prog);
-            held.delete(prog);
-            if (res) res.end(body);
-          }
-          for (const [method, params] of req.steps || []) await page.send(method, params);
-          await page.send('Runtime.evaluate', { expression: `window.kilimDriven(${req.id})` });
-        } catch (e) {
-          console.log(`${prog}: DRIVER ERROR ${e.message}`);
+          console.log(`${prog}: EXCEPTION ${e.text}`);
           done('DONE FAIL');
         }
       }
     });
-    await page.send('Runtime.enable');
-    await page.send('Page.enable');
-    await page.send('Runtime.addBinding', { name: 'kilimDrive' });
-    await page.send('Page.navigate', { url: `http://127.0.0.1:${port}/page/${prog}` });
+    await page.bind('kilimDrive', async (payload) => {
+      try {
+        const req = JSON.parse(payload);
+        if (req.release) {
+          const res = held.get(prog);
+          held.delete(prog);
+          if (res) res.end(body);
+        }
+        for (const [method, params] of req.steps || []) await page.input(method, params);
+        await page.evaluate(`window.kilimDriven(${req.id})`);
+      } catch (e) {
+        console.log(`${prog}: DRIVER ERROR ${e.message}`);
+        done('DONE FAIL');
+      }
+    });
+    await page.goto(`http://127.0.0.1:${port}/page/${prog}?browser=${name}`);
     return finished;
   };
   try {
-    return await withPage(browser, limitMs, open);
+    return await browser.withPage(limitMs, run);
   } catch (e) {
     console.log(`${prog}: ${e.message}`);
     return 'DONE FAIL';
@@ -164,6 +162,6 @@ try {
   console.log(`FAIL: ${e.message}`);
   failures++;
 }
-cleanup();
+await cleanup();
 console.log(failures === 0 ? `all ${programs.length} pages pass` : `${failures} pages FAILED`);
 process.exit(failures === 0 ? 0 : 1);

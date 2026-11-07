@@ -1,7 +1,8 @@
 ; The loader tests in a real headless Chrome (docs/design.html, "The loader").
 ; run.mjs makes the pages with `kilim page` and serves them with the builds of
-; app_a and app_b. With no Chrome, it writes "SKIP: no Chrome", but CI sets
-; KILIM_REQUIRE_CHROME=1 and fails.
+; app_a and app_b. It drives Chrome through the browser interface of test/dom
+; (browser.mjs, chrome.mjs). With no Chrome, it writes "SKIP: no Chrome", but
+; CI sets KILIM_REQUIRE_CHROME=1 and fails.
 
 (executables
  (names app_a app_b)
@@ -39,6 +40,7 @@
   (<> %{profile} release))
  (deps
   run.mjs
+  ../dom/browser.mjs
   ../dom/chrome.mjs
   %{bin:kilim}
   index.html
@@ -62,6 +64,7 @@
   (<> %{profile} release))
  (deps
   run.mjs
+  ../dom/browser.mjs
   ../dom/chrome.mjs
   %{bin:kilim}
   app_a.bc.js
@@ -79,8 +82,7 @@
    dev
    --only
    no-wasm-real
-   --
-   --js-flags=--jitless)))
+   --no-wasm)))
 
 ; The release files (`make test-release`): `kilim dist` on the release builds,
 ; with content names and immutable files.
@@ -91,6 +93,7 @@
   (= %{profile} release))
  (deps
   run.mjs
+  ../dom/browser.mjs
   ../dom/chrome.mjs
   %{bin:kilim}
   app_a.bc.js
@@ -116,6 +119,7 @@
   mutate.mjs
   mutants.txt
   run.mjs
+  ../dom/browser.mjs
   ../dom/chrome.mjs
   %{bin:kilim}
   app_a.bc.js
@@ -137,6 +141,7 @@
   mutate.mjs
   mutants.txt
   run.mjs
+  ../dom/browser.mjs
   ../dom/chrome.mjs
   %{bin:kilim}
   app_a.bc.js
