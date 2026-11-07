@@ -103,3 +103,49 @@
   (env_var KILIM_REQUIRE_CHROME))
  (action
   (run node run.mjs --kilim %{bin:kilim} --profile release)))
+
+; The hand mutants of the loader text (`make mutate-loader`): each mutant of
+; mutants.txt must fail its scenarios. The rule of each profile tests the
+; mutants of that profile.
+
+(rule
+ (alias mutants)
+ (enabled_if
+  (<> %{profile} release))
+ (deps
+  mutate.mjs
+  mutants.txt
+  run.mjs
+  ../dom/chrome.mjs
+  %{bin:kilim}
+  app_a.bc.js
+  app_a.bc.wasm.js
+  (glob_files app_a.bc.wasm.assets/*)
+  app_b.bc.js
+  app_b.bc.wasm.js
+  (glob_files app_b.bc.wasm.assets/*)
+  (env_var KILIM_CHROME)
+  (env_var KILIM_REQUIRE_CHROME))
+ (action
+  (run node mutate.mjs --kilim %{bin:kilim} --profile dev)))
+
+(rule
+ (alias mutants)
+ (enabled_if
+  (= %{profile} release))
+ (deps
+  mutate.mjs
+  mutants.txt
+  run.mjs
+  ../dom/chrome.mjs
+  %{bin:kilim}
+  app_a.bc.js
+  app_a.bc.wasm.js
+  (glob_files app_a.bc.wasm.assets/*)
+  app_b.bc.js
+  app_b.bc.wasm.js
+  (glob_files app_b.bc.wasm.assets/*)
+  (env_var KILIM_CHROME)
+  (env_var KILIM_REQUIRE_CHROME))
+ (action
+  (run node mutate.mjs --kilim %{bin:kilim} --profile release)))

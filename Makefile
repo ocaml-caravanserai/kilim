@@ -9,6 +9,9 @@
 #                       bench/size/budget (docs/budgets.md).
 #   make test-release   Run the loader tests of the release files in Chrome
 #                       (test/loader: kilim dist on the release builds).
+#   make mutate-loader  Test the hand mutants of the loader text
+#                       (test/loader/mutants.txt) in Chrome, in the dev and
+#                       the release profile.
 #   make mutate         Test the mutants on the lines that changed since BASE.
 #   make mutate-all     Test all the mutants of the libraries.
 #   make mutate-report  Merge the verdicts of the last run of mutate or
@@ -50,7 +53,7 @@ SUITES := test/core test/view test/turn test/dist
 report = $(DUNE) exec $(MUTATE) windtrap -- mutants \
   $(if $(1),--since $(1)) $(if $(MIN_SCORE),--min-score $(MIN_SCORE))
 
-.PHONY: help build fmt test size test-release check-windtrap mutate mutate-all mutate-report mutate-arm
+.PHONY: help build fmt test size test-release mutate-loader check-windtrap mutate mutate-all mutate-report mutate-arm
 
 help:
 	@sed -n '1,/^$$/p' Makefile | sed 's/^# \{0,1\}//'
@@ -69,6 +72,10 @@ size:
 
 test-release:
 	$(DUNE) build --force @test/loader/runtest --profile release
+
+mutate-loader:
+	$(DUNE) build --force @test/loader/mutants
+	$(DUNE) build --force @test/loader/mutants --profile release
 
 # A dev shell that started before a change of flake.nix keeps its old
 # windtrap, and an old windtrap has no --since.

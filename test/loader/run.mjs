@@ -1,7 +1,12 @@
 // The Chrome runner of the loader tests (docs/design.html, "The loader"). It
 // uses only the built-in modules of node, and test/dom/chrome.mjs.
 //
-//   node run.mjs --kilim PATH --profile dev|release [--only a,b] [-- chrome flags]
+//   node run.mjs --kilim PATH --profile dev|release [--only a,b]
+//                [--mutant FILE] [-- chrome flags]
+//
+// --mutant FILE: the text of FILE replaces the loader text in each page and
+// in loader.js, and the CSP has the hash of that text (node:crypto). Thus
+// mutate.mjs can test a hand mutant of the loader.
 //
 // For each scenario, the runner writes a template to a temporary directory.
 // In the dev profile, it runs `kilim page` with the base /sN/ (N: the number
@@ -39,7 +44,8 @@
 // and gives exit status 0, but 1 if KILIM_REQUIRE_CHROME is 1 (CI).
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
 import http from 'node:http';
@@ -58,15 +64,14 @@ const profile = opt('--profile');
 const only = opt('--only')?.split(',');
 const release = profile === 'release';
 if (!kilim || !(release || profile === 'dev')) {
-  console.log('usage: node run.mjs --kilim PATH --profile dev|release [--only a,b] [-- chrome flags]');
+  console.log('usage: node run.mjs --kilim PATH --profile dev|release [--only a,b] [--mutant FILE] [-- chrome flags]');
   process.exit(2);
 }
 
-// The CSP source expression of the loader text.
-const hash = execFileSync(kilim, ['csp']).toString().trim();
-const ttCsp = `script-src 'self' 'wasm-unsafe-eval' ${hash}; require-trusted-types-for 'script'; ` +
+// @HASH@ in a CSP is the CSP source expression of the loader text.
+const ttCsp = "script-src 'self' 'wasm-unsafe-eval' @HASH@; require-trusted-types-for 'script'; " +
   'trusted-types kilim-loader app-html';
-const cspNoWasm = `script-src 'self' ${hash}`;
+const cspNoWasm = "script-src 'self' @HASH@";
 
 // The fixtures: page scripts and stylesheets.
 const js = (body, delay = 0) => ({ type: 'text/javascript', body, delay });
@@ -136,14 +141,14 @@ const copy = (base, js) => ['', ' data-start'].map((start) =>
   `<script data-base="${base}" data-js="${js}" data-build="js"${start}>@TEXT@</script>`).join('');
 const injected = copy('@OTHER@/', 'x.js') + copy('@PREFIX@', '@OTHER@/x.js');
 const scenarios = [
-  { name: 'inline', expect: { build: 'wasm', path: 'start', probes: 1, reports: 0 } },
+  { name: 'inline', expect: { build: 'wasm', path: 'start', probes: 1, reports: 0, none: /undefined/ } },
   { name: 'file', form: 'file', expect: { build: 'wasm', path: ['head', 'start'], requests: { 'loader.js': 1 } } },
   { name: 'no-jstag', pre: ['no-jstag.js'], expect: { build: 'js', none: /wasm/ } },
   { name: 'no-wasm', pre: ['no-wasm.js'], expect: { build: 'js' } },
   { name: 'no-gc', pre: ['no-gc.js'], expect: { build: 'js', probes: 1 } },
   { name: 'csp-header', csp: cspNoWasm, expect: { build: 'js', reports: 1 } },
   { name: 'csp-meta', csp: cspNoWasm, cspIn: 'meta', expect: { build: 'js', reports: 1 } },
-  { name: 'csp-wasm', csp: `script-src 'self' 'wasm-unsafe-eval' ${hash}`, expect: { build: 'wasm', reports: 0 } },
+  { name: 'csp-wasm', csp: "script-src 'self' 'wasm-unsafe-eval' @HASH@", expect: { build: 'wasm', reports: 0 } },
   { name: 'csp-build-js', csp: cspNoWasm, build: 'js', expect: { build: 'js', reports: 0, probes: 0 } },
   { name: 'csp-bad-hash', csp: "script-src 'self' 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='",
     expect: { start: false } },
@@ -151,7 +156,7 @@ const scenarios = [
   { name: 'tt-handoff', ...tt, form: 'file', headDelay: true,
     expect: { build: 'wasm', path: 'head', html: '<i>x</i>', probes: 1, reports: 0 } },
   { name: 'tt-plain', csp: ttCsp, expect: { build: 'wasm', text: 'fallback', errors: 1, reports: 1 } },
-  { name: 'tt-names', csp: `script-src 'self' 'wasm-unsafe-eval' ${hash}; trusted-types other`,
+  { name: 'tt-names', csp: "script-src 'self' 'wasm-unsafe-eval' @HASH@; trusted-types other",
     expect: { build: 'wasm', reports: 1, policies: 1 } },
   { name: 'tt-gadget', ...tt, expect: { build: 'wasm', gadget: true } },
   { name: 'no-tt', pre: ['no-tt.js'], expect: { build: 'wasm', policies: 0 } },
@@ -194,7 +199,7 @@ const scenarios = [
   // another origin: no request to that origin, and an error in each of the 4
   // parts (the head part throws at the preload, the start part at the start).
   { name: 'origin', inject: injected, expect: { build: 'wasm', exceptions: 4, exception: /another origin/ } },
-  { name: 'origin-strict', inject: injected, csp: `script-src 'strict-dynamic' ${hash}`,
+  { name: 'origin-strict', inject: injected, csp: "script-src 'strict-dynamic' @HASH@",
     expect: { build: 'js', exceptions: 4, exception: /another origin/ } },
   { name: 'dup', apps: [['a', 'x'], ['a', 'y']], expect: { build: 'wasm' } },
   { name: 'rule', prebuilt: true, expect: { build: 'wasm', path: 'start' } },
@@ -227,29 +232,43 @@ if (only) for (const o of only) if (!mine.some((sc) => sc.name === o)) {
   process.exit(1);
 }
 
+const work = mkdtempSync(join(tmpdir(), 'kilim-loader-'));
+
+// The loader text and its CSP source expression. A mutant replaces the text
+// of `kilim loader` in each page.
+execFileSync(kilim, ['loader', '-o', join(work, 'loader.js')]);
+const realText = readFileSync(join(work, 'loader.js'), 'utf8');
+const mutant = opt('--mutant');
+const loaderText = mutant ? readFileSync(mutant, 'utf8') : realText;
+const hash = mutant
+  ? `'sha256-${createHash('sha256').update(loaderText).digest('base64')}'`
+  : execFileSync(kilim, ['csp']).toString().trim();
+const withText = (page) => page.split(realText).join(loaderText);
+
 let chrome;
 try {
   chrome = findChrome();
 } catch (e) {
+  rmSync(work, { recursive: true, force: true });
   console.log(`FAIL: ${e.message}`);
   process.exit(1);
 }
 if (!chrome) {
+  rmSync(work, { recursive: true, force: true });
   console.log('SKIP: no Chrome');
   process.exit(process.env.KILIM_REQUIRE_CHROME === '1' ? 1 : 0);
 }
 
 const builds = process.cwd();
-const work = mkdtempSync(join(tmpdir(), 'kilim-loader-'));
-execFileSync(kilim, ['loader', '-o', join(work, 'loader.js')]);
-const loaderText = readFileSync(join(work, 'loader.js'), 'utf8');
+
+const csp = (sc) => sc.csp.replaceAll('@HASH@', hash);
 
 // The template of a scenario, with its markers.
 const marker = (kind, name) => `<!--kilim:${kind}${name ? ':' + name : ''}-->`;
 const template = (sc, prefix) => {
   const apps = sc.apps || [['a']];
   const mounts = [...new Set(apps.map(([a]) => a))];
-  const cspMeta = sc.csp && sc.cspIn === 'meta' ? `<meta http-equiv="content-security-policy" content="${sc.csp}">` : '';
+  const cspMeta = sc.csp && sc.cspIn === 'meta' ? `<meta http-equiv="content-security-policy" content="${csp(sc)}">` : '';
   const pre = (sc.pre || []).concat(['count.js']).map((f) => `<script src="x/${f}"></script>`).join('');
   // The fixtures are relative to the base, also on a deep link.
   const x = (h) => h.replaceAll('"x/', `"${prefix}x/`);
@@ -265,7 +284,7 @@ const template = (sc, prefix) => {
 // (release) for each app, each on the output of the run before it. The runs
 // of `kilim dist` write into one directory.
 const makePage = (sc, prefix, dir) => {
-  if (sc.prebuilt) return readFileSync(join(builds, 'index.html'), 'utf8');
+  if (sc.prebuilt) return withText(readFileSync(join(builds, 'index.html'), 'utf8'));
   let input = join(dir, 'template.html');
   writeFileSync(input, template(sc, prefix));
   (sc.apps || [['a']]).forEach(([app, name], i) => {
@@ -278,8 +297,11 @@ const makePage = (sc, prefix, dir) => {
     else execFileSync(kilim, ['page', ...common, '-o', out]);
     input = out;
   });
-  let page = readFileSync(input, 'utf8');
-  if (sc.form === 'file' && !release) execFileSync(kilim, ['loader', '-o', join(dir, 'loader.js')]);
+  let page = withText(readFileSync(input, 'utf8'));
+  // A mutant replaces the text of loader.<hash>.js too: the name stays.
+  if (sc.form === 'file' && release)
+    for (const f of readdirSync(join(dir, 'dist'))) if (/^loader\./.test(f)) writeFileSync(join(dir, 'dist', f), loaderText);
+  if (sc.form === 'file' && !release) writeFileSync(join(dir, 'loader.js'), loaderText);
   if (sc.form === 'file') {
     const src = page.match(/<script src="([^"]*)" async/)[1];
     if (sc.headDelay) page = page.replace(`<script src="${src}" async`, `<script src="${src}?head" async`);
@@ -331,11 +353,14 @@ const server = http.createServer(async (req, res) => {
       send(404, 'text/plain', '');
       return;
     }
-    // The page.
-    site.t0 = Date.now();
-    site.visit++;
+    // The page. A navigation starts a visit. Another request of a path that
+    // is not a file (for example a preload of a wrong URL) goes to the log.
+    if (req.headers['sec-fetch-dest'] === 'document') {
+      site.t0 = Date.now();
+      site.visit++;
+    } else site.log.push({ path: rest + url.search, t: Date.now() - site.t0, visit: site.visit });
     const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' };
-    if (sc.csp && sc.cspIn !== 'meta') headers['content-security-policy'] = sc.csp;
+    if (sc.csp && sc.cspIn !== 'meta') headers['content-security-policy'] = csp(sc);
     res.writeHead(200, headers);
     if (sc.bodyDelay) {
       const i = site.page.indexOf('<body');
