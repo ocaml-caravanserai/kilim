@@ -15,10 +15,11 @@ kilim builds with js_of_ocaml and wasm_of_ocaml in their default modes.
 
 ## Status
 
-kilim is in Phase 1 of the design: the view, the keyed diff, the app, the
-commands, the subscriptions, the async tasks, the browser host, the loader
-and `kilim.testing`. Components come in Phase 2. There is no release yet,
-and the API can change.
+kilim has the parts of Phase 1 of the design: the view, the keyed diff, the
+app, the commands, the subscriptions, the async tasks, the browser host, the
+loader and `kilim.testing`. The browser tests run in Chrome, Firefox and
+WebKit. Components come in Phase 2. There is no release yet, and the API can
+change.
 
 The design is in [docs/design.html](docs/design.html). The results of the
 spikes are in [docs/phase0.md](docs/phase0.md), and the budgets are in
@@ -210,6 +211,19 @@ nix develop
 make build
 make test
 ```
+
+`make test` runs the browser tests in Chrome (the Chrome of the system).
+The same tests in Firefox and WebKit use Playwright, from the second dev
+shell `browsers` (Linux only):
+
+```sh
+nix develop .#browsers
+make browsers
+```
+
+This shell adds Playwright, Firefox, WebKit and the EGL driver of mesa to
+the default shell: a download of about 680 MiB. On another system, `make
+browsers` writes "SKIP: no Playwright".
 
 ## License
 

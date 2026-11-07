@@ -9,6 +9,11 @@ with D are in test/dom/test_dom.ml. The tests with H are in
 test/browser/test_browser.ml. The other names are the scenarios of
 test/loader/run.mjs.
 
+A test "in Firefox" or "in WebKit" runs only in the dev shell `browsers` of
+flake.nix (Playwright): in `nix develop .#browsers`, run `dune build --force
+@test/dom/browsers @test/loader/browsers`. In the default shell, these rules
+write "SKIP: no Playwright". The other tests run in Chrome.
+
 listen.ml   cell       Jv.is_undefined of __kilim       true: D2, D3. false: D2 (a trap
                                                         in the wasm build).
 listen.ml   cell       an element in __kilim            removed: D28 (a control named
@@ -51,13 +56,11 @@ listen.ml   handle     live = None                      No test: it does not occ
 ops.ml      create_element  Svg: createElementNS        createElement: D3 (svg).
 ops.ml      focused    activeElement of the root node   true: D41 in Firefox and WebKit,
                        is the node                      which send no focusout on the
-                                                        move. PR 6c-2 runs the pages
-                                                        in Firefox and WebKit. In
-                                                        Chrome, no test: the focusout
-                                                        of the move ends the
-                                                        composition. false: D14, D15,
-                                                        D39, D41 (a write during the
-                                                        composition).
+                                                        move. In Chrome, no test:
+                                                        the focusout of the move ends
+                                                        the composition. false: D14,
+                                                        D15, D39, D41 (a write during
+                                                        the composition).
 ops.ml      focused    getRootNode, not document        document.activeElement: D41
                                                         in a shadow root.
 ops.ml      set_inner_html  a TrustedHTML: the value     the text: tt-inline,
@@ -86,14 +89,13 @@ mount.ml    traps      the abort in a microtask         at once: D33 (wasm build
                                                         model is 100).
 mount.ml    traps      a null error: abort_open         true (each error event): D37 in
                                                         Chrome (two traps give one
-                                                        report). false: D31 to D37 in
-                                                        WebKit, which gives a trap of
-                                                        a wasm:js-string function
-                                                        with a null error. PR 6c-2
-                                                        runs the pages in WebKit.
+                                                        report). false: D31 and D34
+                                                        in WebKit, which gives a trap
+                                                        of a wasm:js-string function
+                                                        with a null error.
 mount.ml    traps      abort_open, not abort            abort: D37 in WebKit (two
                                                         traps with a null error give
-                                                        one report). PR 6c-2.
+                                                        one report).
 mount.ml    traps      the unhandledrejection listener  removed: D34 (a start in a
                                                         promise reaction, wasm
                                                         build).

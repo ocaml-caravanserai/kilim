@@ -54,6 +54,18 @@ the template. The app calls `Kilim_browser.run ~mount:"app" app`.
   goes. Use this form for a CSP with no hash. It costs one more round trip
   before the download of the build starts.
 
+In WebKit (measured in Playwright WebKit 27.2, not yet in Safari), the
+loader.js form has two differences:
+
+- A `defer` script does not wait for the stylesheets. Thus the app can
+  start before the CSS loads, and a layout that the app reads at the
+  start has no CSS.
+- An `async` script can run after the `defer` scripts (measured in some
+  runs). Then a slow `defer` script of another party delays the start.
+
+Use the inline form if your users have Safari. The inline form does not
+have these differences.
+
 ## The base and the names
 
 `--base` is the base of all the URLs: a path that ends with `/`, for
@@ -129,7 +141,9 @@ kilim dist --template page.html --base /static/ \
   16 hexadecimal characters of BLAKE2b-128.
 - Copies the `.assets` directory of the launcher, with its name, next to
   the launcher. The directory must have exactly one `.wasm` file (a
-  release build). The loader preloads this file.
+  release build). The loader preloads this file. Playwright WebKit 27.2
+  does not use this preload for the fetch of the launcher: it downloads
+  the file two times, and it can log that the preload was not used.
 - Writes `loader.<hash>.js` in the loader.js form.
 - Fills the template, and writes the page to `--page` (default
   `dist/index.html`). The page has no `data-dev`.
@@ -161,8 +175,9 @@ A repeat visit then starts with no request for the loader and the builds.
   `script-src 'self' 'sha256-...'`: then each script comes from the origin
   of the page.
 - Add `'wasm-unsafe-eval'` for the wasm_of_ocaml build. With no
-  `'wasm-unsafe-eval'`, the loader picks the js_of_ocaml build, and the
-  probe gives one CSP violation report for each page view.
+  `'wasm-unsafe-eval'`, the loader picks the js_of_ocaml build. Then the
+  probe gives one CSP violation report for each page view in Chrome and
+  Firefox. Playwright WebKit 27.2 gives no report.
 
 ## Trusted Types
 
