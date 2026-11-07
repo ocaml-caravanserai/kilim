@@ -57,3 +57,68 @@ let () =
   let t = Private.Diff.mount dom ~parent:() ~dispatch:ignore (view [1; 2; 3]) in
   Private.Diff.patch t (view [3; 1; 4]) ;
   ignore (Private.Diff.children (Private.Diff.root t))
+
+(* The commands and the app. *)
+let () =
+  let cmd =
+    Cmd.batch
+      [ Cmd.none
+      ; Cmd.task (Async.return 1)
+      ; Cmd.map ~scope:"s"
+          (fun x -> x + 1)
+          (Cmd.latest ~key:"k" (Async.return 2)) ]
+  in
+  ignore (Private.Cmd.requests cmd) ;
+  ignore
+    (App.make
+       ~init:(fun () -> (0, cmd))
+       ~update:(fun m _ -> (m, Cmd.none))
+       ~view:(fun _ -> txt "")
+       ~fallback:(fun _ -> txt "")
+       () )
+
+(* The turn on the DOM of unit nodes, with a fixed env. *)
+let () =
+  let dom : unit Private.Dom.t =
+    { create_element= (fun _ _ -> ())
+    ; create_text= ignore
+    ; set_text= (fun () _ -> ())
+    ; set_attribute= (fun () _ _ -> ())
+    ; remove_attribute= (fun () _ -> ())
+    ; set_property= (fun () _ -> ())
+    ; get_value= (fun () -> "")
+    ; get_checked= (fun () -> false)
+    ; insert_before= (fun () () _ -> ())
+    ; remove= (fun () () -> ())
+    ; replace= (fun () () () -> ())
+    ; clear= ignore
+    ; set_inner_html= (fun () _ -> ())
+    ; attach= (fun () _ -> ())
+    ; listen= (fun () _ ~passive:_ -> ())
+    ; unlisten= (fun () _ -> ()) }
+  in
+  let host =
+    { Private.Host.now_ms= (fun () -> 0.)
+    ; set_timer= (fun ~ms:_ f -> f () ; ignore)
+    ; request_frame= (fun f -> f ())
+    ; queue_microtask= (fun f -> f ())
+    ; post_task= (fun f -> f ()) }
+  in
+  let env = {Private.Runtime.host; hidden= (fun () -> false); cost= ignore} in
+  let app =
+    App.make
+      ~init:(fun () -> (0, Cmd.latest ~key:"k" (Async.return 1)))
+      ~update:(fun m n -> (m + n, Cmd.none))
+      ~view:(fun m -> El.button ~ev:[Ev.click 1] [txt (string_of_int m)])
+      ()
+  in
+  let rt = Private.Runtime.start env dom ~parent:() app in
+  Private.Runtime.event rt Private.Runtime.Discrete ignore ;
+  Private.Runtime.visibility_changed rt ;
+  Private.Event.walk
+    ~parent:(fun () -> None)
+    ~cell:(fun () -> None)
+    () "click" ignore ;
+  ignore (Private.Runtime.stats rt) ;
+  ignore (Private.Runtime.inspect rt) ;
+  Private.Runtime.stop rt

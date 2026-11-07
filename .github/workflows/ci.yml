@@ -29,11 +29,11 @@ jobs:
         run: nix develop -c dune runtest --force
 
   # The mutation gate of a pull request. make mutate tests the mutants that
-  # the suites (test/core and test/view) reach on the lines that the pull
-  # request changes. It gives a failure if one of these mutants survives. A
-  # mutant that no test reaches gives no failure. The checkout of a pull
-  # request is a merge commit, and its first parent HEAD^1 is the base, thus
-  # the diff from HEAD^1 holds only the lines of the pull request.
+  # the suites (test/core, test/view and test/turn) reach on the lines that
+  # the pull request changes. It gives a failure if one of these mutants
+  # survives. A mutant that no test reaches gives no failure. The checkout of
+  # a pull request is a merge commit, and its first parent HEAD^1 is the base,
+  # thus the diff from HEAD^1 holds only the lines of the pull request.
   mutation:
     name: mutation (changed lines)
     if: github.event_name == 'pull_request'

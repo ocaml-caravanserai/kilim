@@ -1,0 +1,8 @@
+; The tests of the commands, the app, the turn and the test host (design
+; sections 08, 09, 11, 12 and 14), native only: windtrap runs here, and `make
+; mutate` tests the mutants of src/core and src/testing with this suite.
+; test/cross runs the big loops in the three builds.
+
+(test
+ (name test_turn)
+ (libraries kilim kilim.testing windtrap))

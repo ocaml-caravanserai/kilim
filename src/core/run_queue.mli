@@ -14,6 +14,11 @@ val length : t -> int
 
 val is_empty : t -> bool
 
+val clear : t -> unit
+(** [clear q] removes all continuations. The depth and the flags do not change.
+    Thus a push after [clear] asks for a turn again, because the queue is empty.
+*)
+
 val with_turn : t -> (unit -> 'a) -> 'a
 (** [with_turn q f] runs [f] in a turn: a push inside a turn asks for no turn.
     The turn ends also when [f] raises. *)

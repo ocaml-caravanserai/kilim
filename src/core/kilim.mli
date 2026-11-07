@@ -1,16 +1,26 @@
 (** kilim: a browser application library for OCaml (docs/design.html).
 
     This version has the async tasks and the cancel tokens of section 12, the
-    view of section 08, and the diff of section 11. *)
+    view, the commands and the app of section 08, and the diff of section 11. *)
 
 module Span = Span
 
 (** The internals for the runtime and the tests. They can change at any time. *)
 module Private : sig
   val set_error_handler : (exn -> unit) -> unit
-  (** The function that gets an exception with no error scope: from an end
-      action, or from a callback of {!Async.make} after [ok] or [error]. The
-      default does nothing. *)
+  (** The function that gets each error that the runtime writes to the console:
+      - An exception with no error scope: from an end action, or from a callback
+        of {!Async.make} after [ok] or [error].
+      - The error of each root catch.
+      - Each error of the root fallback: of its function or of its write.
+      - Each fault in the catch of the turn, for example a fault of the host.
+
+      The default does nothing. *)
+
+  val set_warning_handler : (string -> unit) -> unit
+  (** The function that gets a warning of the runtime, for example 10 stops at
+      the time limit in 1 s. The default does nothing. kilim.browser gives
+      [console.warn]. *)
 
   module Host = Host
   module Cancel = Cancel
@@ -22,6 +32,11 @@ module Private : sig
   module View = View
   module Dom = Dom
   module Diff = Diff
+  module Cmd = Cmd
+  module App = App
+  module Instance = Instance
+  module Event = Event
+  module Runtime = Runtime
 end
 
 (** Cancel tokens. *)
@@ -660,4 +675,47 @@ module El : sig
   val foreign_object : 'msg el
 
   val view : 'msg el
+end
+
+(** Commands: the work that [update] asks for, as a value. *)
+module Cmd : sig
+  type 'msg t = 'msg Private.Cmd.t
+
+  val none : 'msg t
+
+  val batch : 'msg t list -> 'msg t
+  (** The tasks start in the order of the list. *)
+
+  val task : 'msg Async.t -> 'msg t
+  (** The runtime starts the task in the settle step, after the messages, under
+      a new token. Its result is a message. An error goes to the error scope of
+      the instance. *)
+
+  val latest : key:string -> 'msg Async.t -> 'msg t
+  (** As [task], but a new task with the same key cancels the old one, also if
+      the old one has not started. A result of the old task that waits in the
+      queue does nothing. The keys are local to the instance. *)
+
+  val map : ?scope:string -> ('a -> 'msg) -> 'a t -> 'msg t
+  (** [scope] adds a level to the keys of [latest] in the command. The key is a
+      path: [map ~scope:"a" (latest ~key:"b" t)] and [latest ~key:"a/b" t] do
+      not collide. *)
+end
+
+(** An application: the root instance. *)
+module App : sig
+  type t = Private.App.t
+
+  val make :
+       init:(unit -> 'model * 'msg Cmd.t)
+    -> update:('model -> 'msg -> 'model * 'msg Cmd.t)
+    -> view:('model -> 'msg View.t)
+    -> ?fallback:(exn -> 'msg View.t)
+    -> unit
+    -> t
+  (** An error in [init], [update], [view], a task, a message function or a DOM
+      operation of the app unmounts the app: its tasks stop. Then the root shows
+      [fallback exn] (default: an empty text). The messages of the fallback do
+      nothing. The error goes to the error handler. An error in [fallback] goes
+      to the error handler, and the root then shows an empty text. *)
 end

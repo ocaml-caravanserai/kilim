@@ -132,6 +132,36 @@ let drain_after_raise () =
   is_true !ran ;
   is_true (Q.is_empty q)
 
+(* The clear empties the queue and keeps the depth. A push after the clear asks
+   for a turn again. *)
+let clear () =
+  let q, asks = make () in
+  Q.push q ignore ;
+  Q.push q ignore ;
+  equal int 1 !asks ;
+  let ran = ref 0 in
+  let rec nest n =
+    if n > 0 then
+      Q.step q (fun () ->
+          incr ran ;
+          if n = 1 then begin
+            Q.clear q ;
+            is_true (Q.is_empty q) ;
+            (* The depth stays: this step goes on the queue. *)
+            Q.step q (fun () -> incr ran) ;
+            equal int 1 (Q.length q)
+          end
+          else nest (n - 1) )
+  in
+  nest Q.max_depth ;
+  equal int Q.max_depth !ran ;
+  equal int ~msg:"the push after the clear asks" 2 !asks ;
+  Q.clear q ;
+  Q.push q ignore ;
+  equal int 3 !asks ;
+  Q.drain q ;
+  equal int Q.max_depth !ran
+
 let tests =
   [ group "run queue"
       [ test "exactly 256 nested steps run at once" depth_limit
@@ -144,4 +174,5 @@ let tests =
       ; test "the drain reads the clock before the first and every 256"
           drain_over
       ; test "a drain inside a drain does nothing" drain_reentry
-      ; test "the drain runs again after an exception" drain_after_raise ] ]
+      ; test "the drain runs again after an exception" drain_after_raise
+      ; test "the clear empties the queue and keeps the depth" clear ] ]

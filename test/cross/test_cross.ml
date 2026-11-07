@@ -1,7 +1,8 @@
 (* Stack depth and the once rule in each build (design section 12). Under
    js_of_ocaml, a chain of 2,000 synchronous steps overflowed the stack before
    the trampoline. Also keyed diffs of 10,000 rows on the fake DOM (design
-   section 14), and the hash of the keys. *)
+   section 14), the hash of the keys, and the big loops of the turn
+   (Cross_turn). *)
 
 open Kilim
 open Async.Syntax
@@ -231,4 +232,5 @@ let () =
     (result (nest_both m (Async.return 7)) = Some (Ok ())) ;
   keyed_diffs () ;
   hashes () ;
+  Cross_turn.run check ;
   if !failures > 0 then exit 1
