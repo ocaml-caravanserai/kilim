@@ -15,9 +15,10 @@
 #   make test-release   Run the tests of the release files in Chrome:
 #                       kilim dist on the release builds of the loader tests
 #                       (test/loader) and of the examples (test/examples).
-#   make browsers       Run the tests of test/dom and test/loader in
-#                       Firefox and WebKit (Playwright), and the tests of
-#                       the release files of test/loader. Outside the dev
+#   make browsers       Run the tests of test/dom, test/loader and
+#                       test/examples in Firefox and WebKit (Playwright),
+#                       and the tests of the release files of test/loader
+#                       and test/examples. Outside the dev
 #                       shell `browsers` of flake.nix, the command runs in
 #                       `nix develop .#browsers` (Linux only). On another
 #                       system, it writes "SKIP: no Playwright", with exit
@@ -104,7 +105,7 @@ ifeq ($(KILIM_PLAYWRIGHT)$(LINUX),)
 	@test "$(KILIM_REQUIRE_PLAYWRIGHT)" != 1
 else
 	$(BDUNE) build --force @browsers
-	$(BDUNE) build --force @test/loader/browsers --profile release
+	$(BDUNE) build --force @test/loader/browsers @test/examples/browsers --profile release
 endif
 
 mutate-loader:

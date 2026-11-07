@@ -4,7 +4,7 @@
 //
 //   node run.mjs --kilim PATH --profile dev|release [--browser NAME] DIR...
 //
-// --browser NAME: chrome (the default). DIR is the build directory of an
+// --browser NAME: chrome (the default), firefox or webkit. DIR is the build directory of an
 // example. Its name selects the script of the example. For each example, the
 // runner does two runs: a default browser (the wasm_of_ocaml build) and a
 // browser with no WebAssembly (browser.mjs, noWasm: the js_of_ocaml build).
@@ -16,7 +16,7 @@
 // directory, and serves it at /static/ with the CSP of docs/loader.md
 // (Trusted Types included).
 //
-// The input is trusted input of DevTools: a click is a mouse press and a
+// The input is trusted input of DevTools (Playwright translates it): a click is a mouse press and a
 // release at the center of the element, text is Input.insertText after a
 // click on the input, and Enter is a key down with the text "\r" and a key
 // up. After each action, the runner polls the DOM until the expected state
@@ -29,15 +29,17 @@
 // see it.
 //
 // The checks of each run, after the wait:
-//   - The build: the default Chrome requests a .wasm file and not the
-//     js_of_ocaml build. The Chrome with no JIT requests the js_of_ocaml
-//     build, and not the launcher.
+//   - The build: the default browser requests a .wasm file and not the
+//     js_of_ocaml build. The browser with no WebAssembly requests the
+//     js_of_ocaml build, and not the launcher.
 //   - Each URL gets at most one request (the build uses the preload).
 //   - dev: data-kilim-started is "start" (the inline form). release: the
 //     attribute is not set.
 //   - No uncaught exception, no console error, no console warning, no
-//     securitypolicyviolation event, no Chrome log message about a preload,
-//     and no Chrome log error or warning other than a 404 for /favicon.ico.
+//     securitypolicyviolation event, no log message of the browser about a
+//     preload, and no log error or warning of the browser other than a 404
+//     for /favicon.ico.
+// The table `browsers` holds the differences of Firefox and WebKit.
 //
 // A browser configuration that is not valid is a failure. With no browser,
 // the runner writes the skip line of browser.mjs.
@@ -46,7 +48,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { open, until, watch } from '../dom/browser.mjs';
+import { mainWasm, open, preloadFaults, sleep, until, watch } from '../dom/browser.mjs';
 import { serve } from '../../examples/serve.mjs';
 
 const argv = process.argv.slice(2);
@@ -63,6 +65,39 @@ if (!kilim || !(release || profile === 'dev') || dirs.length === 0) {
   console.log('usage: node run.mjs --kilim PATH --profile dev|release [--browser NAME] DIR...');
   process.exit(2);
 }
+
+// The differences of the browsers: the one table of the tests of the
+// examples. The values are facts of the Playwright browsers of flake.lock
+// (Firefox 157, WebKit 27.2). The fields:
+//   accepted  the log messages of the browser that are not a fault
+//   limit     the most requests for a path; the default is 1
+//   preloads  the most preload messages for a path; the default is 0
+// Firefox 157 gives no message for a preload that the page does not use, and
+// no message for a 404 of a stylesheet or an image: there, only the count of
+// the requests finds a preload fault.
+const main = (p) => release && mainWasm(p);
+const browsers = {
+  chrome: {},
+  firefox: {
+    accepted: [
+      // wasm_of_ocaml emits the legacy exception handling (try), and Firefox
+      // warns one time for each module that has it.
+      /^\[JavaScript Warning: "The WebAssembly exception handling 'try' instruction is deprecated and should no longer be used\. Please recompile to use the 'try_table' instruction instead\."/,
+      // The anti-tracking feature of Firefox for a local server.
+      /^\[JavaScript Warning: "“127\.0\.0\.1” has been classified as a bounce tracker\./,
+    ],
+  },
+  webkit: {
+    // WebKit does not use the preload as=fetch of the main .wasm for the
+    // fetch of the launcher: two requests, and one preload message.
+    limit: (p) => (main(p) ? 2 : 1),
+    preloads: (p) => (main(p) ? 1 : 0),
+  },
+};
+const differences = browsers[name] ?? {};
+const limit = differences.limit ?? (() => 1);
+const preloadLimit = differences.preloads ?? (() => 0);
+const accepted = (text) => (differences.accepted || []).some((re) => re.test(text));
 
 const runMs = 30000;
 const startMs = 10000;
@@ -173,11 +208,10 @@ const dist = (dir) => {
   return out;
 };
 
-const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
 // selfTest: after the script, the page writes a console warning 50 ms late.
 // The run must see it: thus the runner waits after the script.
-const runExample = async (browser, dir, jitless, selfTest = false) => {
+const runExample = async (browser, dir, noWasm, selfTest = false) => {
   const name = basename(dir);
   const faults = [];
   const fault = (s) => faults.push(s);
@@ -249,7 +283,7 @@ const runExample = async (browser, dir, jitless, selfTest = false) => {
   const has = (re) => paths.some((p) => re.test(p));
   const jsBuild = /\/main\.bc\.([0-9a-f]{16}\.)?js$/;
   const launcher = /\/main\.bc\.wasm\.([0-9a-f]{16}\.)?js$/;
-  if (jitless) {
+  if (noWasm) {
     if (!has(jsBuild)) fault('no request for the js_of_ocaml build');
     if (has(launcher) || has(/\.wasm$/)) fault('a request for the wasm_of_ocaml build');
   } else {
@@ -258,14 +292,16 @@ const runExample = async (browser, dir, jitless, selfTest = false) => {
   }
   const counts = {};
   for (const p of paths) counts[p] = (counts[p] || 0) + 1;
-  for (const [p, c] of Object.entries(counts)) if (c > 1) fault(`${c} requests for ${p}`);
+  for (const [p, c] of Object.entries(counts)) if (c > limit(p)) fault(`${c} requests for ${p}`);
   if (events) {
     if (events.warnings.length) fault(`console warnings: ${JSON.stringify(events.warnings)}`);
     if (events.errors.length) fault(`console errors: ${JSON.stringify(events.errors)}`);
     if (events.exceptions.length) fault(`exceptions: ${JSON.stringify(events.exceptions)}`);
+    const preloads = preloadFaults(events.logs, Object.keys(counts), preloadLimit);
+    if (preloads.length) fault(`preload messages: ${JSON.stringify(preloads)}`);
     const logs = events.logs.filter((e) => {
       const favicon = /\/favicon\.ico$/.test(e.url || '') && / 404 /.test(e.text);
-      return /preload/i.test(e.text) || ((e.level === 'error' || e.level === 'warning') && !favicon);
+      return !/preload/i.test(e.text) && (e.level === 'error' || e.level === 'warning') && !favicon && !accepted(e.text);
     });
     if (logs.length) fault(`log entries: ${JSON.stringify(logs.map((e) => `${e.level}: ${e.text} (${e.url})`))}`);
   }
@@ -275,13 +311,13 @@ const runExample = async (browser, dir, jitless, selfTest = false) => {
 let failures = 0;
 let runs = 0;
 try {
-  for (const jitless of [false, true]) {
-    const browser = await backend.launch({ noWasm: jitless });
+  for (const noWasm of [false, true]) {
+    const browser = await backend.launch({ noWasm });
     try {
       for (const dir of dirs) {
-        const label = `${basename(dir)} (${profile}, ${jitless ? 'no JIT: js_of_ocaml' : 'wasm_of_ocaml'})`;
+        const label = `${basename(dir)} (${name}, ${profile}, ${noWasm ? 'no WebAssembly: js_of_ocaml' : 'wasm_of_ocaml'})`;
         runs++;
-        const r = await runExample(browser, dir, jitless);
+        const r = await runExample(browser, dir, noWasm);
         if (r.faults.length) {
           failures++;
           console.log(`FAIL ${label}: ${r.faults.join('; ')}`);
@@ -289,7 +325,7 @@ try {
         } else console.log(`ok   ${label}`);
       }
       // The self-test of the runner: a warning after the script is a fault.
-      if (!jitless && !release) {
+      if (!noWasm && !release) {
         runs++;
         const r = await runExample(browser, dirs[0], false, true);
         const expected = 'console warnings: ["kilim self-test"]';

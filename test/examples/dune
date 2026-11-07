@@ -1,14 +1,23 @@
-; The Chrome test of the examples (docs/design.html, "Testing"): run.mjs
-; drives the page of each example with trusted input of DevTools, in the
-; wasm_of_ocaml and the js_of_ocaml builds. In the dev profile, it serves the
-; dev page (index.html) with examples/serve.mjs. In the release profile (`make
-; test-release`), it runs `kilim dist` of docs/loader.md on the release builds,
-; and serves the output at /static/ with the CSP of docs/loader.md. With no
-; Chrome, it writes "SKIP: no Chrome", but CI sets KILIM_REQUIRE_CHROME=1 and
-; fails.
+; The browser test of the examples (docs/design.html, "Testing"): run.mjs
+; drives the page of each example with trusted input (the commands of
+; DevTools, which Playwright translates), in the wasm_of_ocaml and the
+; js_of_ocaml builds: Chrome in the alias runtest, Firefox and WebKit in the
+; alias browsers (`make browsers`). In the dev profile, it serves the dev page
+; (index.html) with examples/serve.mjs. In the release profile (`make
+; test-release`, `make browsers`), it runs `kilim dist` of docs/loader.md on
+; the release builds, and serves the output at /static/ with the CSP of
+; docs/loader.md. The browser with no WebAssembly is real in Chrome (no JIT)
+; and Firefox (a preference), and simulated in WebKit (a script deletes
+; WebAssembly before the page). The differences of the browsers are in the
+; table `browsers` of run.mjs. With no Chrome or no Playwright, run.mjs writes
+; "SKIP: no Chrome" or "SKIP: no Playwright", but CI sets
+; KILIM_REQUIRE_CHROME=1 and KILIM_REQUIRE_PLAYWRIGHT=1 and fails.
 
-(rule
- (alias runtest)
+; The files of each rule: the runner, its browser interface, the server,
+; kilim and the builds of the examples.
+
+(alias
+ (name files)
  (deps
   run.mjs
   ../dom/browser.mjs
@@ -25,7 +34,12 @@
   ../../examples/todo/page.html
   ../../examples/todo/main.bc.js
   ../../examples/todo/main.bc.wasm.js
-  (glob_files ../../examples/todo/main.bc.wasm.assets/*)
+  (glob_files ../../examples/todo/main.bc.wasm.assets/*)))
+
+(rule
+ (alias runtest)
+ (deps
+  (alias files)
   (env_var KILIM_CHROME)
   (env_var KILIM_REQUIRE_CHROME))
  (action
@@ -36,5 +50,47 @@
    %{bin:kilim}
    --profile
    %{profile}
+   ../../examples/counter
+   ../../examples/todo)))
+
+(rule
+ (alias browsers)
+ (deps
+  (alias files)
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+ (action
+  (run
+   node
+   run.mjs
+   --kilim
+   %{bin:kilim}
+   --profile
+   %{profile}
+   --browser
+   firefox
+   ../../examples/counter
+   ../../examples/todo)))
+
+(rule
+ (alias browsers)
+ (deps
+  (alias files)
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+ (action
+  (run
+   node
+   run.mjs
+   --kilim
+   %{bin:kilim}
+   --profile
+   %{profile}
+   --browser
+   webkit
    ../../examples/counter
    ../../examples/todo)))
