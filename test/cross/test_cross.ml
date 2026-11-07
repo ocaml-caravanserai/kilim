@@ -1,6 +1,7 @@
 (* Stack depth and the once rule in each build (design section 12). Under
    js_of_ocaml, a chain of 2,000 synchronous steps overflowed the stack before
-   the trampoline. *)
+   the trampoline. Also keyed diffs of 10,000 rows on the fake DOM (design
+   section 14), and the hash of the keys. *)
 
 open Kilim
 open Async.Syntax
@@ -35,6 +36,109 @@ let result ?(tok = C.root ()) t =
   | exception Stack_overflow ->
       r := Some (Error Stack_overflow) ) ;
   !r
+
+module F = Kilim_testing.Fake_dom
+
+let rows keys =
+  View.keyed El.ul
+    (List.map (fun k -> (Key.int k, El.li [txt (string_of_int k)])) keys)
+
+(* A shuffle with a fixed seed, with no Random: a small linear congruential
+   generator whose values stay below 2^30 in each build. *)
+let shuffle l =
+  let a = Array.of_list l in
+  let x = ref 12345 in
+  for i = Array.length a - 1 downto 1 do
+    x := ((!x * 75) + 74) mod 65537 ;
+    let j = !x mod (i + 1) in
+    let t = a.(i) in
+    a.(i) <- a.(j) ;
+    a.(j) <- t
+  done ;
+  Array.to_list a
+
+let keyed_diffs () =
+  let n = 10_000 in
+  let keys = List.init n (fun i -> i) in
+  let doc = F.create () in
+  let root = F.element "div" in
+  let tree =
+    Private.Diff.mount (F.ops doc) ~parent:root ~dispatch:ignore (rows keys)
+  in
+  let ul = Private.Diff.dom (Private.Diff.root tree) in
+  let texts () = List.map F.text (F.children ul) in
+  let same keys = texts () = List.map string_of_int keys in
+  let patch name keys ~moves =
+    F.reset doc ;
+    match Private.Diff.patch tree (rows keys) with
+    | () ->
+        check name (same keys && moves (F.moves doc))
+    | exception Stack_overflow ->
+        check (name ^ ": stack overflow") false
+  in
+  check "a mount of 10,000 keyed rows" (same keys) ;
+  patch "a reverse of 10,000 keyed rows" (List.rev keys) ~moves:(fun m ->
+      m = n - 1 ) ;
+  let mixed = shuffle keys in
+  check "the shuffle is a permutation" (List.sort compare mixed = keys) ;
+  patch "a shuffle of 10,000 keyed rows" mixed ~moves:(fun m -> m > 0 && m < n) ;
+  patch "a shuffle back to the order" keys ~moves:(fun m -> m > 0 && m < n) ;
+  patch "a replace of 10,000 keyed rows with the keys 20000.."
+    (List.map (fun k -> k + 20_000) keys)
+    ~moves:(fun m -> m = 0) ;
+  patch "a removal of 10,000 keyed rows" [] ~moves:(fun m -> m = 0)
+
+(* The hash of a key is the same in the three builds, for an int below 2^30 and
+   for a string. Thus the table reads the same slots. *)
+let hashes () =
+  let h = Private.Key.hash in
+  check "the hash of an int"
+    ( List.map (fun x -> h (Key.int x)) [0; 1; 2; 7; 1000; 0x3fff_ffff]
+    = [0; 749930575; 719903339; 450586307; 789315851; 586705084] ) ;
+  check "the hash of a string"
+    ( List.map
+        (fun x -> h (Key.string x))
+        [""; "a"; "row-1"; "Aa"; "BB"; "\255\255"]
+    = [493303829; 122118257; 232771046; 110798886; 566909467; 923304462] ) ;
+  let n = 10_000 in
+  let ints f = Array.init n (fun i -> Key.int (f i)) in
+  let probes name nk ok =
+    check name
+      ( match Private.Diff.probes nk ok with
+      | Some c ->
+          c < 4 * n
+      | None ->
+          false )
+  in
+  probes "the probes of 10,000 keys shifted by 20000"
+    (ints (fun i -> i + 20_000))
+    (ints (fun i -> i)) ;
+  probes "the probes of 10,000 keys with a stride of 20001"
+    (ints (fun i -> i * 20_001))
+    (ints (fun i -> (n - 1 - i) * 20_001)) ;
+  probes "the probes of 10,000 string keys"
+    (Array.init n (fun i -> Key.string ("row-" ^ string_of_int i)))
+    (Array.init n (fun i -> Key.string ("row-" ^ string_of_int (n - 1 - i)))) ;
+  (* A table with half of the slots full: the plan uses no map. *)
+  List.iter
+    (fun k ->
+      let fit = ref true in
+      for t = 0 to 19 do
+        let off = t * 1_000_003 in
+        match
+          Private.Diff.probes
+            (Array.init k (fun i -> Key.int (off + i)))
+            (Array.init k (fun i -> Key.int (off + k + i)))
+        with
+        | Some c ->
+            if c >= 6 * k then fit := false
+        | None ->
+            fit := false
+      done ;
+      check
+        ("the probes of " ^ string_of_int k ^ " keys, 20 replaces with offsets")
+        !fit )
+    [16_384; 65_536]
 
 let () =
   let n = 1_000_000 in
@@ -125,4 +229,6 @@ let () =
   in
   check "an ok through 100,000 nested and+ with no let+"
     (result (nest_both m (Async.return 7)) = Some (Ok ())) ;
+  keyed_diffs () ;
+  hashes () ;
   if !failures > 0 then exit 1
