@@ -261,20 +261,30 @@ let blur t by = dispatch t by "focusout"
 
 let event t by name = dispatch t by name
 
-(* The order of Chrome: compositionstart, then for each text an input event with
-   isComposing (the last text is the commit), then compositionend. One task for
-   each event. *)
-let compose t by texts =
+(* compositionstart, then an input event with isComposing for each text: one
+   task for each event. The order of Chrome sends the last text in the same way,
+   then compositionend in a new task. The order of Firefox sends the last text
+   (the commit) in one task: the live value, compositionend, then an input event
+   with isComposing false. *)
+let compose t ?(order = `Chrome) by texts =
   let target = find t by in
   let start = Fake_dom.value target in
+  let composing s =
+    top t (fun () ->
+        Fake_dom.browser_set target (Value (start ^ s)) ;
+        ignore (send t ~composing:true target "input") )
+  in
   dispatch t (By.node target) "compositionstart" ;
-  List.iter
-    (fun s ->
+  match (order, List.rev texts) with
+  | `Chrome, _ | `Firefox, [] ->
+      List.iter composing texts ;
+      dispatch t (By.node target) "compositionend"
+  | `Firefox, commit :: rest ->
+      List.iter composing (List.rev rest) ;
       top t (fun () ->
-          Fake_dom.browser_set target (Value (start ^ s)) ;
-          ignore (send t ~composing:true target "input") ) )
-    texts ;
-  dispatch t (By.node target) "compositionend"
+          Fake_dom.browser_set target (Value (start ^ commit)) ;
+          ignore (send t target "compositionend") ;
+          ignore (send t target "input") )
 
 let set_hidden t b =
   top t (fun () ->

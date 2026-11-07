@@ -43,13 +43,13 @@ let ime_app ?(f = String.uppercase_ascii) ?(every = false) () =
 let cell p = Option.get (F.cell (P.find p field))
 
 (* One message for each text, no value write during the composition, one write
-   at compositionend. *)
+   in the task after compositionend. *)
 let compose () =
   let p = P.start (ime_app ()) in
   F.reset (P.doc p) ;
   P.compose p field ["k"; "ka"] ;
   equal int 2 (stats p).messages ;
-  equal int ~msg:"one write, at compositionend" 1 (writes p) ;
+  equal int ~msg:"one write, in the task after compositionend" 1 (writes p) ;
   equal string "KA" (F.value (P.find p field)) ;
   is_false (cell p).composing ;
   settled p ;
@@ -64,6 +64,168 @@ let compose () =
   equal string "kab" (F.value (P.find p field)) ;
   quiet p ;
   no_errors p
+
+(* The two orders of a composition, with a commit text that is not the last text
+   with isComposing in Firefox. Firefox sends the last input after
+   compositionend. In each order: one message for each text, one write, and the
+   value is the view of the commit. *)
+let compose_order () =
+  List.iter
+    (fun order ->
+      let p = P.start (ime_app ()) in
+      F.reset (P.doc p) ;
+      P.compose p ~order field ["k"; "ka"; "kai"] ;
+      equal int 3 (stats p).messages ;
+      equal int ~msg:"one write" 1 (writes p) ;
+      equal string "KAI" (F.value (P.find p field)) ;
+      is_false (cell p).composing ;
+      settled p ;
+      quiet p ;
+      no_errors p )
+    [`Chrome; `Firefox]
+
+(* The order of Firefox, with a render that is pending at compositionend: the
+   keyup runs a Macro turn that changes the model. A render at compositionend
+   writes the old view value over the commit. *)
+let compose_pending () =
+  let p = P.start (ime_app ()) in
+  P.keyup p field "a" ;
+  is_true ~msg:"a pending render" (ins p).pending ;
+  F.reset (P.doc p) ;
+  P.compose p ~order:`Firefox field ["kai"] ;
+  equal int 2 (stats p).messages ;
+  equal int ~msg:"one write" 1 (writes p) ;
+  equal string "KAI" (F.value (P.find p field)) ;
+  settled p ;
+  quiet p ;
+  no_errors p
+
+(* Two compositions in a chain: Chrome can send compositionend, then a new
+   compositionstart in the same task. The restore task finds the flag set again
+   and writes nothing. The end of the last composition writes the view value one
+   time. The test calls Event.dispatch, thus the two events are in one task. *)
+let chained () =
+  let h = H.create () in
+  let doc = F.create () in
+  let root = F.element "div" in
+  let ops = F.ops doc in
+  let rt = Private.Runtime.start (H.env h) ops ~parent:root (ime_app ()) in
+  H.microtasks h ;
+  let i = List.hd (F.children (List.hd (F.children root))) in
+  let tasks = Queue.create () in
+  let env =
+    { Private.Event.ops
+    ; parent= F.parent
+    ; cell= F.cell
+    ; connected= (fun _ -> true)
+    ; group= (fun _ -> [])
+    ; toggles= (fun _ -> false)
+    ; post_task= (fun f -> Queue.push f tasks) }
+  in
+  let read : type a. a Private.Dom.payload -> a = function
+    | Private.Dom.Unit ->
+        ()
+    | Private.Dom.String ->
+        F.value i
+    | Private.Dom.Key ->
+        ""
+    | Private.Dom.Bool ->
+        false
+  in
+  let send ?(composing = false) name =
+    ignore
+      (Private.Event.dispatch env rt
+         {name; target= i; composing; read; prevent= ignore; stop= ignore} )
+  in
+  (* The end of a task: the microtasks, then each task of the dispatch. *)
+  let finish () =
+    H.microtasks h ;
+    while not (Queue.is_empty tasks) do
+      (Queue.pop tasks) () ;
+      H.microtasks h
+    done
+  in
+  let writes () =
+    Option.value ~default:0 (List.assoc_opt "set_property" (F.counts doc))
+  in
+  let composing () = (Option.get (F.cell i)).composing in
+  send "compositionstart" ;
+  finish () ;
+  F.browser_set i (Value "k") ;
+  send ~composing:true "input" ;
+  finish () ;
+  F.reset doc ;
+  send "compositionend" ;
+  send "compositionstart" ;
+  finish () ;
+  equal int ~msg:"no write in the restore task" 0 (writes ()) ;
+  equal string "k" (F.value i) ;
+  is_true (composing ()) ;
+  F.browser_set i (Value "kb") ;
+  send ~composing:true "input" ;
+  finish () ;
+  send "compositionend" ;
+  finish () ;
+  equal int ~msg:"one write at the last end" 1 (writes ()) ;
+  equal string "KB" (F.value i) ;
+  is_false (composing ()) ;
+  equal int 0 (List.length (H.errors h))
+
+(* The handlers of compositionend run in their turn. The restore task then
+   renders the view of their message. *)
+type emsg_c = Ended
+
+let end_handler () =
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(fun n Ended -> (n + 1, Cmd.none))
+         ~view:(fun n ->
+           El.input
+             ~at:[At.data "testid" "i"; At.value (string_of_int n)]
+             ~ev:[{(Ev.click Ended) with event= "compositionend"}]
+             () )
+         () )
+  in
+  P.compose p field ["a"] ;
+  equal int 1 (stats p).messages ;
+  equal string "1" (F.value (P.find p field)) ;
+  settled p ;
+  quiet p ;
+  no_errors p
+
+(* Page.compose sends the events in the order of the browser. A handler of
+   compositionend reads the live value. *)
+type omsg = Typed_o of string | End_o of string
+
+let compose_events () =
+  List.iter
+    (fun (order, texts, expected) ->
+      let log = ref [] in
+      let p =
+        P.start
+          (App.make
+             ~init:(fun () -> ((), Cmd.none))
+             ~update:(fun () m ->
+               log := m :: !log ;
+               ((), Cmd.none) )
+             ~view:(fun () ->
+               El.input
+                 ~at:[At.data "testid" "i"]
+                 ~ev:
+                   [ Ev.input (fun v -> Typed_o v)
+                   ; {(Ev.input (fun v -> End_o v)) with event= "compositionend"}
+                   ]
+                 () )
+             () )
+      in
+      P.compose p ~order field texts ;
+      is_true (List.rev !log = expected) ;
+      no_errors p )
+    [ (`Chrome, ["k"; "ka"], [Typed_o "k"; Typed_o "ka"; End_o "ka"])
+    ; (`Firefox, ["k"; "ka"], [Typed_o "k"; End_o "ka"; Typed_o "ka"])
+    ; (`Firefox, [], [End_o ""]) ]
 
 (* A render of Sub.every during the composition writes no value. *)
 let compose_every () =
@@ -460,6 +622,12 @@ let order () =
 let tests =
   [ group "dispatch"
       [ test "an IME composition writes the value at its end" compose
+      ; test "the orders of Chrome and Firefox give one write" compose_order
+      ; test "Firefox order with a pending render at compositionend"
+          compose_pending
+      ; test "two compositions in one task" chained
+      ; test "the handlers of compositionend" end_handler
+      ; test "the events of Page.compose in each order" compose_events
       ; test "a render during a composition writes no value" compose_every
       ; test "a focusout or a focusin ends a composition" no_end
       ; test "a moved composing input, then its focusout" moved

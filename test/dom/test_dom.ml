@@ -576,16 +576,19 @@ let d13 () =
   B.stop a ;
   Fut.return ()
 
-(* D14: an IME composition on an uppercase input, with Sub.every. *)
+(* D14: an IME composition on an uppercase input, with Sub.every. [last] is the
+   text of the last message of the input. *)
 type imsg = Typed of string | Tick
 
 let ime_app () =
-  let ticks = ref 0 in
+  let ticks = ref 0 and last = ref "" in
   ( ticks
+  , last
   , App.make
       ~init:(fun () -> (("", 0), Cmd.none))
       ~update:(fun (s, n) -> function
         | Typed v ->
+            last := v ;
             ((String.uppercase_ascii v, n), Cmd.none)
         | Tick ->
             incr ticks ;
@@ -601,7 +604,7 @@ let ime_app () =
       () )
 
 let d14 () =
-  let ticks, app = ime_app () in
+  let ticks, _, app = ime_app () in
   let root, a = start app in
   let i = q root "i" in
   focus i ;
@@ -627,6 +630,23 @@ let d14 () =
   check "D14 one compositionstart" (!starts = 1) ;
   check "D14 the uppercase text after compositionend"
     (String.equal (value i) "KA") ;
+  B.stop a ;
+  Fut.return ()
+
+(* D39: a commit with a text that is not the last text of the composition. In
+   Chrome, the commit is an input with isComposing, then compositionend. Firefox
+   sends the input after compositionend. *)
+let d39 () =
+  let _, last, app = ime_app () in
+  let root, a = start app in
+  let i = q root "i" in
+  focus i ;
+  let* () = ime "k" in
+  let* () = ime "ka" in
+  let* () = insert_text "kai" in
+  let* () = task () in
+  check "D39 the commit text after one task"
+    (String.equal (value i) "KAI" && String.equal !last "kai") ;
   B.stop a ;
   Fut.return ()
 
@@ -1726,7 +1746,8 @@ let tests =
   ; d35
   ; d36
   ; d37
-  ; d38 ]
+  ; d38
+  ; d39 ]
 
 let () =
   ignore (Lazy.force spy) ;
