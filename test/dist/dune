@@ -5,3 +5,19 @@
 (test
  (name test_dist)
  (libraries kilim_dist windtrap))
+
+; The installed executable: the SHA-256 of the output of `kilim loader`, with
+; node:crypto, is the expression of `kilim csp`.
+
+(rule
+ (alias runtest)
+ (action
+  (progn
+   (run %{bin:kilim} loader -o loader.out.js)
+   (with-stdout-to
+    csp.out
+    (run %{bin:kilim} csp))
+   (run
+    node
+    -e
+    "const c = require('node:crypto'), f = require('node:fs'); const h = \"'sha256-\" + c.createHash('sha256').update(f.readFileSync('loader.out.js')).digest('base64') + \"'\\n\"; const g = f.readFileSync('csp.out', 'utf8'); if (h !== g) { console.log('kilim csp: ' + g + 'the hash of kilim loader: ' + h); process.exit(1); }"))))
