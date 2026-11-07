@@ -8,9 +8,14 @@ module Span = Span
 (** The internals for the runtime and the tests. They can change at any time. *)
 module Private : sig
   val set_error_handler : (exn -> unit) -> unit
-  (** The function that gets an exception with no error scope: from an end
-      action, or from a callback of {!Async.make} after [ok] or [error]. The
-      default does nothing. *)
+  (** The function that gets each error that the runtime writes to the console:
+      - An exception with no error scope: from an end action, or from a callback
+        of {!Async.make} after [ok] or [error].
+      - The error of each root catch.
+      - Each error of the root fallback: of its function or of its write.
+      - Each fault in the catch of the turn, for example a fault of the host.
+
+      The default does nothing. *)
 
   val set_warning_handler : (string -> unit) -> unit
   (** The function that gets a warning of the runtime, for example 10 stops at
@@ -29,6 +34,9 @@ module Private : sig
   module Diff = Diff
   module Cmd = Cmd
   module App = App
+  module Instance = Instance
+  module Event = Event
+  module Runtime = Runtime
 end
 
 (** Cancel tokens. *)

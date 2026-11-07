@@ -17,6 +17,9 @@ module Private = struct
   module Diff = Diff
   module Cmd = Cmd
   module App = App
+  module Instance = Instance
+  module Event = Event
+  module Runtime = Runtime
 end
 
 module Cancel = Cancel

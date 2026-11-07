@@ -31,6 +31,9 @@ val create : ?frame_ms:int -> unit -> t
 
 val host : t -> Kilim.Private.Host.t
 
+val env : t -> Kilim.Private.Runtime.env
+(** The env of the runtime: {!host} and the hidden flag. *)
+
 val now : t -> float
 
 val hidden : t -> bool

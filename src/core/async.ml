@@ -43,9 +43,13 @@ let make (start : Cancel.t -> ok:('a -> unit) -> error:(exn -> unit) -> unit) :
           cell := None ;
           Cancel.release step ;
           let k = pick ks in
-          (* Never inside the callback. Examine the token again at the run. *)
-          Run_queue.push ctx.run (fun () ->
-              if not (Cancel.cancelled ctx.cancel) then k v )
+          (* Never inside the callback. An end action of the release can cancel
+             the token (for example a stop of the page): then nothing goes on
+             the run queue. A cancelled token never becomes live again, and the
+             continuation examines the token again at its run. *)
+          if not (Cancel.cancelled ctx.cancel) then
+            Run_queue.push ctx.run (fun () ->
+                if not (Cancel.cancelled ctx.cancel) then k v )
       | _ ->
           ()
     in

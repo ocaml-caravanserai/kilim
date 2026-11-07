@@ -201,3 +201,5 @@ let frames t = List.length t.frames
 let errors t = List.rev t.errors
 
 let warnings t = List.rev t.warnings
+
+let env t = {Kilim.Private.Runtime.host= host t; hidden= (fun () -> t.hidden)}
