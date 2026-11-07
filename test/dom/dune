@@ -12,6 +12,7 @@
  (alias runtest)
  (deps
   run.mjs
+  chrome.mjs
   smoke.bc.js
   smoke.bc.wasm.js
   (glob_files smoke.bc.wasm.assets/*.wasm)
@@ -36,6 +37,7 @@
  (alias runtest)
  (deps
   run.mjs
+  chrome.mjs
   smoke.bc.js
   test_dom.bc.js
   (env_var KILIM_CHROME)
