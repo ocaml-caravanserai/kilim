@@ -35,8 +35,10 @@ MUTANT ?=
 DUNE := $(if $(IN_NIX_SHELL),dune,nix develop -c dune)
 MUTATE := --instrument-with ppx_windtrap.mutate
 
-# The suites of the libraries. test/core is the suite of kilim.
-SUITES := test/core
+# The suites of the libraries. test/core is the suite of Async and Cancel.
+# test/view is the suite of the view, the diff and the fake DOM of
+# kilim.testing.
+SUITES := test/core test/view
 
 report = $(DUNE) exec $(MUTATE) windtrap -- mutants \
   $(if $(1),--since $(1)) $(if $(MIN_SCORE),--min-score $(MIN_SCORE))

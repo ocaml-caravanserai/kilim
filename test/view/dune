@@ -1,0 +1,8 @@
+; The tests of the view, the diff and the fake DOM (design sections 08, 11, 13
+; and 14), native only: windtrap runs here, and `make mutate` tests the mutants
+; of src/core and src/testing with this suite. test/cross runs the big keyed
+; diffs in the three builds.
+
+(test
+ (name test_view)
+ (libraries kilim kilim.testing windtrap))
