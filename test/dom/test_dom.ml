@@ -960,6 +960,60 @@ let d23 () =
   B.stop a1 ;
   Fut.return ()
 
+(* D24: Sub.window. *)
+type wmsg = Got of string | Set of int * string
+
+let d24 () =
+  let got = ref [] in
+  let root, a =
+    start
+      (App.make
+         ~init:(fun () -> ((1, "a"), Cmd.none))
+         ~update:(fun m -> function
+           | Got s ->
+               got := s :: !got ;
+               (m, Cmd.none)
+           | Set (n, t) ->
+               ((n, t), Cmd.none) )
+         ~view:(fun _ ->
+           El.div
+             [ button ~id:"two" (Set (2, "a")) "two"
+             ; button ~id:"new" (Set (2, "b")) "new"
+             ; button ~id:"none" (Set (0, "b")) "none" ] )
+         ~subs:(fun (n, t) ->
+           Sub.batch
+             (List.init n (fun _ ->
+                  Kilim_browser.Sub.window "kilim-test" (fun _ -> Got t) ) ) )
+         () )
+  in
+  let fire () =
+    dispatch window
+      (Jv.new' (Jv.get Jv.global "Event") [|Jv.of_string "kilim-test"|]) ;
+    task ()
+  in
+  let listeners () = count ~name:"kilim-test" window in
+  check "D24 one passive window listener"
+    (listeners () = 1 && Jv.strict_equal (passive window "kilim-test") Jv.true') ;
+  let* () = fire () in
+  check "D24 an event gives one message" (!got = ["a"]) ;
+  ignore (Jv.call (q root "two") "click" [||]) ;
+  got := [] ;
+  let* () = fire () in
+  check "D24 two with the same name: two listeners, two messages"
+    (listeners () = 2 && !got = ["a"; "a"]) ;
+  ignore (Jv.call (q root "new") "click" [||]) ;
+  got := [] ;
+  let* () = fire () in
+  check "D24 a kept key uses the newest function"
+    (listeners () = 2 && !got = ["b"; "b"]) ;
+  ignore (Jv.call (q root "none") "click" [||]) ;
+  got := [] ;
+  let* () = fire () in
+  check "D24 a removed key: no listener, no message"
+    (listeners () = 0 && !got = []) ;
+  B.stop a ;
+  Fut.return ()
+
 (* D25: the stop removes the listeners, the timers and the DOM. *)
 let d25 () =
   let doc_vis = count ~name:"visibilitychange" document in
@@ -980,7 +1034,10 @@ let d25 () =
       ~init:(fun () -> (0, Cmd.none))
       ~update:(fun m () -> (m + 1, Cmd.none))
       ~view:(fun m -> button () (string_of_int m))
-      ~subs:(fun _ -> Sub.every (Span.ms 1000) ())
+      ~subs:(fun _ ->
+        Sub.batch
+          [ Sub.every (Span.ms 1000) ()
+          ; Kilim_browser.Sub.window "kilim-cycle" (fun _ -> ()) ] )
       ()
   in
   let root = container () in
@@ -989,6 +1046,7 @@ let d25 () =
   done ;
   check "D25 1,000 starts and stops: each count 0"
     ( count root = 0
+    && count ~name:"kilim-cycle" window = 0
     && count ~name:"visibilitychange" document = doc_vis
     && B.live_timers () = 0
     && children root = 0 ) ;
@@ -1559,6 +1617,7 @@ let tests =
   ; d21
   ; d22
   ; d23
+  ; d24
   ; d25
   ; d26
   ; d27

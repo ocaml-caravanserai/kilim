@@ -23,3 +23,9 @@ module Private = struct
 end
 
 let run = Mount.run
+
+module Sub = struct
+  include Kilim.Sub
+
+  let window = Window.window
+end

@@ -82,3 +82,6 @@ browser_host.ml  same  other builds: ( == )             No test: Object.is gives
                                                         compare. The choice is for
                                                         speed.
 browser_host.ml  set_timer  the first clear only        true: H3, D25.
+window.ml   start      the end action removes the listener  removed: D24 (a removed
+                                                        key), D25.
+window.ml   start      passive                          false: D24.

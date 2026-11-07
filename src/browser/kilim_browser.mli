@@ -1,7 +1,7 @@
 (** kilim.browser: the browser part of kilim (docs/design.html).
 
-    This version has the browser host, the real DOM, the listeners and {!run}.
-*)
+    This version has the browser host, the real DOM, the listeners, {!run} and
+    {!Sub.window}. *)
 
 (** The internals for the tests. They can change at any time. *)
 module Private : sig
@@ -55,3 +55,21 @@ val run : mount:string -> Kilim.App.t -> unit
       if the element does not exist and the document is not "loading", or if the
       element has a live app. After the wait, a missing element goes to the
       error handler. *)
+
+(** The subscriptions of {!Kilim.Sub}, and the subscriptions of the browser. *)
+module Sub : sig
+  include module type of struct
+    include Kilim.Sub
+  end
+
+  val window : string -> (Brr.Ev.Type.void Brr.Ev.t -> 'msg) -> 'msg t
+  (** [window name f] listens to the event [name] on [window], with a passive
+      listener. The key comes from [name]: two with the same name get their
+      position among them in the key. Each event is a payload, and [f] makes the
+      message when the payload leaves the queue, with the newest [f] of the key.
+      The event runs a microtask turn: the render waits for the next frame.
+
+      An app module that uses [window] links only in the browser builds. To test
+      such an app with kilim.testing, give the window subscriptions to the app
+      as a parameter. *)
+end
