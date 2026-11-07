@@ -231,7 +231,8 @@ let warnings t = List.rev t.warnings
 let env t =
   { Kilim.Private.Runtime.host= host t
   ; hidden= (fun () -> t.hidden)
-  ; cost= (fun _ -> t.now <- t.now +. t.cost) }
+  ; cost= (fun _ -> t.now <- t.now +. t.cost)
+  ; same= ( == ) }
 
 let spend t ms = t.now <- t.now +. ms
 

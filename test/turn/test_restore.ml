@@ -123,7 +123,8 @@ let check_box () =
   let p = P.start (checkbox ~accept:false) in
   P.click p (By.test_id "c") ;
   is_false (F.checked (P.find p (By.test_id "c"))) ;
-  equal int 1 (stats p).restores ;
+  (* The restore of the click turn, then the restore task after the click. *)
+  equal int 2 (stats p).restores ;
   let p = P.start (checkbox ~accept:true) in
   F.reset (P.doc p) ;
   P.click p (By.test_id "c") ;
@@ -524,8 +525,13 @@ type raction =
   | R_wait of int
   | R_radio of int
   | R_nested of string
+  | R_compose of int * string list
+  | R_compstart of int * string
+  | R_blur of int
+  | R_pcheck
 
-type rmodel = {v1: string; v2: string; box: bool; allow: bool; radio: int}
+type rmodel =
+  {v1: string; v2: string; box: bool; pbox: bool; allow: bool; radio: int}
 
 type rmsg =
   | R_typed of int * string
@@ -534,6 +540,7 @@ type rmsg =
   | R_done
   | R_pick of int
   | R_nest
+  | R_pbox of bool
 
 let pp_raction = function
   | R_type (i, s) ->
@@ -550,6 +557,14 @@ let pp_raction = function
       "radio " ^ string_of_int i
   | R_nested s ->
       "nested input " ^ s
+  | R_compose (i, l) ->
+      "compose " ^ string_of_int i ^ " [" ^ String.concat "; " l ^ "]"
+  | R_compstart (i, s) ->
+      "compositionstart " ^ string_of_int i ^ " and input " ^ s
+  | R_blur i ->
+      "blur " ^ string_of_int i
+  | R_pcheck ->
+      "prevented check"
 
 let gen_text =
   Gen.map
@@ -570,7 +585,18 @@ let gen_raction =
     ; (1, Gen.constant R_focus)
     ; (2, Gen.map (fun n -> R_wait n) (Gen.int_range 1 40))
     ; (2, Gen.map (fun i -> R_radio i) (Gen.int_range 0 2))
-    ; (1, Gen.map (fun s -> R_nested s) gen_text) ]
+    ; (1, Gen.map (fun s -> R_nested s) gen_text)
+    ; ( 2
+      , Gen.map
+          (fun (i, l) -> R_compose (i, l))
+          (Gen.pair (Gen.int_range 1 2)
+             (Gen.list ~size:(Gen.int_range 1 3) gen_text) ) )
+    ; ( 1
+      , Gen.map
+          (fun (i, s) -> R_compstart (i, s))
+          (Gen.pair (Gen.int_range 1 2) gen_text) )
+    ; (1, Gen.map (fun i -> R_blur i) (Gen.int_range 1 2))
+    ; (2, Gen.constant R_pcheck) ]
 
 let rgen =
   Gen.with_pp
@@ -590,10 +616,12 @@ let rec controlled n acc =
   | Some _ | None ->
       acc
 
-(* The radio group accepts a change only when the model allows it. A nested
-   input is a discrete event inside the Macro turn of a focus. After each
-   action, if no render is pending and no restore waits, the live property of
-   each controlled element is its view value. *)
+(* The radio group and the prevented checkbox accept a change only when the
+   model allows it. A nested input is a discrete event inside the Macro turn of
+   a focus. A composition can stay open until a blur or the next composition.
+   After each action, if no render is pending and no restore waits, the live
+   property of each controlled element is its view value, except the value of an
+   element with a composition. *)
 let restore_law (cost, actions) =
   let h = H.create ~cost () in
   let page = ref None and nested = ref "" in
@@ -614,6 +642,8 @@ let restore_law (cost, actions) =
         (m, Cmd.none)
     | R_pick i ->
         ((if m.allow then {m with radio= i} else m), Cmd.none)
+    | R_pbox b ->
+        ((if m.allow then {m with pbox= b} else m), Cmd.none)
     | R_nest ->
         Option.iter (fun p -> P.input p (id 1) !nested) !page ;
         (m, Cmd.none)
@@ -632,6 +662,10 @@ let restore_law (cost, actions) =
           ~at:[At.data "testid" "c"; At.type_ "checkbox"; At.checked m.box]
           ~ev:[Ev.check (fun b -> R_box b); Ev.focus R_switch]
           ()
+      ; El.input
+          ~at:[At.data "testid" "p"; At.type_ "checkbox"; At.checked m.pbox]
+          ~ev:[Ev.check ~prevent_default:true (fun b -> R_pbox b)]
+          ()
       ; El.input ~at:[At.data "testid" "n"] ~ev:[Ev.focus R_nest] ()
       ; El.div
           (List.init 3 (fun i ->
@@ -647,9 +681,11 @@ let restore_law (cost, actions) =
   let live_is_view where =
     List.iter
       (fun (n, (c : Private.Dom.cell)) ->
-        Option.iter
-          (fun v -> equal string ~msg:("the live value " ^ where) v (F.value n))
-          c.value ;
+        if not c.composing then
+          Option.iter
+            (fun v ->
+              equal string ~msg:("the live value " ^ where) v (F.value n) )
+            c.value ;
         Option.iter
           (fun b ->
             equal bool ~msg:("the live checked " ^ where) b (F.checked n) )
@@ -660,7 +696,8 @@ let restore_law (cost, actions) =
     P.start ~host:h
       (App.make
          ~init:(fun () ->
-           ({v1= ""; v2= ""; box= false; allow= true; radio= 0}, Cmd.none) )
+           ( {v1= ""; v2= ""; box= false; pbox= false; allow= true; radio= 0}
+           , Cmd.none ) )
          ~update ~view () )
   in
   page := Some p ;
@@ -681,16 +718,30 @@ let restore_law (cost, actions) =
           P.click p (By.test_id ("r" ^ string_of_int i))
       | R_nested s ->
           nested := s ;
-          P.focus p (By.test_id "n") ) ;
+          P.focus p (By.test_id "n")
+      | R_compose (i, l) ->
+          P.compose p (id i) l
+      | R_compstart (i, s) ->
+          P.event p (id i) "compositionstart" ;
+          P.input p (id i) s
+      | R_blur i ->
+          P.blur p (id i)
+      | R_pcheck ->
+          P.click p (By.test_id "p") ) ;
       settled p ;
       let i = ins p in
       if (not i.pending) && i.restores_left = 0 then
         live_is_view "after an action" )
     actions ;
+  P.blur p (id 1) ;
+  P.blur p (id 2) ;
   quiet p ;
   equal int 0 (ins p).restores_left ;
   live_is_view "at the end" ;
-  equal int 6 (List.length (controlled (P.root p) [])) ;
+  List.iter
+    (fun (_, (c : Private.Dom.cell)) -> is_false ~msg:"composing" c.composing)
+    (controlled (P.root p) []) ;
+  equal int 7 (List.length (controlled (P.root p) [])) ;
   no_errors p
 
 let tests =

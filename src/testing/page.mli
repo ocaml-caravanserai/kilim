@@ -1,16 +1,21 @@
 (** An app on the fake DOM and the virtual host (design section 14), with
     simulated events.
 
-    A simulated event finds its target, then calls the handlers from the target
-    to the top with {!Kilim.Private.Event.walk}, all in one turn. The payload
-    comes from the target: its live [value], its live [checked], or the key of
+    A simulated event finds its target, then calls
+    {!Kilim.Private.Event.dispatch}: the same rules as in a browser. The
+    handlers run from the target to the top, all in one turn. The payload comes
+    from the target: its live [value], its live [checked], or the key of
     {!keydown}. The turn is discrete for a discrete event ([click], [input],
     [change], [submit] and [keydown]). A discrete event also gives the runtime
     its restore: after the next render, the restore writes the view values of
     the target, and of the other buttons of its radio group, where the live
     property is different (design section 11). It does nothing for a target that
-    is not under the mount element. After each top-level call, the host runs the
-    microtasks. *)
+    is not under the mount element.
+
+    After each top-level call, the page runs the microtasks, then the undo of a
+    prevented click, then the tasks of the dispatch (for example the restore
+    task after a click on a checkbox), each with the microtasks after it. This
+    is the order of a browser. *)
 
 type t
 
@@ -37,9 +42,11 @@ val click : t -> By.t -> unit
 (** A [click] event: a discrete turn. As in a browser, a click on a checkbox
     first toggles its [checked], and a click on a radio button first checks it
     (and unchecks its group). If a handler prevents the default, the click
-    undoes this change after the turn, as a browser does after the dispatch: the
-    checkbox toggles back, and the radio button that was checked before becomes
-    checked again. *)
+    undoes this change after the turn and the microtasks, as a browser does
+    after the dispatch: the checkbox toggles back. The radio button that was
+    checked before becomes checked again, if it is still in the group of the
+    target. If not, the target stays checked, as in Chrome. Then a task restores
+    the target from the view. *)
 
 val type_ : t -> By.t -> string -> unit
 (** [type_ t q s] types each character of [s]: the live value becomes the live
@@ -55,12 +62,34 @@ val change : t -> By.t -> string -> unit
 val submit : t -> By.t -> unit
 (** A [submit] event. *)
 
-val keydown : t -> By.t -> string -> unit
+val keydown : t -> ?composing:bool -> By.t -> string -> unit
 (** [keydown t q key] sends a [keydown] event with this [key], for example
-    ["Enter"]. *)
+    ["Enter"]. With [~composing:true] ([isComposing] of the event, default
+    [false]), no handler runs. *)
+
+val keyup : t -> ?composing:bool -> By.t -> string -> unit
+(** As {!keydown}, for [keyup]: a [Macro] turn. *)
 
 val focus : t -> By.t -> unit
-(** A [focusin] event: a [Macro] turn. *)
+(** A [focusin] event: a [Macro] turn. On an element with an IME composition, it
+    ends the composition and gives a discrete turn with the restore. *)
+
+val blur : t -> By.t -> unit
+(** A [focusout] event: a [Macro] turn. On an element with an IME composition,
+    it ends the composition and gives a discrete turn with the restore. *)
+
+val compose : t -> By.t -> string list -> unit
+(** [compose t q texts] is an IME composition in the order of Chrome:
+    [compositionstart], then for each text the live value becomes the start
+    value and the text, and an [input] event with [isComposing] runs (the last
+    text is the commit), then [compositionend]. During the composition, the diff
+    does not write [value]. At [compositionend], the restore writes the view
+    value. *)
+
+val event : t -> By.t -> string -> unit
+(** [event t q name] sends the event [name] with the payloads of the target and
+    the key [""], for example [mouseenter], [scroll], [wheel] or
+    [compositionstart]. *)
 
 val set_hidden : t -> bool -> unit
 (** Sets the hidden flag of the host, then tells the runtime. *)

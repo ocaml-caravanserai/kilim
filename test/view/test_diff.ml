@@ -161,6 +161,33 @@ let properties () =
   equal ops [("get_checked", 1); ("set_property", 1)] (counts p) ;
   is_true (cell.value = None && cell.checked = Some false)
 
+(* While the cell is composing (an IME composition), the patch and the restore
+   do not write [value]: the cell keeps the new view value. A [checked] change
+   is still written. *)
+let composing () =
+  let p = mount (El.input ~at:[At.value "a"; At.checked false] ()) in
+  let n = node p in
+  let cell = Option.get (F.cell n) in
+  is_false cell.composing ;
+  cell.composing <- true ;
+  patch p (El.input ~at:[At.value "b"; At.checked true] ()) ;
+  equal ops [("get_checked", 1); ("set_property", 1)] (counts p) ;
+  equal string "a" (F.value n) ;
+  is_true (F.checked n) ;
+  is_true (cell.value = Some "b") ;
+  (* The restore: no value write while composing. *)
+  F.reset p.doc ;
+  Diff.restore (F.ops p.doc) n cell ;
+  equal ops [("get_checked", 1)] (counts p) ;
+  equal string "a" (F.value n) ;
+  (* With no composition, one write. *)
+  cell.composing <- false ;
+  Diff.restore (F.ops p.doc) n cell ;
+  equal ops
+    [("get_checked", 2); ("get_value", 1); ("set_property", 1)]
+    (counts p) ;
+  equal string "b" (F.value n)
+
 (* A patch from [a] to [b] gives the DOM of a fresh mount of [b], with the
    counts [expected]. *)
 let as_fresh a b expected =
@@ -451,7 +478,23 @@ let listeners () =
   equal ops [("listen", 1)] (counts p) ;
   patch p (El.div []) ;
   equal ops [("unlisten", 2)] (counts p) ;
-  equal (list (pair string bool)) [] (F.listeners n)
+  equal (list (pair string bool)) [] (F.listeners n) ;
+  (* wheel, touchstart and touchmove: passive with no prevent_default. A patch
+     that adds prevent_default removes the listener and adds it again. *)
+  List.iter
+    (fun (name, ev) ->
+      patch p (El.div ~ev:[ev ~prevent_default:false name] []) ;
+      equal ops ~msg:name [("listen", 1)] (counts p) ;
+      equal (list (pair string bool)) [(name, true)] (F.listeners n) ;
+      patch p (El.div ~ev:[ev ~prevent_default:true name] []) ;
+      equal ops ~msg:name [("listen", 1); ("unlisten", 1)] (counts p) ;
+      equal (list (pair string bool)) [(name, false)] (F.listeners n) ;
+      patch p (El.div []) ;
+      equal ops [("unlisten", 1)] (counts p) )
+    [ ("wheel", fun ~prevent_default m -> Ev.wheel ~prevent_default m)
+    ; ("touchstart", fun ~prevent_default m -> Ev.touchstart ~prevent_default m)
+    ; ("touchmove", fun ~prevent_default m -> Ev.touchmove ~prevent_default m)
+    ]
 
 let namespaces () =
   let v =
@@ -779,6 +822,7 @@ let tests =
       ; test "a new name or kind replaces the node" replace
       ; test "a text change is one set_text" text
       ; test "attributes: add, change and remove" attributes
+      ; test "an IME composition: no value write" composing
       ; test "properties: a write only if the live value is different"
           properties
       ; test "a select writes its value again after a change of its options"
