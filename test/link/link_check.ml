@@ -58,7 +58,7 @@ let () =
   Private.Diff.patch t (view [3; 1; 4]) ;
   ignore (Private.Diff.children (Private.Diff.root t))
 
-(* The commands and the app. *)
+(* The commands, the subscriptions and the app. *)
 let () =
   let cmd =
     Cmd.batch
@@ -69,6 +69,13 @@ let () =
           (Cmd.latest ~key:"k" (Async.return 2)) ]
   in
   ignore (Private.Cmd.requests cmd) ;
+  let sub =
+    Sub.batch
+      [ Sub.none
+      ; Sub.every (Span.ms 1) ()
+      ; Sub.run ~key:"k" (fun send -> send () ; Async.return ()) ]
+  in
+  ignore (Private.Sub.leaves sub) ;
   ignore
     (App.make
        ~init:(fun () -> (0, cmd))

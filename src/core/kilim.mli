@@ -1,7 +1,8 @@
 (** kilim: a browser application library for OCaml (docs/design.html).
 
     This version has the async tasks and the cancel tokens of section 12, the
-    view, the commands and the app of section 08, and the diff of section 11. *)
+    view, the commands, the subscriptions and the app of section 08, and the
+    diff of section 11. *)
 
 module Span = Span
 
@@ -33,6 +34,7 @@ module Private : sig
   module Dom = Dom
   module Diff = Diff
   module Cmd = Cmd
+  module Sub = Sub
   module App = App
   module Instance = Instance
   module Event = Event
@@ -700,6 +702,39 @@ module Cmd : sig
   (** [scope] adds a level to the keys of [latest] in the command. The key is a
       path: [map ~scope:"a" (latest ~key:"b" t)] and [latest ~key:"a/b" t] do
       not collide. *)
+end
+
+(** Subscriptions: the event sources that the model needs, with keys (design
+    section 08). [subs] of {!App.make} gives a set of subscriptions for a model.
+    After a render, the runtime compares the keys of the set with the keys of
+    the last set. A new key starts its subscription, a removed key stops it, and
+    a key that stays keeps it. *)
+module Sub : sig
+  type 'msg t = 'msg Private.Sub.t
+
+  val none : 'msg t
+
+  val batch : 'msg t list -> 'msg t
+
+  val every : Span.t -> 'msg -> 'msg t
+  (** [every span msg] sends [msg] [span] after its start, then [span] after
+      each delivery (a fixed delay, not a fixed rate). The key comes from
+      [span]: two [every] with the same span get their position among them in
+      the key. A key that stays sends the newest [msg].
+
+      @raise Invalid_argument
+        if [span] is zero. In [subs], this goes to the error scope of the
+        instance. *)
+
+  val run : key:string -> (('msg -> unit) -> unit Async.t) -> 'msg t
+  (** [run ~key f] starts the task [f send] at a render. [send m] sends the
+      message [m]. Put each parameter of [f] in [key], for example the room of a
+      chat. A key that stays keeps its task. A removed key cancels it, and then
+      [send] has no effect. If the task ends, the key stays and the task does
+      not start again. An error of the task goes to the error scope of the
+      instance.
+
+      @raise Invalid_argument for a duplicate key, in [subs]. *)
 end
 
 (** An application: the root instance. *)
