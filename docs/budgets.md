@@ -35,6 +35,14 @@ The same rule checks the generated code: the release `counter.bc.js` contains
 DOM operations are direct calls), and the launcher contains
 `"meth_call_2_insertBefore"` and `"get___kilim"`.
 
+## The loader text
+
+`test/dist` checks that the loader text (`Kilim_dist.Loader_text.text`) has
+at most 2,560 bytes. The inline form has the text two times in each page,
+thus the size counts. Measured: 2,555 bytes, and 1,180 bytes with gzip
+(level 9, the `zlib` module of node). The text has no comments and no
+leading spaces (`src/loader/gen/embed.ml`).
+
 ## Open reference sizes
 
 The targets against references are open: the gzip size of an Elm counter app,

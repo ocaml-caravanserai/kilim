@@ -1,0 +1,7 @@
+; The executable kilim (docs/loader.md). The logic is in kilim_dist.
+
+(executable
+ (name main)
+ (public_name kilim)
+ (package kilim)
+ (libraries kilim_dist))

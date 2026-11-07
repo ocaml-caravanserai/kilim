@@ -1,0 +1,7 @@
+; The tests of the loader text and of the executable kilim (docs/design.html,
+; "The loader"), native only: windtrap runs here, and `make mutate` tests the
+; mutants of src/loader with this suite. test/loader runs the pages in Chrome.
+
+(test
+ (name test_dist)
+ (libraries kilim_dist windtrap))

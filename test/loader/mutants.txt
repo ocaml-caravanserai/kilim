@@ -1,0 +1,81 @@
+# The hand mutants of the loader text (docs/design.html, "The loader").
+# mutate.mjs applies each one to the output of `kilim loader`, runs the
+# scenarios of run.mjs that the line names, and expects a failure. A mutant
+# whose scenarios pass is a survivor.
+#
+#   slug | text to find | replacement | scenarios that must fail
+#
+# The text to find must occur exactly one time in the loader text. "\n" is a
+# newline. The scenarios of a line are all of the dev profile, or all of the
+# release profile (the names that start with "rel-"). Add a line for each new
+# branch of loader.js.
+
+# The probes.
+no-typeof | typeof WebAssembly == "object" &&  |  | no-wasm
+no-jstag-probe |  && WebAssembly.JSTag) { | ) { | no-jstag
+no-compile | new WebAssembly.Module(new Uint8Array(m));\n |  | csp-header
+no-validate | if (WebAssembly.validate(new Uint8Array(m.concat([1, 5, 1, 95, 1, 127, 0])))) { | if (true) { | no-gc
+validate-false | if (WebAssembly.validate(new Uint8Array(m.concat([1, 5, 1, 95, 1, 127, 0])))) { | if (false) { | inline
+catch-wasm | } catch (x) {\n}\n}\nst.build = b; | } catch (x) {\nb = "wasm";\n}\n}\nst.build = b; | csp-header
+no-build-js | d.build != "js" &&  |  | csp-build-js
+start-probes | if ("start" in d) {\n | if ("start" in d) {\nWebAssembly.validate(new Uint8Array(0));\n | inline
+
+# The two parts and the hand-off.
+no-start-part | if ("start" in d) { | if (false) { | inline
+no-flag | st.flag = true;\n |  | tt-handoff
+no-flag-read | if (st.flag) { | if (false) { | tt-handoff
+flag-always | if (st.flag) { | if (true) { | inline
+no-start-call | if (st.build) {\nstart(st.build, "start"); | if (false) {\nstart(st.build, "start"); | inline
+start-early | if (st.build) {\nstart(st.build, "start"); | if (true) {\nstart(st.build, "start"); | tt-handoff
+no-started | if (st.started) {\nreturn;\n}\n |  | dup
+state-each | var L = root.__kilimLoader || (root.__kilimLoader = | var L = (root.__kilimLoader = | inline
+app-each | var st = L.apps[key] || (L.apps[key] = {}); | var st = L.apps[key] = {}; | inline
+key-base | var key = d.base + " " + d.js; | var key = d.base; | two-inline
+src-swap | return url(b == "wasm" ? d.wasm : d.js); | return url(b == "wasm" ? d.js : d.wasm); | inline
+doc-url | var u = new URL(n, base); | var u = new URL(n, location.href); | deep-inline
+no-origin-check | if (u.origin != location.origin) { | if (false) { | origin,origin-strict
+origin-always | if (u.origin != location.origin) { | if (true) { | inline
+
+# Trusted Types.
+policy-each | if (!L.policy) { | if (true) { | two-tt
+no-policy-create | if (!L.policy) { | if (false) { | tt-inline
+no-policy | e.src = L.policy ? L.policy.createScriptURL(u) : u; | e.src = u; | tt-inline
+policy-always | e.src = L.policy ? L.policy.createScriptURL(u) : u; | e.src = L.policy.createScriptURL(u); | no-tt
+policy-open | if (L.urls[x]) { | if (true) { | tt-gadget
+policy-closed | if (L.urls[x]) { | if (false) { | tt-inline
+no-url-record | L.urls[u] = true;\n |  | tt-inline
+policy-throw | } catch (x) {\n}\n}\nvar e | } catch (x) {\nthrow x;\n}\n}\nvar e | tt-names
+
+# The preloads.
+no-preload | preload(src(b), "script");\n |  | css-inline
+preload-as | preload(src(b), "script"); | preload(src(b), "fetch"); | inline
+cors-always | if (cors) { | if (true) { | inline
+main-preload-dev | if (b == "wasm" && d.wasmMain) { | if (b == "wasm") { | inline
+main-preload-js | if (b == "wasm" && d.wasmMain) { | if (d.wasmMain) { | rel-csp-header,rel-no-jstag,rel-no-gc
+no-main-preload | preload(url(d.wasmMain), "fetch", true);\n |  | rel-preload
+no-crossorigin | l.crossOrigin = "anonymous";\n |  | rel-preload
+preload-query | preload(src(b), "script"); | preload(src(b) + "?x", "script"); | rel-wait
+
+# The path record and the dev checks.
+no-path | root.setAttribute("data-kilim-started", part);\n |  | tt-handoff
+path-release | if (dev) {\nroot.setAttribute | if (true) {\nroot.setAttribute | rel-silent
+no-start-check | if (dev) {\ndoc.addEventListener | if (false) {\ndoc.addEventListener | warn-css
+check-release | if (dev) {\ndoc.addEventListener | if (true) {\ndoc.addEventListener | rel-silent
+start-check-now | doc.addEventListener("DOMContentLoaded", check); | check(); | warn-start
+no-head-check | if (dev) {\ncheck();\n} | if (false) {\ncheck();\n} | warn-late
+head-check-release | if (dev) {\ncheck();\n} | if (true) {\ncheck();\n} | rel-late
+head-check-listen | if (dev) {\ncheck();\n} | if (dev) {\ndoc.addEventListener("DOMContentLoaded", check);\n} | warn-late
+check-first | start(b, "head");\nif (dev) {\ncheck();\n}\n} | start(b, "head");\n}\nif (dev) {\ncheck();\n} | inline,css-late
+no-check-css | warn("a stylesheet is before the head part");\n |  | warn-css
+css-any | if (n && n.compareDocumentPosition(h) & 4) { | if (n) { | css-inline
+css-first-null | if (n && n.compareDocumentPosition(h) & 4) { | if (n.compareDocumentPosition(h) & 4) { | inline
+no-check-meta | warn("a CSP meta is after the head part");\n |  | warn-meta
+meta-any | if (n && h.compareDocumentPosition(n) & 4) { | if (n) { | csp-meta
+meta-last-null | if (n && h.compareDocumentPosition(n) & 4) { | if (h.compareDocumentPosition(n) & 4) { | inline
+meta-first | n = n[n.length - 1]; | n = n[0]; | warn-meta
+no-check-start | warn("the start part is not in its place");\n |  | warn-start
+form-swap | var ok = h.src ? | var ok = !h.src ? | inline
+start-parent | n.parentNode == doc.body | true | warn-nest
+loop-file | while (ok && !h.src && | while (ok && | file
+start-sibling-true | ok = n.matches("script[data-start]"); | ok = true; | warn-start
+start-sibling-false | ok = n.matches("script[data-start]"); | ok = false; | two-inline
