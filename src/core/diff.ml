@@ -265,10 +265,12 @@ let control ctx d (cell : Dom.cell) (ve : _ View.element) =
 (* The browser can change [value] and [checked] with no write of the diff: the
    user types, a radio button unchecks the other buttons of its group, a select
    selects an option. Thus the diff compares the view value with the live
-   property, and writes only a different value. *)
+   property, and writes only a different value. A write of [value] stops an IME
+   composition, thus no [value] write while the cell is composing. *)
 let set_props (ops : _ Dom.t) (d, (cell : Dom.cell)) =
   ( match cell.value with
-  | Some x when not (String.equal x (ops.get_value d)) ->
+  | Some x when (not cell.composing) && not (String.equal x (ops.get_value d))
+    ->
       ops.set_property d (Value x)
   | Some _ | None ->
       () ) ;
@@ -383,7 +385,8 @@ let rec build : 'node 'msg. ('node, 'msg) ctx -> 'msg View.t -> 'node node =
       let cell =
         { Dom.events= Events (ve.events, ctx.dispatch)
         ; value= None
-        ; checked= None }
+        ; checked= None
+        ; composing= false }
       in
       ctx.ops.attach d cell ;
       List.iter (fun (k, v) -> ctx.ops.set_attribute d k v) ve.attrs ;

@@ -20,7 +20,10 @@ let setup () =
 let text o s = o.Dom.create_text s
 
 let cell evs dispatch =
-  {Dom.events= Events (evs, dispatch); value= None; checked= None}
+  { Dom.events= Events (evs, dispatch)
+  ; value= None
+  ; checked= None
+  ; composing= false }
 
 let ev ?(prevent_default = false) ?(stop = false) event payload f =
   {Dom.event; bubbles= true; prevent_default; stop; decode= Decode (payload, f)}

@@ -1,7 +1,8 @@
-; A real host on Brr: timers and a fetch with an abort, in the js_of_ocaml and
-; wasm_of_ocaml builds on node (a local HTTP server of node).
+; The host of kilim.browser: timers, a fetch with an abort and the order of its
+; queues, in the js_of_ocaml and wasm_of_ocaml builds on node (a local HTTP
+; server of node).
 
 (test
  (name test_browser)
  (modes js wasm)
- (libraries kilim brr))
+ (libraries kilim kilim.browser brr))

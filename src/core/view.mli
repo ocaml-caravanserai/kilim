@@ -14,9 +14,7 @@ type 'msg decode = 'msg Dom.decode =
 
 type 'msg handler = 'msg Dom.event =
   { event: string  (** The DOM event name. *)
-  ; bubbles: bool
-        (** [false] for an event for which a listener on its element is
-            necessary. *)
+  ; bubbles: bool  (** [false]: a listener on the element ([Event.bubbles]). *)
   ; prevent_default: bool
   ; stop: bool
   ; decode: 'msg decode }

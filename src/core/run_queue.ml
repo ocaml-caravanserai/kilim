@@ -16,6 +16,11 @@ let is_empty r = Queue.is_empty r.q
 
 let clear r = Queue.clear r.q
 
+let reset r =
+  r.depth <- 0 ;
+  r.draining <- false ;
+  r.in_turn <- false
+
 let with_turn r f =
   let outer = r.in_turn in
   r.in_turn <- true ;

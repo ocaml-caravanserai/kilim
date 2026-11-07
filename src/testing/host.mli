@@ -43,7 +43,8 @@ val create : ?cost:float -> ?frame_ms:int -> unit -> t
 val host : t -> Kilim.Private.Host.t
 
 val env : t -> Kilim.Private.Runtime.env
-(** The env of the runtime: {!host}, the hidden flag, and the cost. *)
+(** The env of the runtime: {!host}, the hidden flag, the cost, and [( == )] for
+    [same]. *)
 
 val now : t -> float
 

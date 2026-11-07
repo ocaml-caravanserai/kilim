@@ -291,6 +291,198 @@ let double () =
   is_true (ins p).pending ;
   is_false (ins p).scheduled
 
+(* Runtime.abort: a trap of wasm_of_ocaml leaves a turn open. Here update calls
+   abort in the turn: the turn ends, the error goes to the error handler, and
+   the app still works. Outside a turn, abort only reports. kilim.browser calls
+   abort only from a microtask, when no OCaml code of a turn runs, thus no live
+   outer turn is open then: native code cannot make that state, and no test here
+   has an outer turn. *)
+exception Boom
+
+type amsg = Abort | Inc
+
+let abort () =
+  let page = ref None and seen = ref [] in
+  let app =
+    App.make
+      ~init:(fun () -> (0, Cmd.none))
+      ~update:(fun m -> function
+        | Abort ->
+            (* The second abort finds no open turn: it only reports. *)
+            R.abort Boom ;
+            R.abort Boom ;
+            seen := (ins (Option.get !page)).in_turn :: !seen ;
+            (m, Cmd.none)
+        | Inc ->
+            (m + 1, Cmd.none) )
+      ~view:(fun m ->
+        El.div
+          [button ~id:"a" Abort "abort"; button ~id:"i" Inc (string_of_int m)] )
+      ()
+  in
+  let p = P.start app in
+  page := Some p ;
+  (* Outside a turn, abort only reports. *)
+  let turns = (stats p).turns in
+  R.abort Boom ;
+  equal int 1 (List.length (errors p)) ;
+  equal int turns (stats p).turns ;
+  is_false (ins p).turn_requested ;
+  P.click p (By.test_id "a") ;
+  equal (list bool) ~msg:"the turn ends at the abort" [false] !seen ;
+  is_true (match errors p with [Boom; Boom; Boom] -> true | _ -> false) ;
+  P.click p (By.test_id "i") ;
+  equal string "1" (F.text (P.find p (By.test_id "i"))) ;
+  settled p ;
+  quiet p ;
+  R.abort Boom ;
+  equal int 4 (List.length (errors p)) ;
+  (* A task that calls abort in its start, then ok: the result arrives. This
+     does not test the reset of the run queue (native code always leaves the
+     turn of the run queue): only the wasm pages of test/dom (D31, D35) test
+     it. *)
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () ->
+           (0, Cmd.task (Async.make (fun _ ~ok ~error:_ -> R.abort Boom ; ok 1))) )
+         ~update:(fun m n -> (m + n, Cmd.none))
+         ~view:(fun m -> txt (string_of_int m))
+         () )
+  in
+  equal int ~msg:"the request of the continuation" 1 (stats p).requests ;
+  quiet p ;
+  equal string "<div>1</div>" (P.html p)
+
+(* The list of the open turns with two runtimes. A trap leaves its turn open
+   with no OCaml catch: here an effect does the same, because its handler in the
+   outer update drops the continuation. The update of page A clicks a button of
+   page B, and the update of B leaves its turn so. The turn of A ends normally:
+   it removes its own entry, not the entry of B. Then the abort ends the turn of
+   B, and B works again. *)
+type _ Effect.t += Leave : unit Effect.t
+
+type omsg = Go | Inc_o
+
+let open_turns () =
+  let leave = ref true in
+  let pb =
+    P.start
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(fun m -> function
+           | Go ->
+               if !leave then begin
+                 leave := false ;
+                 Effect.perform Leave
+               end ;
+               (m + 1000, Cmd.none)
+           | Inc_o ->
+               (m + 1, Cmd.none) )
+         ~view:(fun m ->
+           El.div [button ~id:"t" Go "t"; button ~id:"i" Inc_o (string_of_int m)] )
+         () )
+  in
+  let pa =
+    P.start
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(fun m -> function
+           | Go ->
+               Effect.Deep.match_with
+                 (fun () -> P.click pb (By.test_id "t"))
+                 ()
+                 { retc= Fun.id
+                 ; exnc= raise
+                 ; effc=
+                     (fun (type a) (e : a Effect.t) ->
+                       match e with
+                       | Leave ->
+                           Some
+                             (fun (_ : (a, unit) Effect.Deep.continuation) -> ())
+                       | _ ->
+                           None ) } ;
+               (m + 100, Cmd.none)
+           | Inc_o ->
+               (m + 1, Cmd.none) )
+         ~view:(fun m ->
+           El.div [button ~id:"t" Go "t"; button ~id:"i" Inc_o (string_of_int m)] )
+         () )
+  in
+  P.click pa (By.test_id "t") ;
+  is_false ~msg:"the turn of A ends" (ins pa).in_turn ;
+  is_true ~msg:"the turn of B stays open" (ins pb).in_turn ;
+  R.abort Boom ;
+  is_false ~msg:"the abort ends the turn of B" (ins pb).in_turn ;
+  P.click pb (By.test_id "i") ;
+  equal string "1" (F.text (P.find pb (By.test_id "i"))) ;
+  equal string "100" (F.text (P.find pa (By.test_id "i")))
+
+(* abort gives its error to the error handler one time: also when it ends two
+   turns, and also when an earlier abort already ended them. The updates of
+   pages B and C leave their turns open (an effect, as a trap), both in one
+   update of page A. *)
+exception E1
+
+exception E2
+
+let abort_once () =
+  let leaving () =
+    let leave = ref true in
+    P.start
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(fun m () ->
+           if !leave then begin
+             leave := false ;
+             Effect.perform Leave
+           end ;
+           (m + 1, Cmd.none) )
+         ~view:(fun m -> button () (string_of_int m))
+         () )
+  in
+  let pb = leaving () and pc = leaving () in
+  let drop f =
+    Effect.Deep.match_with f ()
+      { retc= Fun.id
+      ; exnc= raise
+      ; effc=
+          (fun (type a) (e : a Effect.t) ->
+            match e with
+            | Leave ->
+                Some (fun (_ : (a, unit) Effect.Deep.continuation) -> ())
+            | _ ->
+                None ) }
+  in
+  let pa =
+    P.start
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(fun m () ->
+           drop (fun () -> P.click pb (By.test_id "b")) ;
+           drop (fun () -> P.click pc (By.test_id "b")) ;
+           (m + 1, Cmd.none) )
+         ~view:(fun m -> button () (string_of_int m))
+         () )
+  in
+  P.click pa (By.test_id "b") ;
+  is_true ~msg:"two open turns" ((ins pb).in_turn && (ins pc).in_turn) ;
+  (* The last host gets the errors. *)
+  R.abort E1 ;
+  is_false ~msg:"one abort ends the two turns"
+    ((ins pb).in_turn || (ins pc).in_turn) ;
+  (* The first abort empties the list: the second one does not end the turns of
+     B and C again (it would post a tick for each one). *)
+  P.stop pb ;
+  P.stop pc ;
+  H.idle (P.host pb) ;
+  H.idle (P.host pc) ;
+  R.abort E2 ;
+  is_true ~msg:"each error one time"
+    (match errors pa with [E1; E2] -> true | _ -> false) ;
+  is_false ~msg:"no second end of B" (ins pb).tick_pending ;
+  is_false ~msg:"no second end of C" (ins pc).tick_pending
+
 let tests =
   [ group "faults"
       [ test "a fault at each clock read" sweep
@@ -299,4 +491,7 @@ let tests =
       ; test "a fault of the continuation post" continuation_fault
       ; test "a fault of the microtask request" microtask_fault
       ; test "a fault in a click turn renders in a recovery turn" recovery
-      ; test "a second fault in the catch of the turn" double ] ]
+      ; test "a second fault in the catch of the turn" double
+      ; test "an abort ends the open turns" abort
+      ; test "a turn removes its own entry from the open turns" open_turns
+      ; test "an abort gives its error one time" abort_once ] ]

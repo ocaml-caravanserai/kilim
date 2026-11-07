@@ -1,4 +1,5 @@
-(* The async tasks of kilim on a real host on Brr (design section 12). *)
+(* The async tasks of kilim on the host of kilim.browser (design section 12),
+   and the order of its queues. *)
 
 open Brr
 open Kilim
@@ -13,31 +14,10 @@ let check name ok =
   print_endline ((if ok then "ok   " else "FAIL ") ^ name) ;
   if not ok then incr failures
 
-let queue_microtask f =
-  ignore
-    (Jv.call Jv.global "queueMicrotask"
-       [|Jv.callback ~arity:1 (fun _ -> f ())|] )
+(* The host of kilim.browser: the checks test the shipped host. *)
+let host = Kilim_browser.Private.host
 
-let set_timer ~ms f =
-  let id = G.set_timeout ~ms f in
-  fun () -> G.stop_timer id
-
-(* A macrotask: one MessageChannel message. *)
-let post_task f =
-  let ch = Jv.new' (Jv.get Jv.global "MessageChannel") [||] in
-  let port1 = Jv.get ch "port1" and port2 = Jv.get ch "port2" in
-  Jv.set port1 "onmessage"
-    (Jv.callback ~arity:1 (fun _ ->
-         ignore (Jv.call port1 "close" [||]) ;
-         f () ) ) ;
-  ignore (Jv.call port2 "postMessage" [|Jv.of_int 0|])
-
-let host =
-  { Private.Host.now_ms= (fun () -> Performance.now_ms G.performance)
-  ; set_timer
-  ; request_frame= (fun f -> ignore (G.request_animation_frame (fun _ -> f ())))
-  ; queue_microtask
-  ; post_task }
+let queue_microtask = host.queue_microtask
 
 let rec run = lazy (Q.create ~schedule:(fun () -> queue_microtask turn_now))
 
@@ -106,21 +86,67 @@ let with_server f =
         ; Jv.of_string "127.0.0.1"
         ; Jv.callback ~arity:1 (fun _ -> on_listen ()) |] )
 
-(* Each check finishes later; the program reports when all are done. *)
-let later ms f =
+(* Each check finishes later: [wait ()] gives the function that ends the check.
+   The program reports when all checks are done. *)
+let wait () =
   incr pending ;
-  ignore
-    (G.set_timeout ~ms (fun () ->
-         f () ;
-         decr pending ;
-         if !pending = 0 then begin
-           print_endline
-             ( if !failures = 0 then "all browser checks pass"
-               else "browser checks FAILED" ) ;
-           if !failures > 0 then exit 1
-         end ) )
+  fun f ->
+    f () ;
+    decr pending ;
+    if !pending = 0 then begin
+      print_endline
+        ( if !failures = 0 then "all browser checks pass"
+          else "browser checks FAILED" ) ;
+      (* The MessageChannel port of the host keeps node alive. *)
+      exit (if !failures > 0 then 1 else 0)
+    end
+
+let later ms f =
+  let finish = wait () in
+  ignore (G.set_timeout ~ms (fun () -> finish f))
+
+(* The queues of the host: three tasks run in order, each in its own task. A
+   microtask from a task runs before the next task. Then the count of the live
+   timers. The checks run in the callbacks, not after a fixed time: node runs a
+   timer that is due before a message of a MessageChannel. [k] starts the other
+   checks at the end, thus no other timer is live during these checks. *)
+let queues k =
+  let log = ref [] in
+  let add s = log := s :: !log in
+  let finish = wait () in
+  let live = Kilim_browser.Private.live_timers in
+  let timers () =
+    let base = live () in
+    let clear = host.set_timer ~ms:10 ignore in
+    let one = live () = base + 1 in
+    clear () ;
+    clear () ;
+    let cleared = live () = base in
+    let (_ : unit -> unit) =
+      host.set_timer ~ms:10 (fun () ->
+          finish (fun () ->
+              check
+                "the live timers: 1 after a set, 0 after a clear, 0 after a run"
+                (one && cleared && live () = base) ;
+              k () ) )
+    in
+    check "the live timers: 1 after the second set" (live () = base + 1)
+  in
+  host.post_task (fun () ->
+      add "t1" ;
+      host.queue_microtask (fun () -> add "m1") ) ;
+  host.post_task (fun () -> add "t2") ;
+  host.post_task (fun () ->
+      add "t3" ;
+      check
+        ( "three tasks in order, and a microtask before the next task: "
+        ^ String.concat " " (List.rev !log) )
+        (List.rev !log = ["t1"; "m1"; "t2"; "t3"]) ;
+      timers () )
 
 let () =
+  queues
+  @@ fun () ->
   (* A real timer. *)
   let fired = ref false in
   start (C.root ())

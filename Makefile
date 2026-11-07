@@ -3,7 +3,10 @@
 #   make build          Build all.
 #   make fmt            Format the code.
 #   make test           Run the tests: native code, js_of_ocaml and
-#                       wasm_of_ocaml (on node).
+#                       wasm_of_ocaml (on node, and in Chrome for test/dom).
+#   make size           Build the counter of bench/size in the release
+#                       profile, and compare its gzip size with
+#                       bench/size/budget (docs/budgets.md).
 #   make mutate         Test the mutants on the lines that changed since BASE.
 #   make mutate-all     Test all the mutants of the libraries.
 #   make mutate-report  Merge the verdicts of the last run of mutate or
@@ -44,7 +47,7 @@ SUITES := test/core test/view test/turn
 report = $(DUNE) exec $(MUTATE) windtrap -- mutants \
   $(if $(1),--since $(1)) $(if $(MIN_SCORE),--min-score $(MIN_SCORE))
 
-.PHONY: help build fmt test check-windtrap mutate mutate-all mutate-report mutate-arm
+.PHONY: help build fmt test size check-windtrap mutate mutate-all mutate-report mutate-arm
 
 help:
 	@sed -n '1,/^$$/p' Makefile | sed 's/^# \{0,1\}//'
@@ -57,6 +60,9 @@ fmt:
 
 test:
 	$(DUNE) test --force
+
+size:
+	$(DUNE) build --force @bench/size/size --profile release
 
 # A dev shell that started before a change of flake.nix keeps its old
 # windtrap, and an old windtrap has no --since.

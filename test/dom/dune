@@ -1,0 +1,44 @@
+; The DOM tests in a real headless Chrome (design section 14), in the
+; js_of_ocaml and wasm_of_ocaml builds. run.mjs drives Chrome over the DevTools
+; pipe, with node only. With no Chrome, it writes "SKIP: no Chrome", but CI
+; sets KILIM_REQUIRE_CHROME=1 and fails.
+
+(executables
+ (names smoke test_dom)
+ (modes js wasm)
+ (libraries kilim kilim.browser brr))
+
+(rule
+ (alias runtest)
+ (deps
+  run.mjs
+  smoke.bc.js
+  smoke.bc.wasm.js
+  (glob_files smoke.bc.wasm.assets/*.wasm)
+  test_dom.bc.js
+  test_dom.bc.wasm.js
+  (glob_files test_dom.bc.wasm.assets/*.wasm)
+  (env_var KILIM_CHROME)
+  (env_var KILIM_REQUIRE_CHROME))
+ (action
+  (run
+   node
+   run.mjs
+   smoke.bc.js
+   smoke.bc.wasm.js
+   test_dom.bc.js
+   test_dom.bc.wasm.js)))
+
+; The js_of_ocaml pages in a Chrome with no JIT, thus with no WebAssembly (as
+; Chrome with "JavaScript optimization" off): the apps start and work.
+
+(rule
+ (alias runtest)
+ (deps
+  run.mjs
+  smoke.bc.js
+  test_dom.bc.js
+  (env_var KILIM_CHROME)
+  (env_var KILIM_REQUIRE_CHROME))
+ (action
+  (run node run.mjs --js-flags=--jitless smoke.bc.js test_dom.bc.js)))
