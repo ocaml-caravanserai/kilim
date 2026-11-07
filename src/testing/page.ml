@@ -41,26 +41,91 @@ let root t = t.root
 
 let html t = Fake_dom.to_html t.root
 
-let rec collect p n acc =
-  let acc =
-    List.fold_left (fun acc c -> collect p c acc) acc (Fake_dom.children n)
+(* The nodes below [n] (not [n]) that satisfy [p], in the order of the document.
+   Thus a query never gives the mount element. *)
+let collect p n =
+  let rec go acc n =
+    let acc = if p n then n :: acc else acc in
+    List.fold_left go acc (Fake_dom.children n)
   in
-  if p n then n :: acc else acc
+  List.rev (List.fold_left go [] (Fake_dom.children n))
+
+let is_element n =
+  match Fake_dom.name n with "#text" | "#html" -> false | _ -> true
+
+let space c = c = ' ' || c = '\t' || c = '\n' || c = '\r' || c = '\012'
+
+(* Each run of white space becomes one space, and the white space at the start
+   and at the end goes. *)
+let collapse s =
+  String.split_on_char ' ' (String.map (fun c -> if space c then ' ' else c) s)
+  |> List.filter (fun w -> not (String.equal w ""))
+  |> String.concat " "
+
+let has_text s n = is_element n && String.equal (collapse (Fake_dom.text n)) s
+
+let named names n = is_element n && List.mem (Fake_dom.name n) names
+
+(* The first node in the order of the document. *)
+let first p n = match collect p n with x :: _ -> Some x | [] -> None
+
+(* The control of a label: the element of its [for], else the first control
+   inside it. *)
+let control t l =
+  match Fake_dom.attribute l "for" with
+  | Some id ->
+      first
+        (fun n ->
+          is_element n
+          && Option.equal String.equal (Fake_dom.attribute n "id") (Some id) )
+        t.root
+  | None ->
+      first (named ["input"; "select"; "textarea"; "button"]) l
+
+let one what s = function
+  | [n] ->
+      n
+  | [] ->
+      raise (Query ("no element with " ^ what ^ " " ^ s))
+  | _ ->
+      raise (Query ("more than one element with " ^ what ^ " " ^ s))
 
 let find t = function
   | By.Node n ->
       n
-  | By.Test_id s -> (
+  | By.Test_id s ->
       let has n =
         Option.equal String.equal (Fake_dom.attribute n "data-testid") (Some s)
       in
-      match collect has t.root [] with
-      | [n] ->
-          n
-      | [] ->
-          raise (Query ("no element with data-testid " ^ s))
-      | _ ->
-          raise (Query ("more than one element with data-testid " ^ s)) )
+      one "data-testid" s (collect has t.root)
+  | By.Text s ->
+      let s = collapse s in
+      let deepest n =
+        has_text s n && not (List.exists (has_text s) (Fake_dom.children n))
+      in
+      one "the text" s (collect deepest t.root)
+  | By.Label s ->
+      let s = collapse s in
+      let labels =
+        collect (fun n -> named ["label"] n && has_text s n) t.root
+      in
+      let aria =
+        collect
+          (fun n ->
+            match Fake_dom.attribute n "aria-label" with
+            | Some a ->
+                String.equal (collapse a) s
+            | None ->
+                false )
+          t.root
+      in
+      let controls = List.filter_map (control t) labels in
+      let all =
+        List.fold_left
+          (fun acc n -> if List.memq n acc then acc else n :: acc)
+          [] (controls @ aria)
+      in
+      one "the label" s all
 
 let rec under root n =
   match Fake_dom.parent n with

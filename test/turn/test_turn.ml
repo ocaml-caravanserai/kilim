@@ -415,4 +415,4 @@ let () =
        ( Test_values.tests @ Test_host.tests @ tests @ Test_errors.tests
        @ Test_latest.tests @ Test_event.tests @ Test_props.tests
        @ Test_leak.tests @ Test_limit.tests @ Test_faults.tests
-       @ Test_subs.tests @ Test_restore.tests ) )
+       @ Test_subs.tests @ Test_restore.tests @ Test_query.tests ) )
