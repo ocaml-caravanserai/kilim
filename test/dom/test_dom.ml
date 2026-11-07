@@ -1152,6 +1152,15 @@ let d40 () =
            El.span ~at:[At.data "testid" "b"] [txt (string_of_int m)] )
          () )
   in
+  (* The start turn can stop at the time limit (a slow machine, a Chrome with no
+     JIT): then the other tasks start in the next tasks. *)
+  let rec started n =
+    if List.length !resolves = 1000 || n = 0 then Fut.return ()
+    else
+      let* () = task () in
+      started (n - 1)
+  in
+  let* () = started 100 in
   check "D40 1,000 keys and promises before the results"
     ((ins a).latest_keys = 1000 && List.length !resolves = 1000) ;
   List.iter (fun r -> ignore (Jv.apply r [|Jv.of_int 1|])) !resolves ;

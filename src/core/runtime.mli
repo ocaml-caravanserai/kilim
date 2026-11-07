@@ -152,3 +152,12 @@ val abort : exn -> unit
     dead. A turn that ends normally removes only its own entry from the list of
     the open turns, thus a dead nested turn of another runtime stays in the list
     for [abort]. *)
+
+val abort_open : exn -> unit
+(** [abort_open e] is [abort e] if a turn did not end, else it does nothing (no
+    report). kilim.browser calls it from a microtask after an [error] event
+    whose [error] is null: WebKit 27.2 gives a trap of a [wasm:js-string]
+    function so. In a microtask, each open turn is dead, thus the abort is
+    correct for each such event. With no open turn, the event is not a trap of a
+    turn (for example a "Script error." of a script of another origin), and it
+    gives no report. *)

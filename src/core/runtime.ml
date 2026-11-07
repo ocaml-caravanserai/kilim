@@ -841,3 +841,5 @@ let abort e =
   let l = !active in
   active := [] ;
   List.iter (fun f -> f ()) l
+
+let abort_open e = match !active with [] -> () | _ :: _ -> abort e
