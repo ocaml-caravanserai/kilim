@@ -57,3 +57,22 @@ let () =
   let t = Private.Diff.mount dom ~parent:() ~dispatch:ignore (view [1; 2; 3]) in
   Private.Diff.patch t (view [3; 1; 4]) ;
   ignore (Private.Diff.children (Private.Diff.root t))
+
+(* The commands and the app. *)
+let () =
+  let cmd =
+    Cmd.batch
+      [ Cmd.none
+      ; Cmd.task (Async.return 1)
+      ; Cmd.map ~scope:"s"
+          (fun x -> x + 1)
+          (Cmd.latest ~key:"k" (Async.return 2)) ]
+  in
+  ignore (Private.Cmd.requests cmd) ;
+  ignore
+    (App.make
+       ~init:(fun () -> (0, cmd))
+       ~update:(fun m _ -> (m, Cmd.none))
+       ~view:(fun _ -> txt "")
+       ~fallback:(fun _ -> txt "")
+       () )

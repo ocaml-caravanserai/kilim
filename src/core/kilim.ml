@@ -13,6 +13,8 @@ module Private = struct
   module View = View
   module Dom = Dom
   module Diff = Diff
+  module Cmd = Cmd
+  module App = App
 end
 
 module Cancel = Cancel
@@ -49,3 +51,23 @@ let txt = View.txt
 module At = At
 module Ev = Ev
 module El = El
+
+module Cmd = struct
+  type 'msg t = 'msg Cmd.t
+
+  let none = Cmd.None
+
+  let batch l = Cmd.Batch l
+
+  let task t = Cmd.Task t
+
+  let latest ~key t = Cmd.Latest (key, t)
+
+  let map ?scope f c = Cmd.Map (scope, f, c)
+end
+
+module App = struct
+  type t = App.t
+
+  let make = App.make
+end
