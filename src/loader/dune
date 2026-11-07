@@ -1,0 +1,36 @@
+; The loader (docs/design.html, "The loader"): loader.js is the source of the
+; loader text. gen/embed.exe strips it and writes Loader_text, with the CSP
+; hash of the committed loader.csp. The library kilim_dist holds the logic of
+; the executable kilim (bin/), thus windtrap tests it natively (test/dist).
+
+(library
+ (name kilim_dist)
+ (instrumentation
+  (backend ppx_windtrap.coverage))
+ (instrumentation
+  (backend ppx_windtrap.mutate)))
+
+(rule
+ (targets loader_text.ml loader.txt)
+ (deps loader.js loader.csp)
+ (action
+  (run gen/embed.exe loader.js loader.csp loader_text.ml loader.txt)))
+
+; The CSP hash of the loader text, with node:crypto (only the tests use
+; node). When loader.js changes and loader.csp does not, this rule fails, and
+; `dune promote` writes the new hash. Thus each change of the hash is a line
+; in the diff of a pull request.
+
+(rule
+ (alias runtest)
+ (deps loader.txt)
+ (action
+  (progn
+   (with-stdout-to
+    loader.csp.gen
+    (run
+     node
+     -e
+     "const c = require('node:crypto'), f = require('node:fs'); process.stdout.write(\"'sha256-\" + c.createHash('sha256').update(f.readFileSync(process.argv[1])).digest('base64') + \"'\\n\")"
+     loader.txt))
+   (diff? loader.csp loader.csp.gen))))

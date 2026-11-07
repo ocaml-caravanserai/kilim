@@ -1,0 +1,5 @@
+; The generator of the loader text: a build tool, not installed, not
+; instrumented. A fault of the strip fails the Chrome tests of test/loader.
+
+(executable
+ (name embed))
