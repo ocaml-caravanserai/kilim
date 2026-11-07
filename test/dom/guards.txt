@@ -74,6 +74,12 @@ mount.ml    traps      the wasm_of_ocaml build, and     the two removed: the run
                                                         (the js build has no traps,
                                                         and the wasm build has
                                                         WebAssembly).
+trusted.ml  of_trusted  no trustedTypes: of_string    true: D38 (a JS string is not
+                                                        refused). false: D38 (no
+                                                        trustedTypes, a JS error).
+trusted.ml  of_trusted  isHTML                          true: D38 (a JS string is not
+                                                        refused). false: D38 (a
+                                                        TrustedHTML is refused).
 browser_host.ml  same  js_of_ocaml: Object.is           ( == ): D17 in the js build.
 browser_host.ml  same  other builds: ( == )             No test: Object.is gives the
                                                         same result under

@@ -24,6 +24,12 @@ end
 
 let run = Mount.run
 
+module Unsafe_html = struct
+  include Kilim.Unsafe_html
+
+  let of_trusted = Trusted.of_trusted
+end
+
 module Sub = struct
   include Kilim.Sub
 

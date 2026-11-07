@@ -18,5 +18,6 @@ let () =
     Kilim_browser.Private.stop a ;
     ignore Kilim_browser.Private.host ;
     ignore (Kilim_browser.Private.live_timers ()) ;
-    ignore (Kilim_browser.Private.cell Jv.null)
+    ignore (Kilim_browser.Private.cell Jv.null) ;
+    ignore (Kilim_browser.Unsafe_html.of_trusted Jv.null)
   end

@@ -1,6 +1,7 @@
 (* The real Dom.t of one app (design section 11). Each operation is one JS call,
    get or set with a literal name. The record holds the direct listener
-   functions of the app: [unlisten] removes the same function. *)
+   functions of the app: [unlisten] removes the same function. [innerHTML] gets
+   the TrustedHTML value of an Unsafe_html.t if it has one, else its text. *)
 
 module Dom = Kilim.Private.Dom
 
@@ -49,7 +50,11 @@ let make (st : Listen.state) : Jv.t Dom.t =
   ; set_inner_html=
       (fun n h ->
         Jv.set n "innerHTML"
-          (Jv.of_string (Kilim.Private.Unsafe_html.to_string h)) )
+          ( match Kilim.Private.Unsafe_html.native h with
+          | Some (Trusted.Trusted v) ->
+              v
+          | _ ->
+              Jv.of_string (Kilim.Private.Unsafe_html.to_string h) ) )
   ; attach= (fun n c -> Jv.set n "__kilim" (Jv.repr c))
   ; listen=
       (fun n e ~passive ->

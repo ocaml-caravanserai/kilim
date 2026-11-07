@@ -1,7 +1,7 @@
 (** kilim.browser: the browser part of kilim (docs/design.html).
 
-    This version has the browser host, the real DOM, the listeners, {!run} and
-    {!Sub.window}. *)
+    This version has the browser host, the real DOM, the listeners, {!run},
+    {!Unsafe_html.of_trusted} and {!Sub.window}. *)
 
 (** The internals for the tests. They can change at any time. *)
 module Private : sig
@@ -55,6 +55,27 @@ val run : mount:string -> Kilim.App.t -> unit
       if the element does not exist and the document is not "loading", or if the
       element has a live app. After the wait, a missing element goes to the
       error handler. *)
+
+(** {!Kilim.Unsafe_html}, and the values of Trusted Types (design section 13).
+*)
+module Unsafe_html : sig
+  include module type of struct
+    include Kilim.Unsafe_html
+  end
+
+  val of_trusted : Jv.t -> t
+  (** [of_trusted v] is the [TrustedHTML] value [v] and its HTML text
+      [String(v)]. [v] comes from the HTML policy of the app, with its own
+      sanitizer: kilim makes no HTML policy. The diff compares the text, and it
+      writes [v] to [innerHTML]. Thus a page with
+      [require-trusted-types-for 'script'] accepts it. If the page has no
+      [trustedTypes] (a browser with no Trusted Types), the value is
+      [Unsafe_html.of_string (String(v))]: thus a small polyfill that gives
+      strings works.
+
+      @raise Invalid_argument
+        if [trustedTypes] exists and [v] is not a [TrustedHTML]. *)
+end
 
 (** The subscriptions of {!Kilim.Sub}, and the subscriptions of the browser. *)
 module Sub : sig
