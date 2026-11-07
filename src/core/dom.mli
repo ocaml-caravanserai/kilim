@@ -46,7 +46,11 @@ type cell =
   ; mutable value: string option
         (** The value of the [value] property in the last view. *)
   ; mutable checked: bool option
-        (** The value of the [checked] property in the last view. *) }
+        (** The value of the [checked] property in the last view. *)
+  ; mutable composing: bool
+        (** An IME composition is active in the element. The diff and
+            [Diff.restore] do not write [value]: a write stops the composition.
+        *) }
 
 val handler : cell -> string -> handler option
 (** [handler cell name] is the handler for the DOM event name [name], for

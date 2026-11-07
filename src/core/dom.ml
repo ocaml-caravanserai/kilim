@@ -27,7 +27,8 @@ type events = Events : 'msg event list * ('msg -> unit) -> events
 type cell =
   { mutable events: events
   ; mutable value: string option
-  ; mutable checked: bool option }
+  ; mutable checked: bool option
+  ; mutable composing: bool }
 
 let bind dispatch (h : _ event) =
   match h.decode with

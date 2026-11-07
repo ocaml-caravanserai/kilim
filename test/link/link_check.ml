@@ -130,6 +130,33 @@ let () =
     ~parent:(fun () -> None)
     ~cell:(fun () -> None)
     () "click" ignore ;
+  let env =
+    { Private.Event.ops= dom
+    ; parent= (fun () -> None)
+    ; cell= (fun () -> None)
+    ; connected= (fun () -> true)
+    ; group= (fun () -> [])
+    ; toggles= (fun () -> true)
+    ; post_task= (fun f -> f ()) }
+  in
+  let read : type a. a Private.Dom.payload -> a = function
+    | Private.Dom.Unit ->
+        ()
+    | Private.Dom.String ->
+        ""
+    | Private.Dom.Key ->
+        ""
+    | Private.Dom.Bool ->
+        false
+  in
+  ignore
+    (Private.Event.dispatch env rt
+       { name= "click"
+       ; target= ()
+       ; composing= false
+       ; read
+       ; prevent= ignore
+       ; stop= ignore } ) ;
   ignore (Private.Runtime.stats rt) ;
   ignore (Private.Runtime.inspect rt) ;
   Private.Runtime.stop rt

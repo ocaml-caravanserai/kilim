@@ -6,32 +6,76 @@ module Runtime = Kilim.Private.Runtime
 type t =
   { host: Host.t
   ; doc: Fake_dom.t
-  ; ops: Fake_dom.node Dom.t
   ; root: Fake_dom.node
   ; rt: Fake_dom.node Runtime.t
+  ; env: Fake_dom.node Event.env
+  ; mutable undo: (unit -> unit) list
+        (** The undo of a prevented click, after the microtasks. *)
+  ; tasks: (unit -> unit) Queue.t  (** The tasks of [Event.dispatch]. *)
   ; mutable depth: int  (** The nested calls. *) }
 
 exception Query of string
 
-(* The microtasks run after a top-level call, not inside a turn. *)
+(* After a top-level call, not inside a turn: the microtasks, the undo of a
+   prevented click, then each task with the microtasks after it. This is the
+   order of a browser. *)
 let top t f =
   t.depth <- t.depth + 1 ;
   match f () with
   | () ->
       t.depth <- t.depth - 1 ;
-      if t.depth = 0 then Host.microtasks t.host
+      if t.depth = 0 then begin
+        Host.microtasks t.host ;
+        let undo = List.rev t.undo in
+        t.undo <- [] ;
+        List.iter (fun f -> f ()) undo ;
+        while not (Queue.is_empty t.tasks) do
+          (Queue.pop t.tasks) () ;
+          Host.microtasks t.host
+        done
+      end
   | exception e ->
       t.depth <- t.depth - 1 ;
       raise e
+
+let rec under root n =
+  match Fake_dom.parent n with
+  | Some p ->
+      p == root || under root p
+  | None ->
+      false
+
+(* The type of an input element, in lowercase. *)
+let input_type n =
+  if Fake_dom.ns n = Some Dom.Html && String.equal (Fake_dom.name n) "input"
+  then Option.map String.lowercase_ascii (Fake_dom.attribute n "type")
+  else None
+
+let toggles n =
+  match input_type n with
+  | Some ("checkbox" | "radio") ->
+      true
+  | Some _ | None ->
+      false
 
 let start ?host app =
   let host = match host with Some h -> h | None -> Host.create () in
   let doc = Fake_dom.create () in
   let root = Fake_dom.element "div" in
   let ops = Fake_dom.ops doc in
+  let tasks = Queue.create () in
+  let env =
+    { Event.ops
+    ; parent= Fake_dom.parent (* The mount element has no parent. *)
+    ; cell= Fake_dom.cell
+    ; connected= under root
+    ; group= Fake_dom.group
+    ; toggles
+    ; post_task= (fun f -> Queue.push f tasks) }
+  in
   let rt = Runtime.start (Host.env host) ops ~parent:root app in
   Host.microtasks host ;
-  {host; doc; ops; root; rt; depth= 0}
+  {host; doc; root; rt; env; undo= []; tasks; depth= 0}
 
 let host t = t.host
 
@@ -127,60 +171,31 @@ let find t = function
       in
       one "the label" s all
 
-let rec under root n =
-  match Fake_dom.parent n with
-  | Some p ->
-      p == root || under root p
-  | None ->
-      false
-
-(* The restore of a discrete event: the target and the other buttons of its
-   radio group, from their cells. It does nothing for a target that is not under
-   the mount element. *)
-let restore t target () =
-  if under t.root target then
-    List.iter
-      (fun n -> Option.iter (Diff.restore t.ops n) (Fake_dom.cell n))
-      (target :: Fake_dom.group target)
-
-(* The type of an input element, in lowercase. *)
-let input_type n =
-  if Fake_dom.ns n = Some Dom.Html && String.equal (Fake_dom.name n) "input"
-  then Option.map String.lowercase_ascii (Fake_dom.attribute n "type")
-  else None
-
-(* The handlers of one event, from the target up, in one turn. The payload comes
-   from the target: its live value, its live checked, or [key]. A discrete event
-   gives its restore. The result is [true] if a handler prevents the default. *)
-let event t ?(key = "") target name =
-  let prevented = ref false in
-  let fire (Dom.Handler h) =
-    if h.prevent_default then prevented := true ;
-    match h.payload with
+(* One event on [target]. The payload comes from the target: its live value, its
+   live checked, or [key]. The result is [true] if a handler prevents the
+   default. *)
+let send t ?(key = "") ?(composing = false) target name =
+  let read : type a. a Dom.payload -> a = function
     | Dom.Unit ->
-        h.fire ()
+        ()
     | Dom.String ->
-        h.fire (Fake_dom.value target)
+        Fake_dom.value target
     | Dom.Key ->
-        h.fire key
+        key
     | Dom.Bool ->
-        h.fire (Fake_dom.checked target)
+        Fake_dom.checked target
   in
-  let walk () =
-    Event.walk ~parent:Fake_dom.parent ~cell:Fake_dom.cell target name fire
-  in
-  if Event.discrete name then
-    Runtime.event t.rt Runtime.Discrete ~restore:(restore t target) walk
-  else Runtime.event t.rt Runtime.Macro walk ;
-  !prevented
+  Event.dispatch t.env t.rt
+    {name; target; composing; read; prevent= ignore; stop= ignore}
 
-let dispatch t by name = top t (fun () -> ignore (event t (find t by) name))
+let dispatch t by name = top t (fun () -> ignore (send t (find t by) name))
 
 (* As a browser does, a click changes [checked] before the handlers: a checkbox
    toggles, and a radio button becomes checked, which unchecks its group. If a
    handler prevents the default, the browser undoes the change after the
-   dispatch: the checkbox toggles back, and the radio button that was checked
-   before becomes checked again. *)
+   dispatch and its microtasks: the checkbox toggles back. The radio button that
+   was checked before becomes checked again, if it is still in the group of the
+   target. If not, the target stays checked (Chrome). *)
 let click t by =
   top t (fun () ->
       let target = find t by in
@@ -196,21 +211,27 @@ let click t by =
             in
             Fake_dom.browser_set target (Checked true) ;
             fun () ->
-              Fake_dom.browser_set target (Checked was) ;
-              Option.iter
-                (fun n -> Fake_dom.browser_set n (Checked true))
-                before
+              begin match before with
+              | Some n when not (List.memq n (Fake_dom.group target)) ->
+                  ()
+              | Some n ->
+                  (* n is in the group of the target: thus this unchecks the
+                     target. *)
+                  Fake_dom.browser_set n (Checked true)
+              | None ->
+                  Fake_dom.browser_set target (Checked was)
+              end
         | Some _ | None ->
             ignore
       in
-      if event t target "click" then undo () )
+      if send t target "click" then t.undo <- undo :: t.undo )
 
 (* The browser writes the value, then sends the event. *)
 let set_then t by v name =
   top t (fun () ->
       let target = find t by in
       Fake_dom.browser_set target (Value v) ;
-      ignore (event t target name) )
+      ignore (send t target name) )
 
 let type_ t by s =
   String.iter
@@ -219,7 +240,7 @@ let type_ t by s =
           let target = find t by in
           Fake_dom.browser_set target
             (Value (Fake_dom.value target ^ String.make 1 c)) ;
-          ignore (event t target "input") ) )
+          ignore (send t target "input") ) )
     s
 
 let input t by v = set_then t by v "input"
@@ -228,10 +249,32 @@ let change t by v = set_then t by v "change"
 
 let submit t by = dispatch t by "submit"
 
-let keydown t by key =
-  top t (fun () -> ignore (event t ~key (find t by) "keydown"))
+let keydown t ?composing by key =
+  top t (fun () -> ignore (send t ~key ?composing (find t by) "keydown"))
+
+let keyup t ?composing by key =
+  top t (fun () -> ignore (send t ~key ?composing (find t by) "keyup"))
 
 let focus t by = dispatch t by "focusin"
+
+let blur t by = dispatch t by "focusout"
+
+let event t by name = dispatch t by name
+
+(* The order of Chrome: compositionstart, then for each text an input event with
+   isComposing (the last text is the commit), then compositionend. One task for
+   each event. *)
+let compose t by texts =
+  let target = find t by in
+  let start = Fake_dom.value target in
+  dispatch t (By.node target) "compositionstart" ;
+  List.iter
+    (fun s ->
+      top t (fun () ->
+          Fake_dom.browser_set target (Value (start ^ s)) ;
+          ignore (send t ~composing:true target "input") ) )
+    texts ;
+  dispatch t (By.node target) "compositionend"
 
 let set_hidden t b =
   top t (fun () ->

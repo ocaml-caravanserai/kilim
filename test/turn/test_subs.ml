@@ -743,6 +743,10 @@ type how =
 type paction =
   | Change_click of string list * bool * how list
   | Change_focus of string list * bool * how list
+  | Change_blur of string list * bool * how list
+  | Change_check of string list * bool * how list * bool
+      (** A click on a checkbox, prevented if the flag is true. *)
+  | Change_compose of string list * bool * how list
   | Send of int
   | Burst
   | Wait of int
@@ -784,6 +788,12 @@ let pp_paction = function
       "click " ^ pp_change (l, e, h)
   | Change_focus (l, e, h) ->
       "focus " ^ pp_change (l, e, h)
+  | Change_blur (l, e, h) ->
+      "blur " ^ pp_change (l, e, h)
+  | Change_check (l, e, h, prevent) ->
+      (if prevent then "prevented check " else "check ") ^ pp_change (l, e, h)
+  | Change_compose (l, e, h) ->
+      "compose " ^ pp_change (l, e, h)
   | Send i ->
       "send " ^ string_of_int i
   | Burst ->
@@ -820,6 +830,12 @@ let gen_paction =
   Gen.frequency
     [ (3, Gen.map (fun (l, e, h) -> Change_click (l, e, h)) gen_change)
     ; (3, Gen.map (fun (l, e, h) -> Change_focus (l, e, h)) gen_change)
+    ; (1, Gen.map (fun (l, e, h) -> Change_blur (l, e, h)) gen_change)
+    ; ( 2
+      , Gen.map
+          (fun ((l, e, h), prevent) -> Change_check (l, e, h, prevent))
+          (Gen.pair gen_change Gen.bool) )
+    ; (1, Gen.map (fun (l, e, h) -> Change_compose (l, e, h)) gen_change)
     ; (3, Gen.map (fun i -> Send i) (Gen.int_range 0 20))
     ; (1, Gen.constant Burst)
     ; (2, Gen.map (fun n -> Wait n) (Gen.int_range 1 60))
@@ -938,7 +954,18 @@ let subs_law (cost, actions) =
     updates_since_view := 0 ;
     El.div
       [ button Changed (String.concat "," m.keys)
-      ; El.input ~at:[At.data "testid" "f"] ~ev:[Ev.focus Changed] ()
+      ; El.input
+          ~at:[At.data "testid" "f"]
+          ~ev:[Ev.focus Changed; Ev.blur Changed; Ev.input (fun _ -> Changed)]
+          ()
+      ; El.input
+          ~at:[At.data "testid" "c"; At.type_ "checkbox"; At.checked false]
+          ~ev:[Ev.check (fun _ -> Changed)]
+          ()
+      ; El.input
+          ~at:[At.data "testid" "cp"; At.type_ "checkbox"; At.checked false]
+          ~ev:[Ev.check ~prevent_default:true (fun _ -> Changed)]
+          ()
       ; raiser () ]
   in
   let p =
@@ -963,6 +990,13 @@ let subs_law (cost, actions) =
           change (l, e, hs) (fun () -> click p)
       | Change_focus (l, e, hs) ->
           change (l, e, hs) (fun () -> P.focus p (By.test_id "f"))
+      | Change_blur (l, e, hs) ->
+          change (l, e, hs) (fun () -> P.blur p (By.test_id "f"))
+      | Change_check (l, e, hs, prevent) ->
+          change (l, e, hs) (fun () ->
+              P.click p (By.test_id (if prevent then "cp" else "c")) )
+      | Change_compose (l, e, hs) ->
+          change (l, e, hs) (fun () -> P.compose p (By.test_id "f") ["a"; "ab"])
       | Send i -> (
         match List.nth_opt !tasks (i mod max 1 (List.length !tasks)) with
         | Some t ->
