@@ -325,7 +325,7 @@ let reentrant_raise () =
       ~init:(fun () -> (0, Cmd.none))
       ~update:(fun m -> function
         | Outer ->
-            (* Page raises for the Bool payload of Ev.check. *)
+            (* The message function of the handler of "c" raises. *)
             Option.iter (fun p -> P.click p (By.test_id "c")) !page ;
             (m + 1, Cmd.none)
         | Chk _ ->
@@ -335,7 +335,7 @@ let reentrant_raise () =
           [ button ~id:"o" Outer (string_of_int m)
           ; El.button
               ~at:[At.data "testid" "c"]
-              ~ev:[Ev.check (fun b -> Chk b)]
+              ~ev:[Ev.check (fun _ -> invalid_arg "a raise")]
               [txt "c"] ] )
       ()
   in
@@ -387,9 +387,9 @@ let fallback_write () =
         false ) ;
   quiet p
 
-(* An app with a button "b" and an input "in" whose handler has a payload: Page
-   raises for it inside the event, thus a click on "in" in a turn is a
-   re-entrant event that raises (a root catch). *)
+(* An app with a button "b" and an input "in" whose message function raises:
+   thus a click on "in" in a turn is a re-entrant event that raises (a root
+   catch). *)
 type pmsg = Go | Got of int
 
 let page_app ~page ~update ?(view = fun _ -> ()) ?fallback () =
@@ -400,8 +400,10 @@ let page_app ~page ~update ?(view = fun _ -> ()) ?fallback () =
       view m ;
       El.div
         [ button Go (string_of_int m)
-        ; El.input ~at:[At.data "testid" "in"] ~ev:[Ev.check (fun _ -> Go)] ()
-        ] )
+        ; El.input
+            ~at:[At.data "testid" "in"]
+            ~ev:[Ev.check (fun _ -> invalid_arg "a raise")]
+            () ] )
     ?fallback ()
   |> fun app ->
   let p = P.start app in
@@ -525,8 +527,10 @@ let end_action_in_batch kill () =
     El.div
       [ button ~id:"a" First (string_of_int n)
       ; button Second "b"
-      ; El.input ~at:[At.data "testid" "in"] ~ev:[Ev.check (fun _ -> First)] ()
-      ]
+      ; El.input
+          ~at:[At.data "testid" "in"]
+          ~ev:[Ev.check (fun _ -> invalid_arg "a raise")]
+          () ]
   in
   let p =
     P.start

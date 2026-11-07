@@ -16,6 +16,7 @@ module Private = struct
   module Dom = Dom
   module Diff = Diff
   module Cmd = Cmd
+  module Sub = Sub
   module App = App
   module Instance = Instance
   module Event = Event
@@ -69,6 +70,18 @@ module Cmd = struct
   let latest ~key t = Cmd.Latest (key, t)
 
   let map ?scope f c = Cmd.Map (scope, f, c)
+end
+
+module Sub = struct
+  type 'msg t = 'msg Sub.t
+
+  let none = Sub.None
+
+  let batch l = Sub.Batch l
+
+  let every = Sub.every
+
+  let run ~key f = Sub.Run (key, f)
 end
 
 module App = struct

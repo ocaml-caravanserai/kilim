@@ -1,7 +1,8 @@
 (** kilim: a browser application library for OCaml (docs/design.html).
 
     This version has the async tasks and the cancel tokens of section 12, the
-    view, the commands and the app of section 08, and the diff of section 11. *)
+    view, the commands, the subscriptions and the app of section 08, and the
+    diff of section 11. *)
 
 module Span = Span
 
@@ -33,6 +34,7 @@ module Private : sig
   module Dom = Dom
   module Diff = Diff
   module Cmd = Cmd
+  module Sub = Sub
   module App = App
   module Instance = Instance
   module Event = Event
@@ -702,6 +704,39 @@ module Cmd : sig
       not collide. *)
 end
 
+(** Subscriptions: the event sources that the model needs, with keys (design
+    section 08). [subs] of {!App.make} gives a set of subscriptions for a model.
+    After a render, the runtime compares the keys of the set with the keys of
+    the last set. A new key starts its subscription, a removed key stops it, and
+    a key that stays keeps it. *)
+module Sub : sig
+  type 'msg t = 'msg Private.Sub.t
+
+  val none : 'msg t
+
+  val batch : 'msg t list -> 'msg t
+
+  val every : Span.t -> 'msg -> 'msg t
+  (** [every span msg] sends [msg] [span] after its start, then [span] after
+      each delivery (a fixed delay, not a fixed rate). The key comes from
+      [span]: two [every] with the same span get their position among them in
+      the key. A key that stays sends the newest [msg].
+
+      @raise Invalid_argument
+        if [span] is zero. In [subs], this goes to the error scope of the
+        instance. *)
+
+  val run : key:string -> (('msg -> unit) -> unit Async.t) -> 'msg t
+  (** [run ~key f] starts the task [f send] at a render. [send m] sends the
+      message [m]. Put each parameter of [f] in [key], for example the room of a
+      chat. A key that stays keeps its task. A removed key cancels it, and then
+      [send] has no effect. If the task ends, the key stays and the task does
+      not start again. An error of the task goes to the error scope of the
+      instance.
+
+      @raise Invalid_argument for a duplicate key, in [subs]. *)
+end
+
 (** An application: the root instance. *)
 module App : sig
   type t = Private.App.t
@@ -710,12 +745,20 @@ module App : sig
        init:(unit -> 'model * 'msg Cmd.t)
     -> update:('model -> 'msg -> 'model * 'msg Cmd.t)
     -> view:('model -> 'msg View.t)
+    -> ?subs:('model -> 'msg Sub.t)
     -> ?fallback:(exn -> 'msg View.t)
     -> unit
     -> t
-  (** An error in [init], [update], [view], a task, a message function or a DOM
-      operation of the app unmounts the app: its tasks stop. Then the root shows
-      [fallback exn] (default: an empty text). The messages of the fallback do
-      nothing. The error goes to the error handler. An error in [fallback] goes
-      to the error handler, and the root then shows an empty text. *)
+  (** After each render of a new model, the runtime calls [subs] and starts the
+      new keys. If a turn ends with a render that is pending, and the model
+      changed since the last call of [subs], the runtime calls [subs] at the end
+      of the turn, stops the removed keys, and gives the new message functions
+      to the keys that stay. The new keys start at the render.
+
+      An error in [init], [update], [view], [subs], a task, a subscription, a
+      message function or a DOM operation of the app unmounts the app: its tasks
+      and its subscriptions stop. Then the root shows [fallback exn] (default:
+      an empty text). The messages of the fallback do nothing. The error goes to
+      the error handler. An error in [fallback] goes to the error handler, and
+      the root then shows an empty text. *)
 end

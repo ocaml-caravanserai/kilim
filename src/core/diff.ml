@@ -278,6 +278,8 @@ let set_props (ops : _ Dom.t) (d, (cell : Dom.cell)) =
   | Some _ | None ->
       ()
 
+let restore ops d cell = set_props ops (d, cell)
+
 (* [run ctx f] runs [f ()], then writes the properties of the controlled
    elements, in the order of their end tags in the document: a child before its
    parent. A mount and a patch thus write in the same order, and give the same

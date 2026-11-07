@@ -19,7 +19,8 @@ type stats =
   ; mutable stops: int
   ; mutable yields: int
   ; mutable warnings: int
-  ; mutable requests: int }
+  ; mutable requests: int
+  ; mutable restores: int }
 
 type inspect =
   { messages_left: int
@@ -32,6 +33,8 @@ type inspect =
   ; tick_pending: bool
   ; in_turn: bool
   ; latest_keys: int
+  ; sub_keys: int
+  ; restores_left: int
   ; token_children: int
   ; alive: bool }
 
@@ -75,6 +78,8 @@ type 'node t =
   ; run: Run_queue.t
   ; messages: item Queue.t
   ; requests: request Queue.t
+  ; restores: (unit -> unit) Queue.t
+        (** The restores of the discrete events, for the next render. *)
   ; root: 'node root
   ; stats: stats
   ; mutable in_turn: bool
@@ -108,11 +113,15 @@ let has_work rt =
     && Queue.is_empty rt.requests )
 
 (* A dead instance never becomes dirty. After a stop, no render: a stop can come
-   between a root catch and the write of its fallback. *)
+   between a root catch and the write of its fallback. A restore that waits
+   needs a render, also with no model change: for example a discrete event
+   inside a Macro turn. *)
 let wants rt =
   let (Root r) = rt.root in
   (not rt.stopped)
-  && (rt.pending || r.inst.dirty || (Option.is_some r.failed && not r.shown))
+  && ( rt.pending || r.inst.dirty
+     || (Option.is_some r.failed && not r.shown)
+     || not (Queue.is_empty rt.restores) )
 
 let clear_timer rt =
   let clear = rt.timer in
@@ -187,6 +196,8 @@ and body rt kind f =
     match settle rt with
     | Yield ->
         stop_at_limit rt ;
+        (* The continuation settles the work of the end actions. *)
+        early rt ;
         again := false
     | Done ->
         let want = wants rt in
@@ -194,7 +205,10 @@ and body rt kind f =
           render rt
         else begin
           if want then rt.pending <- true ;
-          again := false
+          (* The end actions of the early call can push work: the loop settles
+             it in this turn. *)
+          early rt ;
+          again := has_work rt
         end
   done
 
@@ -299,7 +313,7 @@ and update : type msg. _ -> msg Instance.t -> msg Instance.state -> msg -> unit
          the instance: then the model does not change. *)
       if model != s.model && inst.alive then begin
         s.model <- model ;
-        inst.dirty <- true
+        Instance.changed inst
       end ;
       match cmd with
       | (Cmd.None [@mutate off "a shortcut: the requests of Cmd.None are []"])
@@ -376,11 +390,144 @@ and render rt =
               with e -> catch_in_render rt e )
         | exception e ->
             catch_in_render rt e ) ;
+        (* The subscriptions of the new model. An error in [subs] writes the
+           fallback in this render. A root that died in the view has no state:
+           then the pass does nothing. *)
+        (try subs_pass rt r.inst ~start:true with e -> catch_in_render rt e) ;
         true
     | None, _ ->
         false
   in
-  if wrote then rt.stats.renders <- rt.stats.renders + 1
+  if wrote then rt.stats.renders <- rt.stats.renders + 1 ;
+  restore rt
+
+(* The restores run after the write, thus they compare with the newest view. A
+   restore that a restore pushes waits for the next render. A stop clears the
+   list. *)
+and restore rt =
+  let todo = Queue.create () in
+  Queue.transfer rt.restores todo ;
+  Queue.iter
+    (fun f ->
+      rt.stats.restores <- rt.stats.restores + 1 ;
+      try f () with e -> Report.error e )
+    todo
+
+(* The early call: a turn that leaves a render pending stops the removed keys
+   before the render. It runs only if the model changed since the last pass. A
+   dead instance has no state, thus the pass does nothing for it. *)
+and early rt =
+  let (Root r) = rt.root in
+  if r.inst.early_stale then
+    try subs_pass rt r.inst ~start:false with e -> catch rt e
+
+(* The subscription pass of a live instance. [subs] and the end actions of the
+   removed keys are user code: they can stop the page or make a root catch, thus
+   each leaf examines [alive] again. The new keys start only if [start]. *)
+and subs_pass : type msg. _ -> msg Instance.t -> start:bool -> unit =
+ fun rt inst ~start ->
+  match inst.state with
+  | Some (State {spec= {subs= Some f; _}; model}) ->
+      let leaves = Sub.leaves (f model) in
+      let wanted =
+        List.fold_left
+          (fun m -> function
+            | Sub.Run_leaf (k, _) ->
+                Instance.Subs.add (Sub.Key.Run k) () m
+            | Sub.Auto_leaf (k, _, _, _) ->
+                Instance.Subs.add (Sub.Key.Auto k) () m )
+          Instance.Subs.empty leaves
+      in
+      (* The key leaves the set before its cancel: an end action cannot find it
+         again. *)
+      Instance.Subs.iter
+        (fun k token ->
+          if not (Instance.Subs.mem k wanted) then begin
+            inst.runs <- Instance.Subs.remove k inst.runs ;
+            Cancel.cancel token
+          end )
+        inst.runs ;
+      Instance.Subs.iter
+        (fun k (Instance.Auto {token; _}) ->
+          if not (Instance.Subs.mem k wanted) then begin
+            inst.autos <- Instance.Subs.remove k inst.autos ;
+            Cancel.cancel token
+          end )
+        inst.autos ;
+      List.iter (fun leaf -> if inst.alive then keep rt inst ~start leaf) leaves ;
+      inst.early_stale <- false
+  | _ ->
+      ()
+
+(* A key that stays gets the newest message function. A new key starts if
+   [start]. *)
+and keep : type msg. _ -> msg Instance.t -> start:bool -> msg Sub.leaf -> unit =
+ fun rt inst ~start leaf ->
+  match leaf with
+  | Sub.Run_leaf (k, f) ->
+      let k = Sub.Key.Run k in
+      if start && not (Instance.Subs.mem k inst.runs) then start_run rt inst k f
+  | Sub.Auto_leaf (k, kind, task, on) -> (
+      let k = Sub.Key.Auto k in
+      match Instance.Subs.find_opt k inst.autos with
+      | Some (Instance.Auto x) -> (
+        match Type.Id.provably_equal x.kind kind with
+        | Some Type.Equal ->
+            x.on := on
+        | None ->
+            (* This does not occur: the key has the uid of the witness, thus one
+               key has one witness. *)
+            () )
+      | None ->
+          if start then start_auto rt inst k kind task on )
+
+(* The key goes into the set first, then the task starts. A [send] after the
+   cancel of the key pushes nothing. *)
+and start_run : type msg.
+    _ -> msg Instance.t -> Sub.Key.t -> ((msg -> unit) -> unit Async.t) -> unit
+    =
+ fun rt inst k f ->
+  let token = Cancel.child (Instance.token inst) in
+  inst.runs <- Instance.Subs.add k token inst.runs ;
+  let send m =
+    if not (Cancel.cancelled token) then
+      push rt (Item {inst; token= Some token; key= None; payload= Msg m})
+  in
+  launch rt inst token (f send)
+
+(* A payload takes the newest message function when it leaves the queue. *)
+and start_auto : type msg p.
+       _
+    -> msg Instance.t
+    -> Sub.Key.t
+    -> p Sub.kind
+    -> ((p -> unit) -> unit Async.t)
+    -> (p -> msg)
+    -> unit =
+ fun rt inst k kind task on ->
+  let token = Cancel.child (Instance.token inst) in
+  let on = ref on in
+  inst.autos <- Instance.Subs.add k (Instance.Auto {token; kind; on}) inst.autos ;
+  let map p = !on p in
+  let deliver p =
+    if not (Cancel.cancelled token) then
+      push rt
+        (Item {inst; token= Some token; key= None; payload= Result (p, map)})
+  in
+  launch rt inst token (task deliver)
+
+(* The function of [Sub.run] is user code: it can stop the page or make a root
+   catch, and then the token is cancelled. A task under a cancelled token does
+   not start, because [Async.return] gives its result also then. The end of a
+   task releases its token, and its key stays. An error unmounts the instance
+   when it leaves the queue, and the unmount cancels the token. *)
+and launch : type msg. _ -> msg Instance.t -> Cancel.t -> unit Async.t -> unit =
+ fun rt inst token task ->
+  if not (Cancel.cancelled token) then
+    Async.start ~host:rt.wrapped ~run:rt.run token task
+      ~ok:(fun () -> Cancel.release token)
+      ~error:(fun e ->
+        push rt (Item {inst; token= Some token; key= None; payload= Error e}) )
 
 and dispatch : type msg. _ -> msg Instance.t -> msg -> unit =
  fun rt inst m -> push rt (Item {inst; token= None; key= None; payload= Msg m})
@@ -523,6 +670,7 @@ let make env dom parent root =
     ; run
     ; messages= Queue.create ()
     ; requests= Queue.create ()
+    ; restores= Queue.create ()
     ; root
     ; stats=
         { turns= 0
@@ -535,7 +683,8 @@ let make env dom parent root =
         ; stops= 0
         ; yields= 0
         ; warnings= 0
-        ; requests= 0 }
+        ; requests= 0
+        ; restores= 0 }
     ; in_turn= false
     ; turn_requested= false
     ; continuing= false
@@ -559,7 +708,7 @@ let make env dom parent root =
   rt.wrapped <- wrap rt ;
   rt
 
-let start env dom ~parent (App.App {init; update; view; fallback}) =
+let start env dom ~parent (App.App {init; update; view; subs; fallback}) =
   let inst = Instance.make (Cancel.root ()) in
   let rt =
     make env dom parent
@@ -569,14 +718,22 @@ let start env dom ~parent (App.App {init; update; view; fallback}) =
       match init () with
       | model, cmd ->
           (* init cannot reach the runtime, thus the instance is alive here. *)
-          inst.state <- Some (State {spec= {update; view}; model}) ;
-          inst.dirty <- true ;
+          inst.state <- Some (State {spec= {update; view; subs}; model}) ;
+          Instance.changed inst ;
           command rt inst cmd
       | exception e ->
           catch rt e ) ;
   rt
 
-let event rt kind f = turn rt kind (fun () -> try f () with e -> catch rt e)
+(* The restore goes into the list before the turn, also for an event inside a
+   turn. After a stop, no restore. *)
+let event rt kind ?restore f =
+  ( match restore with
+  | Some g when not rt.stopped ->
+      Queue.push g rt.restores
+  | Some _ | None ->
+      () ) ;
+  turn rt kind (fun () -> try f () with e -> catch rt e)
 
 let visibility_changed rt =
   if rt.env.hidden () && rt.pending then begin
@@ -602,6 +759,7 @@ let stop rt =
         () ) ;
     Queue.clear rt.messages ;
     Queue.clear rt.requests ;
+    Queue.clear rt.restores ;
     Run_queue.clear rt.run ;
     clear_timer rt ;
     rt.pending <- false ;
@@ -622,6 +780,9 @@ let inspect rt =
   ; tick_pending= rt.tick_pending
   ; in_turn= rt.in_turn
   ; latest_keys= Instance.Latest.cardinal r.inst.latest
+  ; sub_keys=
+      Instance.Subs.cardinal r.inst.runs + Instance.Subs.cardinal r.inst.autos
+  ; restores_left= Queue.length rt.restores
   ; token_children=
       (match r.inst.token with Some t -> Cancel.children t | None -> 0)
   ; alive= r.inst.alive }

@@ -352,7 +352,7 @@ let error_law actions =
   and stopped = ref false in
   let in_update = ref R_none and in_view = ref R_none in
   let live () = match !page with Some p -> (ins p).alive | None -> true in
-  (* A re-entrant action inside a turn. The input "in" has a payload, thus Page
+  (* A re-entrant action inside a turn. The message function of the input "in"
      raises inside its event: a root catch. *)
   let reenter r =
     match !page with
@@ -443,7 +443,7 @@ let error_law actions =
       [ button E_clicked (string_of_int m)
       ; El.input
           ~at:[At.data "testid" "in"]
-          ~ev:[Ev.check (fun _ -> E_clicked)]
+          ~ev:[Ev.check (fun _ -> invalid_arg "a raise")]
           () ]
   in
   let fallback _ = button E_clicked "fallback" in
