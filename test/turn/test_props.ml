@@ -80,9 +80,13 @@ let gen_action =
 
 let gen =
   Gen.with_pp
-    (fun ppf l ->
-      Format.pp_print_string ppf (String.concat ", " (List.map pp_action l)) )
-    (Gen.list ~size:(Gen.int_range 1 30) gen_action)
+    (fun ppf (c, l) ->
+      Format.pp_print_string ppf
+        ( "cost " ^ string_of_float c ^ ": "
+        ^ String.concat ", " (List.map pp_action l) ) )
+    (Gen.pair
+       (Gen.of_list [1. /. 128.; 1.; 12.5])
+       (Gen.list ~size:(Gen.int_range 1 30) gen_action) )
 
 let senders = 40
 
@@ -96,8 +100,8 @@ let view m =
            (fun (k, g) -> El.li [txt (k ^ string_of_int g)])
            (List.sort compare m.last) ) ]
 
-let law actions =
-  let h = H.create () in
+let law (cost, actions) =
+  let h = H.create ~cost () in
   let plans = Queue.create () in
   let q = Queue.create () in
   (* The newest generation of each key, and the tasks with no key. *)
@@ -496,6 +500,8 @@ let error_law actions =
   equal int 0 i.continuations_left ;
   equal int 0 i.requests_left ;
   is_false i.turn_requested ;
+  is_false i.continuing ;
+  is_false i.tick_pending ;
   equal int 0 i.latest_keys ;
   equal int 0 i.token_children ;
   equal int 0 (H.live_timers h) ;

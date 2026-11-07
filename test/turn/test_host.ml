@@ -189,6 +189,45 @@ let idle_limit () =
   timer h 9 ignore ;
   raises_match (Exn.failure ~substring:"limit") (fun () -> H.idle ~limit:4 h)
 
+(* The cost of the env, spend, the clock reads and the faults. *)
+let cost () =
+  let h = H.create () in
+  let env = H.env h in
+  env.cost Private.Runtime.Update ;
+  env.cost Private.Runtime.Drain ;
+  equal float_exact (2. /. 128.) (H.now h) ;
+  let h = H.create ~cost:50. () in
+  (H.env h).cost Private.Runtime.Update ;
+  equal float_exact 50. (H.now h) ;
+  H.spend h 0.5 ;
+  equal float_exact 50.5 (H.now h) ;
+  List.iter
+    (fun cost ->
+      raises_match (Exn.invalid_arg ~substring:"cost") (fun () ->
+          H.create ~cost () ) )
+    [0.; 50.5; -1.; Float.nan]
+
+let faults () =
+  let h = H.create () in
+  let host = H.host h in
+  equal int 0 (H.clock_reads h) ;
+  ignore (host.now_ms ()) ;
+  H.fail_clock h 2 ;
+  ignore (host.now_ms ()) ;
+  raises H.Fault (fun () -> host.now_ms ()) ;
+  ignore (host.now_ms ()) ;
+  equal int 4 (H.clock_reads h) ;
+  let ran = ref 0 in
+  H.fail_post_task h 1 ;
+  raises H.Fault (fun () -> host.post_task (fun () -> incr ran)) ;
+  host.post_task (fun () -> incr ran) ;
+  H.fail_microtask h 2 ;
+  host.queue_microtask (fun () -> incr ran) ;
+  raises H.Fault (fun () -> host.queue_microtask (fun () -> incr ran)) ;
+  host.queue_microtask (fun () -> incr ran) ;
+  H.idle h ;
+  equal int ~msg:"a fault has no effect" 3 !ran
+
 let tests =
   [ group "host"
       [ test "timers run by due time, then by order of creation" timer_order
@@ -200,4 +239,6 @@ let tests =
       ; test "advance stops at the target" stops_at_target
       ; test "a raw callback that raises goes to errors" raw
       ; test "create installs the handlers" handlers
-      ; test "idle stops after the limit" idle_limit ] ]
+      ; test "idle stops after the limit" idle_limit
+      ; test "the cost of the env and spend" cost
+      ; test "the clock reads and the faults" faults ] ]

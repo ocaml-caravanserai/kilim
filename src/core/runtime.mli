@@ -15,14 +15,30 @@
     A turn never nests: an entry inside a turn only puts its messages in the
     queue. A push outside a turn asks the host for one turn in a microtask.
 
+    The time limit: the settle step stops when the busy sum of the turns since
+    the last tick passes 50 ms, or when the wall time since the last new clock
+    passes 1,000 ms. The check comes before each settle action and at each clock
+    read of the drain. Then the rest waits in the queues, the render is pending,
+    and a continuation in a new task goes on. The end of each turn posts one
+    tick, which sets the busy sum to 0. A turn gets a new clock if it is not a
+    [Micro] turn, or if no tick is pending. After 10 stops in 1 s, the runtime
+    writes one warning.
+
     An error in [init], [update], [view], a task, a message function or a DOM
     operation unmounts the root instance: its tasks stop, and the root shows the
     fallback. One more catch around the turn handles the errors outside these
     scopes, for example a fault of the host. *)
 
+(** A virtual cost for the test host. *)
+type cost =
+  | Update  (** A call of [update]. *)
+  | Drain  (** A clock read of the drain. *)
+
 type env =
   { host: Host.t
-  ; hidden: unit -> bool  (** [document.visibilityState = "hidden"]. *) }
+  ; hidden: unit -> bool  (** [document.visibilityState = "hidden"]. *)
+  ; cost: cost -> unit
+        (** The test host moves its virtual clock. A browser does nothing. *) }
 
 (** The kind of a turn. *)
 type kind =
@@ -33,17 +49,22 @@ type kind =
           [visibilitychange], a frame of a task: renders if a render is pending
           or if the turn changed the model. *)
   | Macro
-      (** Another DOM event, or a timer or a [post_task] callback of a task. *)
+      (** Another DOM event, a timer or a [post_task] callback of a task, or the
+          continuation after a stop at the limit. *)
   | Micro  (** A push outside a turn, or a microtask of a task. *)
 
 type stats =
   { mutable turns: int
+  ; mutable clocks: int  (** The new clocks. *)
   ; mutable messages: int  (** The calls of [update]. *)
   ; mutable dropped: int
   ; mutable views: int  (** The calls of [view]. *)
   ; mutable renders: int
         (** The render steps that called a view or wrote a fallback. *)
   ; mutable max_renders: int  (** The most renders in one turn. *)
+  ; mutable stops: int  (** The stops at the limit. *)
+  ; mutable yields: int  (** The posted continuations. *)
+  ; mutable warnings: int
   ; mutable requests: int  (** The microtask requests. *) }
 
 type inspect =
@@ -51,8 +72,10 @@ type inspect =
   ; continuations_left: int
   ; requests_left: int
   ; turn_requested: bool
+  ; continuing: bool  (** A continuation is posted. *)
   ; pending: bool  (** A render is pending. *)
   ; scheduled: bool  (** A frame, a timer or a task waits for the render. *)
+  ; tick_pending: bool
   ; in_turn: bool
   ; latest_keys: int  (** The keys in the [Cmd.latest] table of the root. *)
   ; token_children: int  (** The children of the token of the root. *)

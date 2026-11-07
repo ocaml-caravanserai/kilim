@@ -1,14 +1,24 @@
-type env = {host: Host.t; hidden: unit -> bool}
+type cost = Update | Drain
+
+type env = {host: Host.t; hidden: unit -> bool; cost: cost -> unit}
+
+let limit_ms = 50.
+
+let wall_ms = 1000.
 
 type kind = Discrete | Frame | Macro | Micro
 
 type stats =
   { mutable turns: int
+  ; mutable clocks: int
   ; mutable messages: int
   ; mutable dropped: int
   ; mutable views: int
   ; mutable renders: int
   ; mutable max_renders: int
+  ; mutable stops: int
+  ; mutable yields: int
+  ; mutable warnings: int
   ; mutable requests: int }
 
 type inspect =
@@ -16,8 +26,10 @@ type inspect =
   ; continuations_left: int
   ; requests_left: int
   ; turn_requested: bool
+  ; continuing: bool
   ; pending: bool
   ; scheduled: bool
+  ; tick_pending: bool
   ; in_turn: bool
   ; latest_keys: int
   ; token_children: int
@@ -67,12 +79,24 @@ type 'node t =
   ; stats: stats
   ; mutable in_turn: bool
   ; mutable turn_requested: bool
+  ; mutable continuing: bool  (** A continuation is posted. *)
   ; mutable pending: bool
   ; mutable scheduled: bool
   ; mutable gen: int  (** The render count: an older callback does nothing. *)
   ; mutable timer: unit -> unit  (** Clears the 100 ms render timer. *)
+  ; mutable tick_pending: bool
+  ; mutable busy: float  (** The busy sum of the turns since the tick. *)
+  ; mutable turn_start: float
+  ; mutable window_start: float  (** The start of the wall-time window. *)
+  ; mutable clocked: bool  (** The first clock read of the turn worked. *)
+  ; mutable accounted: bool  (** The turn added its time to [busy]. *)
+  ; mutable last_now: float  (** The last clock read of [over]. *)
+  ; stop_times: float Queue.t  (** The last 10 stops at the limit. *)
+  ; mutable warned: bool
   ; mutable renders_in_turn: int
   ; mutable stopped: bool }
+
+type settled = Done | Yield
 
 let max_renders = 3
 
@@ -144,29 +168,87 @@ and turn rt kind f =
   end
 
 and body rt kind f =
+  rt.clocked <- false ;
+  rt.accounted <- false ;
+  let now = rt.env.host.now_ms () in
+  (* A pending tick means that no browser task ran since the last turn. *)
+  if kind <> Micro || not rt.tick_pending then begin
+    rt.busy <- 0. ;
+    rt.window_start <- now ;
+    rt.stats.clocks <- rt.stats.clocks + 1
+  end ;
+  rt.turn_start <- now ;
+  rt.clocked <- true ;
   rt.stats.turns <- rt.stats.turns + 1 ;
   rt.renders_in_turn <- 0 ;
   f () ;
   let again = ref true in
   while !again do
-    settle rt ;
-    let want = wants rt in
-    if renders_now kind && rt.renders_in_turn < max_renders && want then
-      render rt
-    else begin
-      if want then rt.pending <- true ;
-      again := false
-    end
+    match settle rt with
+    | Yield ->
+        stop_at_limit rt ;
+        again := false
+    | Done ->
+        let want = wants rt in
+        if renders_now kind && rt.renders_in_turn < max_renders && want then
+          render rt
+        else begin
+          if want then rt.pending <- true ;
+          again := false
+        end
   done
+
+(* The busy sum of the turns since the tick, and the wall time since the new
+   clock. The check uses a strict [>], thus a turn with no work never stops. *)
+and over rt =
+  let now = rt.env.host.now_ms () in
+  rt.last_now <- now ;
+  rt.busy +. (now -. rt.turn_start) > limit_ms
+  || now -. rt.window_start > wall_ms
 
 (* A loop, not a recursion: js_of_ocaml has no general tail calls. *)
 and settle rt =
-  while has_work rt do
-    if not (Run_queue.is_empty rt.run) then Run_queue.drain rt.run
+  let r = ref None in
+  while Option.is_none !r do
+    if not (has_work rt) then r := Some Done
+    else if over rt then r := Some Yield
+    else if not (Run_queue.is_empty rt.run) then begin
+      Run_queue.drain ~over:(fun () -> rt.env.cost Drain ; over rt) rt.run ;
+      if not (Run_queue.is_empty rt.run) then r := Some Yield
+    end
     else if not (Queue.is_empty rt.messages) then
       process rt (Queue.pop rt.messages)
     else start_requests rt
-  done
+  done ;
+  Option.get !r
+
+(* The rest waits in the queues, and a continuation in a new task goes on. Each
+   stop goes into the warning ring, also a stop while a continuation is
+   posted. *)
+and stop_at_limit rt =
+  let now = rt.last_now in
+  rt.pending <- true ;
+  rt.stats.stops <- rt.stats.stops + 1 ;
+  Queue.push now rt.stop_times ;
+  if Queue.length rt.stop_times > 10 then ignore (Queue.pop rt.stop_times) ;
+  if Queue.length rt.stop_times = 10 && now -. Queue.peek rt.stop_times <= 1000.
+  then
+    begin if not rt.warned then begin
+      Report.warn
+        "kilim: 10 stops at the limit in 1 s. A loop of messages or tasks \
+         blocks the page." ;
+      rt.stats.warnings <- rt.stats.warnings + 1 ;
+      rt.warned <- true
+    end
+    end
+  else rt.warned <- false ;
+  if not rt.continuing then begin
+    rt.env.host.post_task (fun () ->
+        rt.continuing <- false ;
+        turn rt Macro ignore ) ;
+    rt.continuing <- true ;
+    rt.stats.yields <- rt.stats.yields + 1
+  end
 
 and process rt (Item {inst; token; key; payload}) =
   ( match (key, token) with
@@ -203,7 +285,9 @@ and process rt (Item {inst; token; key; payload}) =
   | _ ->
       rt.stats.dropped <- rt.stats.dropped + 1
 
-and count rt = rt.stats.messages <- rt.stats.messages + 1
+and count rt =
+  rt.env.cost Update ;
+  rt.stats.messages <- rt.stats.messages + 1
 
 (* A call of [update]. [Cmd.none] makes no request. *)
 and update : type msg. _ -> msg Instance.t -> msg Instance.state -> msg -> unit
@@ -373,15 +457,37 @@ and schedule rt =
   end ;
   rt.scheduled <- true
 
+and account rt =
+  let now = rt.env.host.now_ms () in
+  rt.busy <- rt.busy +. (now -. rt.turn_start) ;
+  rt.accounted <- true
+
+(* The end of each turn posts one tick. The tick is not a turn: it sets the busy
+   sum to 0 and posts nothing. *)
+and tick rt =
+  if not rt.tick_pending then begin
+    rt.env.host.post_task (fun () ->
+        rt.tick_pending <- false ;
+        rt.busy <- 0. ) ;
+    rt.tick_pending <- true
+  end
+
 and finish rt =
   if rt.pending && not rt.scheduled then schedule rt ;
+  account rt ;
+  tick rt ;
   rt.in_turn <- false
 
-(* The catch of the turn, for an error outside each scope. *)
+(* The catch of the turn, for an error outside each scope. It adds the time of
+   the turn only one time, and only if the first clock read of the turn
+   worked. *)
 and recover rt kind e =
   Report.error e ;
   rt.in_turn <- false ;
-  if has_work rt then request_turn rt ;
+  ( try if rt.clocked && not rt.accounted then account rt
+    with e -> Report.error e ) ;
+  (try tick rt with e -> Report.error e) ;
+  if (not rt.continuing) && has_work rt then request_turn rt ;
   if wants rt then begin
     rt.pending <- true ;
     match kind with
@@ -420,18 +526,32 @@ let make env dom parent root =
     ; root
     ; stats=
         { turns= 0
+        ; clocks= 0
         ; messages= 0
         ; dropped= 0
         ; views= 0
         ; renders= 0
         ; max_renders= 0
+        ; stops= 0
+        ; yields= 0
+        ; warnings= 0
         ; requests= 0 }
     ; in_turn= false
     ; turn_requested= false
+    ; continuing= false
     ; pending= false
     ; scheduled= false
     ; gen= 0
     ; timer= ignore
+    ; tick_pending= false
+    ; busy= 0.
+    ; turn_start= 0.
+    ; window_start= 0.
+    ; clocked= false
+    ; accounted= false
+    ; last_now= 0.
+    ; stop_times= Queue.create ()
+    ; warned= false
     ; renders_in_turn= 0
     ; stopped= false }
   in
@@ -496,8 +616,10 @@ let inspect rt =
   ; continuations_left= Run_queue.length rt.run
   ; requests_left= Queue.length rt.requests
   ; turn_requested= rt.turn_requested
+  ; continuing= rt.continuing
   ; pending= rt.pending
   ; scheduled= rt.scheduled
+  ; tick_pending= rt.tick_pending
   ; in_turn= rt.in_turn
   ; latest_keys= Instance.Latest.cardinal r.inst.latest
   ; token_children=

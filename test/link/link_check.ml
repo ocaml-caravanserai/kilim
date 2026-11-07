@@ -104,7 +104,7 @@ let () =
     ; queue_microtask= (fun f -> f ())
     ; post_task= (fun f -> f ()) }
   in
-  let env = {Private.Runtime.host; hidden= (fun () -> false)} in
+  let env = {Private.Runtime.host; hidden= (fun () -> false); cost= ignore} in
   let app =
     App.make
       ~init:(fun () -> (0, Cmd.latest ~key:"k" (Async.return 1)))

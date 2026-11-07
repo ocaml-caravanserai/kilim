@@ -12,9 +12,29 @@ module Due = Map.Make (struct
     match Float.compare a b with 0 -> Int.compare i j | c -> c
 end)
 
+exception Fault
+
+(* A fault at call number [at] of one host function. [at = 0]: no fault. *)
+type fault = {mutable calls: int; mutable at: int}
+
+let fault () = {calls= 0; at= 0}
+
+let call f =
+  f.calls <- f.calls + 1 ;
+  if f.calls = f.at then begin
+    f.at <- 0 ;
+    raise Fault
+  end
+
+let fail_at f n = f.at <- f.calls + n
+
 type t =
   { mutable now: float
+  ; cost: float
   ; frame_ms: float
+  ; clock: fault
+  ; posts: fault
+  ; micros: fault
   ; micro: (unit -> unit) Queue.t
   ; ready: (unit -> unit) Queue.t
   ; mutable timers: timer Due.t  (** The timers that wait. *)
@@ -27,11 +47,17 @@ type t =
   ; mutable errors: exn list  (** The newest first. *)
   ; mutable warnings: string list  (** The newest first. *) }
 
-let create ?(frame_ms = 16) () =
+let create ?(cost = 1. /. 128.) ?(frame_ms = 16) () =
+  if not (cost > 0. && cost <= 50.) then
+    invalid_arg "Kilim_testing.Host.create: cost" ;
   if frame_ms <= 0 then invalid_arg "Kilim_testing.Host.create: frame_ms" ;
   let t =
     { now= 0.
+    ; cost
     ; frame_ms= float frame_ms
+    ; clock= fault ()
+    ; posts= fault ()
+    ; micros= fault ()
     ; micro= Queue.create ()
     ; ready= Queue.create ()
     ; timers= Due.empty
@@ -159,9 +185,9 @@ let advance t span =
   done ;
   t.now <- Float.max t.now target
 
-let idle ?(limit = 1_000_000) t =
+let idle ?(limit = 1_000_000) ?(until = fun () -> false) t =
   let n = ref 0 and fin = ref false in
-  while not !fin do
+  while not (!fin || until ()) do
     if !n >= limit then failwith "Kilim_testing.Host.idle: the step limit" ;
     incr n ;
     if not (step t) then
@@ -173,14 +199,14 @@ let idle ?(limit = 1_000_000) t =
   done
 
 let host t : Kilim.Private.Host.t =
-  { now_ms= (fun () -> t.now)
+  { now_ms= (fun () -> call t.clock ; t.now)
   ; set_timer= (fun ~ms f -> add_timer t ~counted:true (float ms) f)
   ; request_frame=
       (fun f ->
         if List.is_empty t.frames then t.frame_req <- Some t.now ;
         t.frames <- f :: t.frames )
-  ; queue_microtask= (fun f -> Queue.push f t.micro)
-  ; post_task= (fun f -> Queue.push f t.ready) }
+  ; queue_microtask= (fun f -> call t.micros ; Queue.push f t.micro)
+  ; post_task= (fun f -> call t.posts ; Queue.push f t.ready) }
 
 let now t = t.now
 
@@ -202,4 +228,17 @@ let errors t = List.rev t.errors
 
 let warnings t = List.rev t.warnings
 
-let env t = {Kilim.Private.Runtime.host= host t; hidden= (fun () -> t.hidden)}
+let env t =
+  { Kilim.Private.Runtime.host= host t
+  ; hidden= (fun () -> t.hidden)
+  ; cost= (fun _ -> t.now <- t.now +. t.cost) }
+
+let spend t ms = t.now <- t.now +. ms
+
+let clock_reads t = t.clock.calls
+
+let fail_clock t n = fail_at t.clock n
+
+let fail_post_task t n = fail_at t.posts n
+
+let fail_microtask t n = fail_at t.micros n
