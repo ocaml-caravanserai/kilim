@@ -100,6 +100,10 @@ val value : node -> string
 val checked : node -> bool
 (** The live [checked] property, with no count. *)
 
+val group : node -> node list
+(** The other radio buttons of the group of a radio button (see the model
+    above), in the order of the document, or [[]]. *)
+
 val browser_set : node -> Kilim.Private.Dom.prop -> unit
 (** [browser_set node prop] writes a property as the browser does, for example
     when the user types: no count and no fault. The model above applies.

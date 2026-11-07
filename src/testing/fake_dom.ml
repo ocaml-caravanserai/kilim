@@ -283,21 +283,27 @@ let rec form n =
   | None ->
       None
 
-let settle n =
-  if is_radio n && n.checked then
+(* The other radio buttons of the group of [n], in the order of the document. *)
+let group n =
+  if is_radio n then (
     match attribute n "name" with
     | None | Some "" ->
-        ()
+        []
     | Some name ->
-        let f = form n in
+        let f = form n and acc = ref [] in
         iter_tree
           (fun m ->
             if
               m != n && is_radio m
               && Option.equal String.equal (attribute m "name") (Some name)
               && Option.equal ( == ) (form m) f
-            then m.checked <- false )
-          (tree_root n)
+            then acc := m :: !acc )
+          (tree_root n) ;
+        List.rev !acc )
+  else []
+
+let settle n =
+  if n.checked then List.iter (fun m -> m.checked <- false) (group n)
 
 let create_element t ns name =
   step t "create_element" ;

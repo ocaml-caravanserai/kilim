@@ -13,7 +13,8 @@
       it runs in a new task. After the view of a new model, the render calls
       [subs] (the subscription pass): it stops the removed keys, gives the new
       message functions to the keys that stay, and starts the new keys. A [send]
-      at a start is new work: the turn settles again.
+      at a start is new work: the turn settles again. At its end, the render
+      runs the restores of the discrete events.
     + The early call: if the turn ends with a render that is pending, and the
       model changed since the last pass, the turn calls [subs] again. It stops
       the removed keys and gives the new message functions to the keys that
@@ -74,7 +75,8 @@ type stats =
   ; mutable stops: int  (** The stops at the limit. *)
   ; mutable yields: int  (** The posted continuations. *)
   ; mutable warnings: int
-  ; mutable requests: int  (** The microtask requests. *) }
+  ; mutable requests: int  (** The microtask requests. *)
+  ; mutable restores: int  (** The restore functions that ran. *) }
 
 type inspect =
   { messages_left: int
@@ -88,6 +90,7 @@ type inspect =
   ; in_turn: bool
   ; latest_keys: int  (** The keys in the [Cmd.latest] table of the root. *)
   ; sub_keys: int  (** The recorded subscription keys of the root. *)
+  ; restores_left: int  (** The restore functions that wait. *)
   ; token_children: int  (** The children of the token of the root. *)
   ; alive: bool  (** The root instance is alive. *) }
 
@@ -98,10 +101,19 @@ val start : env -> 'node Dom.t -> parent:'node -> App.t -> 'node t
     the view as the last child of [parent]. The tasks get a host whose callbacks
     each run in a turn. *)
 
-val event : 'node t -> kind -> (unit -> unit) -> unit
-(** [event rt kind f] runs [f] (the handlers of one DOM event) in a turn. An
-    exception from [f] goes to the root catch. Inside a turn, it only runs [f]:
-    the messages go to the queue. *)
+val event : 'node t -> kind -> ?restore:(unit -> unit) -> (unit -> unit) -> unit
+(** [event rt kind ~restore f] runs [f] (the handlers of one DOM event) in a
+    turn. An exception from [f] goes to the root catch. Inside a turn, it only
+    runs [f]: the messages go to the queue.
+
+    A discrete event gives [restore]: it restores the controlled properties of
+    the target from the view (design section 11). It goes into the restore list,
+    which runs at the end of the next render step, in this turn or in a later
+    one. Thus a turn that stops at the limit before its render does not restore
+    from an older view. A turn renders also with no model change if a restore
+    waits. A restore must do nothing for a node that is not in the document. An
+    exception from it goes to the error handler, and the other restores still
+    run. A stop clears the list. *)
 
 val visibility_changed : 'node t -> unit
 (** If the page is hidden and a render is pending, a turn renders at once. *)

@@ -19,7 +19,8 @@ type stats =
   ; mutable stops: int
   ; mutable yields: int
   ; mutable warnings: int
-  ; mutable requests: int }
+  ; mutable requests: int
+  ; mutable restores: int }
 
 type inspect =
   { messages_left: int
@@ -33,6 +34,7 @@ type inspect =
   ; in_turn: bool
   ; latest_keys: int
   ; sub_keys: int
+  ; restores_left: int
   ; token_children: int
   ; alive: bool }
 
@@ -76,6 +78,8 @@ type 'node t =
   ; run: Run_queue.t
   ; messages: item Queue.t
   ; requests: request Queue.t
+  ; restores: (unit -> unit) Queue.t
+        (** The restores of the discrete events, for the next render. *)
   ; root: 'node root
   ; stats: stats
   ; mutable in_turn: bool
@@ -109,11 +113,15 @@ let has_work rt =
     && Queue.is_empty rt.requests )
 
 (* A dead instance never becomes dirty. After a stop, no render: a stop can come
-   between a root catch and the write of its fallback. *)
+   between a root catch and the write of its fallback. A restore that waits
+   needs a render, also with no model change: for example a discrete event
+   inside a Macro turn. *)
 let wants rt =
   let (Root r) = rt.root in
   (not rt.stopped)
-  && (rt.pending || r.inst.dirty || (Option.is_some r.failed && not r.shown))
+  && ( rt.pending || r.inst.dirty
+     || (Option.is_some r.failed && not r.shown)
+     || not (Queue.is_empty rt.restores) )
 
 let clear_timer rt =
   let clear = rt.timer in
@@ -390,7 +398,20 @@ and render rt =
     | None, _ ->
         false
   in
-  if wrote then rt.stats.renders <- rt.stats.renders + 1
+  if wrote then rt.stats.renders <- rt.stats.renders + 1 ;
+  restore rt
+
+(* The restores run after the write, thus they compare with the newest view. A
+   restore that a restore pushes waits for the next render. A stop clears the
+   list. *)
+and restore rt =
+  let todo = Queue.create () in
+  Queue.transfer rt.restores todo ;
+  Queue.iter
+    (fun f ->
+      rt.stats.restores <- rt.stats.restores + 1 ;
+      try f () with e -> Report.error e )
+    todo
 
 (* The early call: a turn that leaves a render pending stops the removed keys
    before the render. It runs only if the model changed since the last pass. A
@@ -649,6 +670,7 @@ let make env dom parent root =
     ; run
     ; messages= Queue.create ()
     ; requests= Queue.create ()
+    ; restores= Queue.create ()
     ; root
     ; stats=
         { turns= 0
@@ -661,7 +683,8 @@ let make env dom parent root =
         ; stops= 0
         ; yields= 0
         ; warnings= 0
-        ; requests= 0 }
+        ; requests= 0
+        ; restores= 0 }
     ; in_turn= false
     ; turn_requested= false
     ; continuing= false
@@ -702,7 +725,15 @@ let start env dom ~parent (App.App {init; update; view; subs; fallback}) =
           catch rt e ) ;
   rt
 
-let event rt kind f = turn rt kind (fun () -> try f () with e -> catch rt e)
+(* The restore goes into the list before the turn, also for an event inside a
+   turn. After a stop, no restore. *)
+let event rt kind ?restore f =
+  ( match restore with
+  | Some g when not rt.stopped ->
+      Queue.push g rt.restores
+  | Some _ | None ->
+      () ) ;
+  turn rt kind (fun () -> try f () with e -> catch rt e)
 
 let visibility_changed rt =
   if rt.env.hidden () && rt.pending then begin
@@ -728,6 +759,7 @@ let stop rt =
         () ) ;
     Queue.clear rt.messages ;
     Queue.clear rt.requests ;
+    Queue.clear rt.restores ;
     Run_queue.clear rt.run ;
     clear_timer rt ;
     rt.pending <- false ;
@@ -750,6 +782,7 @@ let inspect rt =
   ; latest_keys= Instance.Latest.cardinal r.inst.latest
   ; sub_keys=
       Instance.Subs.cardinal r.inst.runs + Instance.Subs.cardinal r.inst.autos
+  ; restores_left= Queue.length rt.restores
   ; token_children=
       (match r.inst.token with Some t -> Cancel.children t | None -> 0)
   ; alive= r.inst.alive }

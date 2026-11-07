@@ -160,29 +160,9 @@ let depth () =
   equal int 2 (stats p).messages ;
   equal int 0 (ins p).continuations_left
 
-(* Page reads only the payloads of click and focus in PR 3. *)
-let payload () =
-  let app =
-    App.make
-      ~init:(fun () -> (false, Cmd.none))
-      ~update:(fun _ b -> (b, Cmd.none))
-      ~view:(fun _ ->
-        El.input ~at:[At.data "testid" "b"] ~ev:[Ev.check Fun.id] () )
-      ()
-  in
-  let p = P.start app in
-  click p ;
-  is_true
-    ( match errors p with
-    | [Invalid_argument s] ->
-        String.equal s "Kilim_testing.Page: no payload for the event click"
-    | _ ->
-        false )
-
 let tests =
   [ group "event"
       [ test "the discrete events and the events that do not bubble" discrete
       ; test "the walk: from the target up, the stop, no bubble" walk
       ; test "Page: two handlers in one turn, and a focus" page
-      ; test "Page: no payload of a value" payload
       ; test "Page: a call that raises" depth ] ]

@@ -54,6 +54,12 @@ val mount :
 val patch : ('node, 'msg) t -> 'msg View.t -> unit
 (** [patch t view] changes the DOM and the retained tree of [t] to [view]. *)
 
+val restore : 'node Dom.t -> 'node -> Dom.cell -> unit
+(** [restore dom node cell] writes each view value of [cell] that is different
+    from the live property of [node], as a patch does. After a discrete event,
+    the platform calls it for the target of the event (design section 11): thus
+    a rejected input does not stay. *)
+
 val root : ('node, 'msg) t -> 'node node
 
 val dom : 'node node -> 'node
