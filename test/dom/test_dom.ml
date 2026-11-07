@@ -1114,6 +1114,82 @@ let d25 () =
     && children root = 0 ) ;
   Fut.return ()
 
+(* D40: tasks that wait for browser promises. 1,000 Cmd.latest tasks with
+   different keys, then each promise resolves: no key and no child of the root
+   token stays. Then 1,000 starts and stops of an app whose task waits for a
+   promise that never resolves: no timer, no listener and no DOM stays after
+   each stop. *)
+type pmsg = Resolved of int
+
+(* A task that waits for a new promise. [keep] gets its resolve function. *)
+let promise keep =
+  Async.make (fun _ ~ok ~error:_ ->
+      let p =
+        Jv.new'
+          (Jv.get Jv.global "Promise")
+          [|Jv.callback ~arity:2 (fun resolve _ -> keep resolve)|]
+      in
+      ignore
+        (Jv.call p "then" [|Jv.callback ~arity:1 (fun v -> ok (Jv.to_int v))|]) )
+
+let d40 () =
+  let resolves = ref [] in
+  let root, a =
+    start
+      (App.make
+         ~init:(fun () ->
+           ( 0
+           , Cmd.batch
+               (List.init 1000 (fun k ->
+                    Cmd.latest
+                      ~key:("k" ^ string_of_int k)
+                      (Async.map
+                         (fun v -> Resolved v)
+                         (promise (fun r -> resolves := r :: !resolves)) ) ) )
+           ) )
+         ~update:(fun m (Resolved v) -> (m + v, Cmd.none))
+         ~view:(fun m ->
+           El.span ~at:[At.data "testid" "b"] [txt (string_of_int m)] )
+         () )
+  in
+  check "D40 1,000 keys and promises before the results"
+    ((ins a).latest_keys = 1000 && List.length !resolves = 1000) ;
+  List.iter (fun r -> ignore (Jv.apply r [|Jv.of_int 1|])) !resolves ;
+  (* The results run in microtask turns, thus the render waits for the frame.
+     The frame of kilim was asked for first, thus it runs first. *)
+  let* () = task () in
+  let* () = frame () in
+  check "D40 after the results: no key and no child of the root token"
+    ( (ins a).latest_keys = 0 && (ins a).token_children = 0
+    && String.equal (text (q root "b")) "1000" ) ;
+  B.stop a ;
+  let doc_vis = count ~name:"visibilitychange" document in
+  let root = container () in
+  let clean = ref true in
+  for _ = 1 to 1000 do
+    let a =
+      B.start (el root)
+        (App.make
+           ~init:(fun () -> (0, Cmd.task (promise ignore)))
+           ~update:(fun _ v -> (v, Cmd.none))
+           ~view:(fun m -> El.span [txt (string_of_int m)])
+           () )
+    in
+    let started = (ins a).token_children = 1 in
+    B.stop a ;
+    clean :=
+      !clean && started
+      && count root = 0
+      && count ~name:"visibilitychange" document = doc_vis
+      && B.live_timers () = 0
+      && children root = 0
+  done ;
+  check
+    "D40 1,000 starts and stops with a promise that never resolves: each count \
+     0"
+    !clean ;
+  Fut.return ()
+
 (* D26: At.value on a progress element: its value property is a number. *)
 let d26 () =
   let root, a =
@@ -1786,6 +1862,7 @@ let tests =
   ; d37
   ; d38
   ; d39
+  ; d40
   ; d41 ]
 
 let () =
