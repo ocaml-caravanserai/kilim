@@ -49,6 +49,17 @@ listen.ml   handle     live = None                      No test: it does not occ
                                                         start sets the field before
                                                         it adds the listeners.
 ops.ml      create_element  Svg: createElementNS        createElement: D3 (svg).
+ops.ml      focused    activeElement of the root node   true: D41 in Firefox and WebKit,
+                       is the node                      which send no focusout on the
+                                                        move. PR 6c-2 runs the pages
+                                                        in Firefox and WebKit. In
+                                                        Chrome, no test: the focusout
+                                                        of the move ends the
+                                                        composition. false: D14, D15,
+                                                        D39, D41 (a write during the
+                                                        composition).
+ops.ml      focused    getRootNode, not document        document.activeElement: D41
+                                                        in a shadow root.
 ops.ml      set_inner_html  a TrustedHTML: the value     the text: tt-inline,
                                                         tt-handoff and two-tt of
                                                         test/loader (a CSP with

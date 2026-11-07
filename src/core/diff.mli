@@ -21,10 +21,12 @@
       select selects an option, a range input clamps its value. Thus the diff
       compares the view value with the live DOM property, as React does, and
       writes only a different value. The cell keeps the view value.
-    - While the cell of an element is composing (an IME composition), the diff
-      and {!restore} do not write [value], because a write stops the
-      composition. The cell keeps the new view value, and the restore at the end
-      of the composition writes it.
+    - While the cell of an element is composing (an IME composition) and the
+      element has the focus, the diff and {!restore} do not write [value],
+      because a write stops the composition. The cell keeps the new view value,
+      and the restore at the end of the composition writes it. A composition
+      cannot go on in an element with no focus: a write site that finds the flag
+      on an element with no focus clears the flag and writes.
     - The namespace of an element comes from its parent. [svg] starts the SVG
       namespace, and the children of [foreignObject] are HTML.
     - For an element, the order is: the attributes ([type] first), the

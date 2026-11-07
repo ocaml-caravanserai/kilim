@@ -23,13 +23,14 @@ type t =
   { mutable total: int
   ; mutable counts: int Smap.t
   ; mutable moves: int
-  ; mutable fail_at: int (* 0: no fault *) }
+  ; mutable fail_at: int (* 0: no fault *)
+  ; mutable focus: node option }
 
 exception Misuse of string
 
 exception Fault
 
-let create () = {total= 0; counts= Smap.empty; moves= 0; fail_at= 0}
+let create () = {total= 0; counts= Smap.empty; moves= 0; fail_at= 0; focus= None}
 
 let make kind text =
   { kind
@@ -73,6 +74,10 @@ let reset t =
   t.moves <- 0
 
 let fail_at t k = t.fail_at <- t.total + k
+
+let focus t n = t.focus <- n
+
+let focused t = t.focus
 
 let is_element n = match n.kind with Element _ -> true | Text | Html -> false
 
@@ -361,6 +366,24 @@ let get_checked t n =
   step t "get_checked" ;
   n.checked
 
+let has_focus t n =
+  need_element "focused" n ;
+  step t "focused" ;
+  match t.focus with Some f -> f == n | None -> false
+
+(* A move or a removal of [n] takes the focus away from [n] and from each node
+   inside it, as in a browser. *)
+let unfocus t n =
+  match t.focus with Some f when is_ancestor n f -> t.focus <- None | _ -> ()
+
+(* A removal of the children of [n]. *)
+let unfocus_children t n =
+  match t.focus with
+  | Some f when f != n && is_ancestor n f ->
+      t.focus <- None
+  | _ ->
+      ()
+
 (* A node that joins a tree: each checked radio button in it joins a group. *)
 let joined n = iter_tree settle n
 
@@ -380,6 +403,7 @@ let insert_before t parent n r =
       () ) ;
   step t op ;
   if move then t.moves <- t.moves + 1 ;
+  unfocus t n ;
   unlink n ;
   link parent n r ;
   joined n ;
@@ -388,6 +412,7 @@ let insert_before t parent n r =
 let remove t parent n =
   if not (is_child parent n) then misuse "remove" "not a child" ;
   step t "remove" ;
+  unfocus t n ;
   unlink n ;
   options_changed parent
 
@@ -397,17 +422,26 @@ let replace t parent n old =
   if Option.is_some n.parent then misuse op "the new node has a parent" ;
   step t op ;
   let r = old.next in
-  unlink old ; link parent n r ; joined n ; options_changed parent
+  unfocus t old ;
+  unlink old ;
+  link parent n r ;
+  joined n ;
+  options_changed parent
 
 let rec clear_children n =
   match n.first with Some c -> unlink c ; clear_children n | None -> ()
 
 let clear t n =
-  need_element "clear" n ; step t "clear" ; clear_children n ; options_changed n
+  need_element "clear" n ;
+  step t "clear" ;
+  unfocus_children t n ;
+  clear_children n ;
+  options_changed n
 
 let set_inner_html t n h =
   need_element "set_inner_html" n ;
   step t "set_inner_html" ;
+  unfocus_children t n ;
   clear_children n ;
   link n (make Html (Kilim.Unsafe_html.to_string h)) None ;
   options_changed n
@@ -438,6 +472,7 @@ let ops t : node Dom.t =
   ; set_property= set_property t
   ; get_value= get_value t
   ; get_checked= get_checked t
+  ; focused= has_focus t
   ; insert_before= insert_before t
   ; remove= remove t
   ; replace= replace t

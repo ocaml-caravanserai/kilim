@@ -61,6 +61,7 @@ type 'node t =
   ; set_property: 'node -> prop -> unit
   ; get_value: 'node -> string
   ; get_checked: 'node -> bool
+  ; focused: 'node -> bool
   ; insert_before: 'node -> 'node -> 'node option -> unit
   ; remove: 'node -> 'node -> unit
   ; replace: 'node -> 'node -> 'node -> unit

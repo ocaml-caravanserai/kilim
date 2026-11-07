@@ -654,39 +654,39 @@ let d39 () =
    compositionend. *)
 type mmsg = Swap | Typed_m of string | More
 
+let move_app () =
+  App.make
+    ~init:(fun () -> ((false, ""), Cmd.none))
+    ~update:(fun (sw, s) -> function
+      | Swap ->
+          ((not sw, s), Cmd.none)
+      | Typed_m v ->
+          ((sw, String.uppercase_ascii v), Cmd.none)
+      | More ->
+          ((sw, s ^ "!"), Cmd.none) )
+    ~view:(fun (sw, s) ->
+      let rows =
+        [ ( Key.int 1
+          , El.input
+              ~at:[At.data "testid" "i"; At.value s]
+              ~ev:[Ev.input (fun v -> Typed_m v)]
+              () )
+        ; (Key.int 2, button ~id:"sw" Swap "swap")
+        ; (Key.int 3, button ~id:"more" More "more") ]
+      in
+      (* The swap moves only the input: the two buttons keep their order. *)
+      View.keyed El.div (if sw then List.tl rows @ [List.hd rows] else rows) )
+    ()
+
+let composing i =
+  match B.cell i with Some c -> c.Private.Dom.composing | None -> false
+
 let d15 () =
-  let root, a =
-    start
-      (App.make
-         ~init:(fun () -> ((false, ""), Cmd.none))
-         ~update:(fun (sw, s) -> function
-           | Swap ->
-               ((not sw, s), Cmd.none)
-           | Typed_m v ->
-               ((sw, String.uppercase_ascii v), Cmd.none)
-           | More ->
-               ((sw, s ^ "!"), Cmd.none) )
-         ~view:(fun (sw, s) ->
-           let rows =
-             [ ( Key.int 1
-               , El.input
-                   ~at:[At.data "testid" "i"; At.value s]
-                   ~ev:[Ev.input (fun v -> Typed_m v)]
-                   () )
-             ; (Key.int 2, button ~id:"sw" Swap "swap")
-             ; (Key.int 3, button ~id:"more" More "more") ]
-           in
-           (* The swap moves only the input: the two buttons keep their
-              order. *)
-           View.keyed El.div (if sw then List.tl rows @ [List.hd rows] else rows) )
-         () )
-  in
+  let root, a = start (move_app ()) in
   let i = q root "i" in
   focus i ;
   let* () = ime "ka" in
-  let composing () =
-    match B.cell i with Some c -> c.Private.Dom.composing | None -> false
-  in
+  let composing () = composing i in
   check "D15 composing before the move" (composing ()) ;
   ignore (Jv.call (q root "sw") "click" [||]) ;
   check "D15 the move ends the composition, and the restore writes the value"
@@ -698,6 +698,44 @@ let d15 () =
     (String.equal (value i) "KA!") ;
   B.stop a ;
   Fut.return ()
+
+(* D41: a composition needs the focus. A synthetic compositionstart on the
+   focused input, an input, then a keyed move. Chrome sends focusout on the
+   move. Firefox and WebKit send no focusout and no compositionend: the render
+   of the move writes the value, because the input has no focus. The second run
+   has the app in a shadow root, whose activeElement is the input. *)
+let d41_in name root =
+  let a = B.start (el root) (move_app ()) in
+  let i = q root "i" in
+  focus i ;
+  dispatch i (js "new CompositionEvent('compositionstart', {bubbles: true})") ;
+  Jv.set i "value" (Jv.of_string "ka") ;
+  dispatch i (js "new InputEvent('input', {bubbles: true, isComposing: true})") ;
+  check
+    (name ^ " no value write while the input has the focus")
+    (composing i && String.equal (value i) "ka") ;
+  ignore (Jv.call (q root "sw") "click" [||]) ;
+  let* () = task () in
+  check
+    (name ^ " the move ends the composition and writes the value")
+    ((not (composing i)) && String.equal (value i) "KA") ;
+  ignore (Jv.call (q root "more") "click" [||]) ;
+  let* () = task () in
+  check
+    (name ^ " a model change after the move writes the value")
+    (String.equal (value i) "KA!") ;
+  B.stop a ;
+  Fut.return ()
+
+let d41 () =
+  let* () = d41_in "D41" (container ()) in
+  let host = container () in
+  let shadow =
+    Jv.call host "attachShadow" [|Jv.obj [|("mode", Jv.of_string "open")|]|]
+  in
+  let root = Jv.call document "createElement" [|Jv.of_string "div"|] in
+  ignore (Jv.call shadow "appendChild" [|root|]) ;
+  d41_in "D41 in a shadow root" root
 
 (* D16: a synthetic keydown with isComposing. *)
 let d16 () =
@@ -1747,7 +1785,8 @@ let tests =
   ; d36
   ; d37
   ; d38
-  ; d39 ]
+  ; d39
+  ; d41 ]
 
 let () =
   ignore (Lazy.force spy) ;

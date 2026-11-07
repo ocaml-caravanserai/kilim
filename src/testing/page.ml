@@ -255,19 +255,35 @@ let keydown t ?composing by key =
 let keyup t ?composing by key =
   top t (fun () -> ignore (send t ~key ?composing (find t by) "keyup"))
 
-let focus t by = dispatch t by "focusin"
+(* The browser moves the focus, then sends the event. *)
+let focus t by =
+  top t (fun () ->
+      let target = find t by in
+      Fake_dom.focus t.doc (Some target) ;
+      ignore (send t target "focusin") )
 
-let blur t by = dispatch t by "focusout"
+let blur t by =
+  top t (fun () ->
+      let target = find t by in
+      ( match Fake_dom.focused t.doc with
+      | Some n when n == target ->
+          Fake_dom.focus t.doc None
+      | Some _ | None ->
+          () ) ;
+      ignore (send t target "focusout") )
 
 let event t by name = dispatch t by name
 
-(* compositionstart, then an input event with isComposing for each text: one
-   task for each event. The order of Chrome sends the last text in the same way,
-   then compositionend in a new task. The order of Firefox sends the last text
-   (the commit) in one task: the live value, compositionend, then an input event
-   with isComposing false. *)
+(* The focus goes to the target with no event. Then compositionstart, and an
+   input event with isComposing for each text: one task for each event. The
+   order of Chrome sends the last text in the same way, then compositionend in a
+   new task. The order of Firefox sends the last text (the commit) in one task:
+   the live value, compositionend, then an input event with isComposing
+   false. *)
 let compose t ?(order = `Chrome) by texts =
   let target = find t by in
+  (* A composition occurs in the focused element. *)
+  Fake_dom.focus t.doc (Some target) ;
   let start = Fake_dom.value target in
   let composing s =
     top t (fun () ->

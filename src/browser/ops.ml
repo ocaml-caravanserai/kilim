@@ -39,6 +39,11 @@ let make (st : Listen.state) : Jv.t Dom.t =
             Jv.set n "checked" (Jv.of_bool b) )
   ; get_value= (fun n -> Listen.value_string (Jv.get n "value"))
   ; get_checked= (fun n -> Listen.truthy (Jv.get n "checked"))
+  ; focused=
+      (fun n ->
+        (* The root node: the document, or the shadow root of an app in a shadow
+           tree. *)
+        Js.same_node (Jv.get (Jv.call n "getRootNode" [||]) "activeElement") n )
   ; insert_before=
       (fun p n r ->
         ignore

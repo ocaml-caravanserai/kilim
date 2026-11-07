@@ -32,7 +32,12 @@
       property is [false] until a write. The model ignores the [checked]
       attribute and the [form] attribute.
     - As in a browser, the case of the [type] attribute is not important:
-      [type="RANGE"] is a range input. *)
+      [type="RANGE"] is a range input.
+    - The document has one focused element or none. Only {!focus} gives the
+      focus. An [insert_before], [remove] or [replace] of the focused element or
+      of one of its ancestors takes the focus away, as in a browser. A [clear]
+      or [set_inner_html] of an ancestor does the same. The fake DOM sends no
+      event. *)
 
 (** A node: an element, a text node, or the HTML of [set_inner_html]. *)
 type node
@@ -74,6 +79,15 @@ val reset : t -> unit
 val fail_at : t -> int -> unit
 (** [fail_at t k] makes operation number [k] from now raise {!Fault}, with no
     effect. [k] starts at 1. The operation after it works again. *)
+
+(** {1 The focus} *)
+
+val focus : t -> node option -> unit
+(** [focus t n] gives the focus to the element [n], or to no element with
+    [None], with no count and no event. *)
+
+val focused : t -> node option
+(** The focused element, with no count. *)
 
 (** {1 The tree} *)
 

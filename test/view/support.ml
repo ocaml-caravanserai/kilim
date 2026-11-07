@@ -131,6 +131,7 @@ let logged (ops : 'n Private.Dom.t) (log : string list ref) : 'n Private.Dom.t =
   ; set_property= (fun d p -> add "prop" ; ops.set_property d p)
   ; get_value= (fun d -> add "get value" ; ops.get_value d)
   ; get_checked= (fun d -> add "get checked" ; ops.get_checked d)
+  ; focused= (fun d -> add "focused" ; ops.focused d)
   ; insert_before= (fun d n r -> add "insert" ; ops.insert_before d n r)
   ; listen=
       (fun d e ~passive ->
