@@ -1,15 +1,41 @@
 # Budgets
 
-The budgets of kilim (section 16 of [design.html](design.html)). CI checks
-the size budget on each push to main and on each pull request.
+The budgets of kilim (section 16 of [design.html](design.html)). `make
+budgets` is the budget gate. CI runs it on each push to main and on each
+pull request.
+
+## The budgets and their checks
+
+| Budget | Check in CI | Where | State |
+|---|---|---|---|
+| Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size` and the todo example | Done |
+| DOM operations for each action | Yes, each change | `test/view/test_budget.ml`: the four actions, exact counts. `examples/todo/test/test_counts.ml`: three actions of the todo example | Done |
+| Allocations for each action | Yes, each change | `bench/alloc`: the allocated words of the four actions | Done |
+| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys), and test D25 of `test/dom` (listeners, timers, DOM, in Chrome) | Done |
+| Token release | No | | Waits for Phase 2: the rows with a token are component instances |
+| Linked modules | Yes, each change | `test/link` (kilim, kilim.browser) | Done |
+| Time of the actions, wasm start-up time | No | Each night on fixed hardware | Waits: no fixed hardware yet |
+
+The leak tests and the link check run in the CI step "Test", with the other
+tests. `make budgets` runs the size, the allocation and the DOM operation
+checks.
 
 ## Size
 
-`make size` builds `bench/size/counter.ml` in the release profile and runs
-`bench/size/size.mjs`. The program is a counter: one int model, two buttons,
-one text, and `Kilim_browser.run`. The script gives the gzip size (level 9,
-the `zlib` module of node) of each file, and compares it with
-`bench/size/budget`. A larger file is a failure.
+`make size` (and `make budgets`) builds two programs in the release profile
+and runs `bench/size/size.mjs`:
+
+- `counter`: `bench/size/counter.ml`, one int model, two buttons, one text,
+  and `Kilim_browser.run`. This program is the fixed reference of the size
+  budget. The open reference sizes compare with it.
+- `example-todo`: the todo example (`examples/todo`), a real app.
+
+The script gives the gzip size (level 9, the `zlib` module of node) of each
+file, and compares it with `bench/size/budget`. Each line of the budget file
+is `PROGRAM FILE BYTES`. A larger file is a failure. A budget line with no
+measured file, and a measured file with no budget line, are failures too.
+`kilim dist` copies the build files with no change, thus these sizes are also
+the sizes of the release files.
 
 The budget is the measured size plus 5 %, rounded up to 500 bytes. When a
 change of kilim makes a file larger, examine the linked modules first. Change
@@ -17,23 +43,77 @@ the budget only for a known cost, and write the cost here.
 
 Measured with OCaml 5.5.1, js_of_ocaml and wasm_of_ocaml 6.4.1, Brr 0.0.9:
 
-| File | Measured | Budget |
-|---|---|---|
-| `counter.bc.js` (js_of_ocaml) | 36,647 bytes | 38,500 bytes |
-| The main `.wasm` file (wasm_of_ocaml) | 35,916 bytes | 37,000 bytes |
-| `counter.bc.wasm.js` (the launcher) | 6,846 bytes | 7,500 bytes |
+| Program | File | Measured | Budget |
+|---|---|---|---|
+| `counter` | `counter.bc.js` (js_of_ocaml) | 36,774 bytes | 38,500 bytes |
+| `counter` | The main `.wasm` file (wasm_of_ocaml) | 36,026 bytes | 37,000 bytes |
+| `counter` | `counter.bc.wasm.js` (the launcher) | 6,847 bytes | 7,500 bytes |
+| `example-todo` | `main.bc.js` (js_of_ocaml) | 38,578 bytes | 41,000 bytes |
+| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 38,469 bytes | 40,500 bytes |
+| `example-todo` | `main.bc.wasm.js` (the launcher) | 6,843 bytes | 7,500 bytes |
 
 The baseline is a minimal Brr program, because Brr links `Fun` and thus
 `Printf` (design section 13): 23,845 bytes (js_of_ocaml), and 17,217 bytes
 for the main `.wasm` file plus 6,482 bytes for the launcher (wasm_of_ocaml).
-Thus kilim adds about 12.8 KB (js_of_ocaml) and 18.7 KB (wasm_of_ocaml) to
+Thus kilim adds about 12.9 KB (js_of_ocaml) and 18.8 KB (wasm_of_ocaml) to
 the counter. The Brr pull request that replaces `Fun.id` would make the baseline
-smaller by about 10 KB.
+smaller by about 10 KB. The todo example adds about 2 KB to the counter.
 
 The same rule checks the generated code: the release `counter.bc.js` contains
 `.insertBefore(`, `.setAttribute(`, `.__kilim` and `.addEventListener(` (the
 DOM operations are direct calls), and the launcher contains
 `"meth_call_2_insertBefore"` and `"get___kilim"`.
+
+## DOM operations
+
+`test/view/test_budget.ml` gives the exact count of each DOM operation on
+the fake DOM of `kilim.testing`, for the four actions of design section 16:
+create 1,000 rows, change 1 row of 1,000, swap 2 rows of 1,000, and remove
+all rows of 1,000. A change of a count is a change of the budget.
+
+`examples/todo/test/test_counts.ml` gives the counts of three actions of the
+todo example on a list of 100 items. The counts include the reads of the
+live properties:
+
+| Action | DOM operations |
+|---|---|
+| Toggle 1 item | `get_checked` 102, `get_value` 1, `set_attribute` 1, `set_text` 1 |
+| Add 1 item (the submit) | `attach` 4, `create_element` 4, `create_text` 2, `get_checked` 101, `get_value` 1, `insert_before` 6, `set_attribute` 3, `set_property` 1, `set_text` 1 |
+| Delete 1 item | `get_checked` 99, `get_value` 1, `remove` 1, `set_text` 1 |
+
+## Allocations
+
+`bench/alloc` counts the words that the diff allocates in the four actions
+of the DOM operation budget. The count is all the allocated words:
+`Gc.counters` gives the minor words, the promoted words and the major words,
+and the count is minor plus major, less promoted. A large array goes
+directly to the major heap, thus the minor words alone are not sufficient.
+The DOM operations of the test do nothing and allocate nothing, thus the
+count is the count of kilim. The test makes the new view before the first
+read, thus the count is the patch only.
+
+The count finds regressions only. It has no target, because it does not show
+the cost under js_of_ocaml. The ceiling is the measured count plus 5 %, plus
+10 words, rounded up to a multiple of 10. Each line of the output gives the
+count, its ceiling and the new ceiling of the count.
+
+The count depends on the compiler. The first line of `bench/alloc/budget` is
+the version of OCaml of the counts (`ocaml 5.5.1`). With another version, the
+test fails and tells you to write the version and the new ceilings. The test
+runs only in the dev profile and with no flambda. It is not in `test/view`,
+because `make mutate` builds `test/view` with the mutation instrumentation,
+and the instrumentation changes the counts.
+
+Measured with OCaml 5.5.1, no flambda:
+
+| Action | Allocated words | Ceiling |
+|---|---|---|
+| Create 1,000 rows | 62,116 | 65,240 |
+| Change 1 row of 1,000 | 11,057 | 11,620 |
+| Swap 2 rows of 1,000 | 20,114 | 21,130 |
+| Remove all rows of 1,000 | 1,033 | 1,100 |
+
+The counts are the same in each run.
 
 ## The loader text
 
@@ -55,3 +135,8 @@ and the js-framework-benchmark results of Elm and Preact.
   live property, converts it to an OCaml string, and compares it with the
   view value. kilim.browser keeps no cache of the value. A cache can come
   later, with a measurement that shows the need.
+- A list of N controlled checkboxes reads N live `checked` properties at
+  each patch of the list, also for an event in another field. In the todo
+  example with 100 items, one `input` event in the draft reads 100 `checked`
+  properties and 2 `value` properties, and writes nothing. Components (Phase
+  2) and `View.lazy_` (after version 1) can skip the list.

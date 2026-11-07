@@ -34,10 +34,11 @@ jobs:
         env:
           KILIM_REQUIRE_CHROME: "1"
         run: nix develop -c dune runtest --force
-      # The gzip size of the counter in the release profile, against
-      # bench/size/budget, and the check of the generated code.
-      - name: Size budget
-        run: nix develop -c make size
+      # The budget gate (docs/budgets.md): the gzip sizes in the release
+      # profile against bench/size/budget, the check of the generated code,
+      # the allocation counts and the exact DOM operation counts.
+      - name: Budget gate
+        run: nix develop -c make budgets
       # The tests of the release files: kilim dist on the release builds of
       # the loader tests and of the examples, in Chrome.
       - name: Release tests

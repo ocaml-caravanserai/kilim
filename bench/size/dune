@@ -1,6 +1,7 @@
-; The size budget (docs/budgets.md): the gzip size of a counter in the release
-; profile, in the two builds, and the check of the generated code. `make size`
-; runs it.
+; The size budget (docs/budgets.md): the gzip size of the counter of bench/size
+; and of the todo example in the release profile, in the two builds, and the
+; check of the generated code of the counter. `make size` and `make budgets`
+; run it.
 
 (executable
  (name counter)
@@ -16,12 +17,20 @@
   budget
   counter.bc.js
   counter.bc.wasm.js
-  (glob_files counter.bc.wasm.assets/*.wasm))
+  (glob_files counter.bc.wasm.assets/*.wasm)
+  ../../examples/todo/main.bc.js
+  ../../examples/todo/main.bc.wasm.js
+  (glob_files ../../examples/todo/main.bc.wasm.assets/*.wasm))
  (action
   (run
    node
    size.mjs
    budget
+   counter
    counter.bc.js
    counter.bc.wasm.js
-   counter.bc.wasm.assets)))
+   counter.bc.wasm.assets
+   example-todo
+   ../../examples/todo/main.bc.js
+   ../../examples/todo/main.bc.wasm.js
+   ../../examples/todo/main.bc.wasm.assets)))
