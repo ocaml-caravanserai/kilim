@@ -184,6 +184,9 @@ let d3 () =
 type emsg = Enter | Leave | Scroll | Drop | Remove_box
 
 let d4 () =
+  (* The mouse goes away first: a box that comes under the mouse gets a
+     mouseenter from Chrome, with no input, at a time that Chrome selects. *)
+  let* () = move_xy (1., 1.) in
   let got = ref [] in
   let root, a =
     start
@@ -221,7 +224,6 @@ let d4 () =
          () )
   in
   let box = q root "box" in
-  let* () = move_xy (1., 1.) in
   let* () = move_to box in
   let* () = move_xy (1., 1.) in
   check "D4 mouseenter, then mouseleave" (List.rev !got = [Enter; Leave]) ;
@@ -940,11 +942,13 @@ let d23 () =
           ; button () "click" ] )
       ()
   in
+  (* The mouse goes away first: a box that comes under the mouse gets a
+     mouseenter from Chrome, with no input, at a time that Chrome selects. *)
+  let* () = move_xy (1., 1.) in
   let g1 = ref 0 and g2 = ref 0 in
   let r1, a1 = start (app "one" g1) in
   let r2, a2 = start (app "two" g2) in
   let b1 = q r1 "box" and b2 = q r2 "box" in
-  let* () = move_xy (1., 1.) in
   let* () = move_to b1 in
   check "D23 one message to app 1" (!g1 = 1 && !g2 = 0) ;
   let* () = move_to b2 in
