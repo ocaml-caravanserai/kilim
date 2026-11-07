@@ -3,9 +3,11 @@ The guards of kilim.browser and their tests (design section 14)
 windtrap runs only native code, thus it makes no mutant of src/browser. Each
 line gives one guard (file, function, condition) and the test that fails when
 the guard changes: replace the condition with true or with false (or remove the
-call), then run `dune test --force test/dom test/browser`. A line "EXPECT
-EXCEPTION" in the output is not a failure: look for "FAILED". The tests with D are
-in test/dom/test_dom.ml. The tests with H are in test/browser/test_browser.ml.
+call), then run `dune test --force test/dom test/browser test/loader`. A line
+"EXPECT EXCEPTION" in the output is not a failure: look for "FAILED". The tests
+with D are in test/dom/test_dom.ml. The tests with H are in
+test/browser/test_browser.ml. The other names are the scenarios of
+test/loader/run.mjs.
 
 listen.ml   cell       Jv.is_undefined of __kilim       true: D2, D3. false: D2 (a trap
                                                         in the wasm build).
@@ -47,6 +49,13 @@ listen.ml   handle     live = None                      No test: it does not occ
                                                         start sets the field before
                                                         it adds the listeners.
 ops.ml      create_element  Svg: createElementNS        createElement: D3 (svg).
+ops.ml      set_inner_html  a TrustedHTML: the value     the text: tt-inline,
+                                                        tt-handoff and two-tt of
+                                                        test/loader (a CSP with
+                                                        require-trusted-types-for
+                                                        refuses the text). D38 has
+                                                        no CSP: the text gives the
+                                                        same DOM.
 mount.ml    run        the element exists               false: D1.
 mount.ml    run        the document is loading          false: D1 (the wait).
 mount.ml    run        the element after the wait       false: D1 (a missing element
