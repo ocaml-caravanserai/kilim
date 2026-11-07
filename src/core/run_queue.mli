@@ -19,6 +19,11 @@ val clear : t -> unit
     Thus a push after [clear] asks for a turn again, because the queue is empty.
 *)
 
+val reset : t -> unit
+(** [reset q] sets the depth to 0 and clears the flags of a turn and of a drain,
+    for {!Runtime.abort}: a JS exception that no OCaml catch sees can leave them
+    set. The continuations stay. *)
+
 val with_turn : t -> (unit -> 'a) -> 'a
 (** [with_turn q f] runs [f] in a turn: a push inside a turn asks for no turn.
     The turn ends also when [f] raises. *)

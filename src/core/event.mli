@@ -45,7 +45,8 @@ type 'node env =
         (** The node is in the document and under the mount element. *)
   ; group: 'node -> 'node list
         (** The other buttons of the radio group of a radio button, else [[]].
-        *)
+            The list can also contain the button: its second restore writes
+            nothing. *)
   ; toggles: 'node -> bool  (** An [input] with the type checkbox or radio. *)
   ; post_task: (unit -> unit) -> unit
         (** Runs a function in a new task, after the dispatch. *) }

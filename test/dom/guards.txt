@@ -1,0 +1,84 @@
+The guards of kilim.browser and their tests (design section 14)
+
+windtrap runs only native code, thus it makes no mutant of src/browser. Each
+line gives one guard (file, function, condition) and the test that fails when
+the guard changes: replace the condition with true or with false (or remove the
+call), then run `dune test --force test/dom test/browser`. A line "EXPECT
+EXCEPTION" in the output is not a failure: look for "FAILED". The tests with D are
+in test/dom/test_dom.ml. The tests with H are in test/browser/test_browser.ml.
+
+listen.ml   cell       Jv.is_undefined of __kilim       true: D2, D3. false: D2 (a trap
+                                                        in the wasm build).
+listen.ml   cell       an element in __kilim            removed: D28 (a control named
+                                                        __kilim).
+listen.ml   cell       a RadioNodeList in __kilim       removed: D28 (two controls
+                                                        named __kilim).
+listen.ml   string_or_empty  typeof is string          true: D27 (the value of an li,
+                                                        a number), D3 (the value of a
+                                                        div, undefined).
+listen.ml   value_string  typeof is string             true: D26 (in the wasm build
+                                                        a trap). false: no test,
+                                                        String(v) gives the same
+                                                        string; the branch saves a
+                                                        call.
+listen.ml   value_string  null or undefined: ""        removed: D26 (an undefined
+                                                        value).
+listen.ml   parent     Js.same_node n root (the walk stop)  true: D3 (a span in a
+                                                        button). false: D3 (the cell
+                                                        above the mount element).
+listen.ml   parent     a null parentNode: None          removed: D29.
+listen.ml   connected  isConnected                      true: D4 (the scroll after
+                                                        the removal). false: D10.
+listen.ml   is_input   instanceof HTMLInputElement      true: D10 (a link with the
+                                                        type checkbox).
+listen.ml   toggles    checkbox || radio                checkbox only: D10 (radio).
+                                                        radio only: D9, D10
+                                                        (checkbox).
+listen.ml   group      not a radio button: []           false: D11 (a checkbox with
+                                                        the name of the group).
+listen.ml   group      empty name: []                   false: D11 (no name).
+listen.ml   group      the same name                    true: D11 (a radio of another
+                                                        name).
+listen.ml   group      the same form owner              removed: D11.
+listen.ml   handle     isComposing                      false: D16.
+listen.ml   handle     preventDefault                   removed: D3 (submit).
+listen.ml   handle     stopPropagation                  removed: D3 (stop).
+listen.ml   handle     live = None                      No test: it does not occur.
+                                                        start sets the field before
+                                                        it adds the listeners.
+ops.ml      create_element  Svg: createElementNS        createElement: D3 (svg).
+mount.ml    run        the element exists               false: D1.
+mount.ml    run        the document is loading          false: D1 (the wait).
+mount.ml    run        the element after the wait       false: D1 (a missing element
+                                                        after the wait).
+mount.ml    run        the wait listener removes itself removed: D1.
+mount.ml    start      a live app on the element: raise false: D30.
+mount.ml    start      the mark before the first turn   after it: D34 (a trap in init,
+                                                        in the wasm build).
+mount.ml    stop       the mark is of this app          true: D30 (a second stop of
+                                                        the old app).
+mount.ml    stop       the delegated listeners go       removed: D25.
+mount.ml    stop       the visibilitychange listener goes  removed: D25.
+mount.ml    traps      a WebAssembly.RuntimeError       true: D32 (a JS error of a
+                                                        listener of the page).
+                                                        false: D31 (wasm build).
+mount.ml    traps      the abort in a microtask         at once: D33 (wasm build, the
+                                                        model is 100).
+mount.ml    traps      the unhandledrejection listener  removed: D34 (a start in a
+                                                        promise reaction, wasm
+                                                        build).
+mount.ml    traps      the wasm_of_ocaml build, and     the two removed: the run with
+                       typeof WebAssembly is "object"   --js-flags=--jitless (the js
+                                                        pages). One removed: no test,
+                                                        the other check covers it
+                                                        (the js build has no traps,
+                                                        and the wasm build has
+                                                        WebAssembly).
+browser_host.ml  same  js_of_ocaml: Object.is           ( == ): D17 in the js build.
+browser_host.ml  same  other builds: ( == )             No test: Object.is gives the
+                                                        same result under
+                                                        wasm_of_ocaml (it compares the
+                                                        boxes), at 39 ns for each
+                                                        compare. The choice is for
+                                                        speed.
+browser_host.ml  set_timer  the first clear only        true: H3, D25.

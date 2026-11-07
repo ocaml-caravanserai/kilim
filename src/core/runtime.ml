@@ -103,9 +103,19 @@ type 'node t =
   ; stop_times: float Queue.t  (** The last 10 stops at the limit. *)
   ; mutable warned: bool
   ; mutable renders_in_turn: int
-  ; mutable stopped: bool }
+  ; mutable stopped: bool
+  ; mutable first: (unit -> unit) option
+        (** The function of the first turn, until it runs. *)
+  ; mutable abort: unit -> unit
+        (** Ends a turn that a JS exception left (see [active]). *) }
 
 type settled = Done | Yield
+
+(* The aborts of the runtimes in a turn, the newest first. Under wasm_of_ocaml,
+   a trap (for example an illegal cast) is a JS exception that no OCaml catch
+   sees: it leaves [in_turn] set, and the app stops. The browser then calls
+   [abort], which ends these turns. *)
+let active : (unit -> unit) list ref = ref []
 
 let max_renders = 3
 
@@ -170,14 +180,18 @@ and turn rt kind f =
   else if rt.in_turn then f ()
   else begin
     rt.in_turn <- true ;
-    match
-      Run_queue.with_turn rt.run (fun () -> body rt kind f) ;
-      finish rt
-    with
+    active := rt.abort :: !active ;
+    ( match
+        Run_queue.with_turn rt.run (fun () -> body rt kind f) ;
+        finish rt
+      with
     | () ->
         ()
     | exception e ->
-        recover rt kind e
+        recover rt kind e ) ;
+    (* The entry of this runtime, not the head: a dead nested turn of another
+       runtime can be above it. After an abort, the entry is gone. *)
+    active := List.filter (fun f -> f != rt.abort) !active
   end
 
 and body rt kind f =
@@ -632,8 +646,10 @@ and finish rt =
 (* The catch of the turn, for an error outside each scope. It adds the time of
    the turn only one time, and only if the first clock read of the turn
    worked. *)
-and recover rt kind e =
-  Report.error e ;
+and recover rt kind e = Report.error e ; resume rt kind
+
+(* The rest of the catch of the turn, after the report of its error. *)
+and resume rt kind =
   rt.in_turn <- false ;
   ( try if rt.clocked && not rt.accounted then account rt
     with e -> Report.error e ) ;
@@ -706,28 +722,55 @@ let make env dom parent root =
     ; stop_times= Queue.create ()
     ; warned= false
     ; renders_in_turn= 0
-    ; stopped= false }
+    ; stopped= false
+    ; first= None
+    ; abort= ignore }
   in
   self := Some rt ;
   rt.wrapped <- wrap rt ;
+  (* As the catch of the turn, for a turn of no known kind. *)
+  rt.abort <-
+    (fun () ->
+      Run_queue.reset rt.run
+      [@mutate
+        off
+          "native code always leaves the turn of the run queue; test/dom D31 \
+           tests the reset after a trap"] ;
+      resume rt Macro ) ;
   rt
 
-let start env dom ~parent (App.App {init; update; view; subs; fallback}) =
+let create env dom ~parent (App.App {init; update; view; subs; fallback}) =
   let inst = Instance.make (Cancel.root ()) in
   let rt =
     make env dom parent
       (Root {inst; fallback; tree= None; failed= None; shown= false})
   in
-  turn rt Discrete (fun () ->
-      match init () with
-      | model, cmd ->
-          (* init cannot reach the runtime, thus the instance is alive here. *)
-          inst.state <- Some (State {spec= {update; view; subs}; model}) ;
-          Instance.changed inst ;
-          command rt inst cmd
-      | exception e ->
-          catch rt e ) ;
+  rt.first <-
+    Some
+      (fun () ->
+        match init () with
+        | model, cmd ->
+            (* init cannot reach the runtime, thus the instance is alive
+               here. *)
+            inst.state <- Some (State {spec= {update; view; subs}; model}) ;
+            Instance.changed inst ;
+            command rt inst cmd
+        | exception e ->
+            catch rt e ) ;
   rt
+
+(* The function of the first turn runs one time. *)
+let init rt =
+  match rt.first with
+  | Some f ->
+      rt.first <- None ;
+      turn rt Discrete f
+  | None ->
+      ()
+
+let start env dom ~parent app =
+  let rt = create env dom ~parent app in
+  init rt ; rt
 
 (* The restore goes into the list before the turn, also for an event inside a
    turn. After a stop, no restore. *)
@@ -790,3 +833,11 @@ let inspect rt =
   ; token_children=
       (match r.inst.token with Some t -> Cancel.children t | None -> 0)
   ; alive= r.inst.alive }
+
+(* One report for each abort: an abort can end several turns, or none when an
+   earlier abort of the same task ended them. *)
+let abort e =
+  Report.error e ;
+  let l = !active in
+  active := [] ;
+  List.iter (fun f -> f ()) l

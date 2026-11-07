@@ -162,6 +162,37 @@ let clear () =
   Q.drain q ;
   equal int Q.max_depth !ran
 
+(* The reset clears the flags that a JS trap can leave set: the depth, the turn
+   and the drain. *)
+let reset () =
+  (* The depth: after a reset at depth 200, 256 more nested steps run at
+     once. *)
+  let q, _ = make () in
+  let ran = ref 0 in
+  let rec nest n =
+    if n > 0 then
+      Q.step q (fun () ->
+          incr ran ;
+          if !ran = 200 then Q.reset q ;
+          nest (n - 1) )
+  in
+  nest 1000 ;
+  equal int (200 + Q.max_depth) !ran ;
+  (* The turn: a push after the reset asks for a turn. *)
+  let q, asks = make () in
+  Q.with_turn q (fun () -> Q.reset q ; Q.push q ignore) ;
+  equal int 1 !asks ;
+  (* The drain: a drain after the reset runs. *)
+  let q, _ = make () in
+  let log = ref [] in
+  Q.push q (fun () ->
+      log := "a" :: !log ;
+      Q.reset q ;
+      Q.drain q ) ;
+  Q.push q (fun () -> log := "b" :: !log) ;
+  Q.drain q ;
+  equal (list string) ["a"; "b"] (List.rev !log)
+
 let tests =
   [ group "run queue"
       [ test "exactly 256 nested steps run at once" depth_limit
@@ -175,4 +206,5 @@ let tests =
           drain_over
       ; test "a drain inside a drain does nothing" drain_reentry
       ; test "the drain runs again after an exception" drain_after_raise
-      ; test "the clear empties the queue and keeps the depth" clear ] ]
+      ; test "the clear empties the queue and keeps the depth" clear
+      ; test "the reset clears the depth and the flags" reset ] ]

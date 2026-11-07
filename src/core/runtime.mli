@@ -103,7 +103,15 @@ type 'node t
 val start : env -> 'node Dom.t -> parent:'node -> App.t -> 'node t
 (** Runs the first turn: [init], the settle step, then the render that mounts
     the view as the last child of [parent]. The tasks get a host whose callbacks
-    each run in a turn. *)
+    each run in a turn. [start] is {!create}, then {!init}. *)
+
+val create : env -> 'node Dom.t -> parent:'node -> App.t -> 'node t
+(** The runtime of the app, with no turn: nothing of the app runs. Thus a
+    platform can record the runtime before the first turn, and a trap in the
+    first turn leaves a runtime that it can stop. *)
+
+val init : 'node t -> unit
+(** Runs the first turn, one time: a second call does nothing. *)
 
 val event : 'node t -> kind -> ?restore:(unit -> unit) -> (unit -> unit) -> unit
 (** [event rt kind ~restore f] runs [f] (the handlers of one DOM event) in a
@@ -132,3 +140,15 @@ val stats : 'node t -> stats
 val inspect : 'node t -> inspect
 (** The flags and counts of the runtime and of the root instance, for the tests.
 *)
+
+val abort : exn -> unit
+(** [abort e] gives [e] to the error handler one time, then ends each turn that
+    did not end, as the catch of a turn does. If work stays in a queue, it asks
+    for a turn. Under wasm_of_ocaml, a trap (for example an illegal cast) is a
+    JS exception that no OCaml catch sees: it leaves the turn open, and the app
+    stops. Call [abort] only when no OCaml code of a turn runs. kilim.browser
+    calls it from a microtask after the [error] event of such an error: a
+    microtask runs only when the JS stack is empty, thus each open turn is then
+    dead. A turn that ends normally removes only its own entry from the list of
+    the open turns, thus a dead nested turn of another runtime stays in the list
+    for [abort]. *)

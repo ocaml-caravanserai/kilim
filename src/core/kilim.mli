@@ -15,8 +15,13 @@ module Private : sig
       - The error of each root catch.
       - Each error of the root fallback: of its function or of its write.
       - Each fault in the catch of the turn, for example a fault of the host.
+      - An error of a platform library with {!error}, for example a missing
+        mount element after the wait of [Kilim_browser.run].
 
       The default does nothing. *)
+
+  val error : exn -> unit
+  (** [error e] gives [e] to the error handler. *)
 
   val set_warning_handler : (string -> unit) -> unit
   (** The function that gets a warning of the runtime, for example 10 stops at

@@ -280,6 +280,31 @@ let env_same () =
   check {f= ( == )} "s" ~renders:1 ~views:1 ;
   check {f= ( == )} "c" ~renders:2 ~views:2
 
+(* Runtime.create runs nothing of the app. Runtime.init runs the first turn one
+   time: a second call does nothing. *)
+let create_init () =
+  let h = H.create () in
+  let root = F.element "div" in
+  let inits = ref 0 in
+  let rt =
+    R.create (H.env h)
+      (F.ops (F.create ()))
+      ~parent:root
+      (App.make
+         ~init:(fun () -> incr inits ; (0, Cmd.none))
+         ~update:(fun m () -> (m, Cmd.none))
+         ~view:(fun m -> txt (string_of_int m))
+         () )
+  in
+  equal int 0 !inits ;
+  equal int 0 (R.stats rt).turns ;
+  equal string "<div></div>" (F.to_html root) ;
+  R.init rt ;
+  R.init rt ;
+  equal int 1 !inits ;
+  equal int 1 (R.stats rt).turns ;
+  equal string "<div>0</div>" (F.to_html root)
+
 (* A re-entrant event only puts its message in the queue, and the same turn
    processes it. *)
 type rmsg = Outer | Inner
@@ -435,6 +460,8 @@ let tests =
       ; test "a click with a pending render renders at once" click_pending
       ; test "the model compare is physical" model_compare
       ; test "the model compare uses the same of the env" env_same
+      ; test "create runs nothing, init runs the first turn one time"
+          create_init
       ; test "a re-entrant event goes to the queue" reentrant
       ; test "the stop" stop
       ; test "at most 3 renders in one turn" render_cap

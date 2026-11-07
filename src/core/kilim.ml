@@ -3,6 +3,8 @@ module Span = Span
 module Private = struct
   let set_error_handler f = Report.handler := f
 
+  let error = Report.error
+
   let set_warning_handler f = Report.warning_handler := f
 
   module Host = Host
