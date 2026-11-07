@@ -745,12 +745,20 @@ module App : sig
        init:(unit -> 'model * 'msg Cmd.t)
     -> update:('model -> 'msg -> 'model * 'msg Cmd.t)
     -> view:('model -> 'msg View.t)
+    -> ?subs:('model -> 'msg Sub.t)
     -> ?fallback:(exn -> 'msg View.t)
     -> unit
     -> t
-  (** An error in [init], [update], [view], a task, a message function or a DOM
-      operation of the app unmounts the app: its tasks stop. Then the root shows
-      [fallback exn] (default: an empty text). The messages of the fallback do
-      nothing. The error goes to the error handler. An error in [fallback] goes
-      to the error handler, and the root then shows an empty text. *)
+  (** After each render of a new model, the runtime calls [subs] and starts the
+      new keys. If a turn ends with a render that is pending, and the model
+      changed since the last call of [subs], the runtime calls [subs] at the end
+      of the turn, stops the removed keys, and gives the new message functions
+      to the keys that stay. The new keys start at the render.
+
+      An error in [init], [update], [view], [subs], a task, a subscription, a
+      message function or a DOM operation of the app unmounts the app: its tasks
+      and its subscriptions stop. Then the root shows [fallback exn] (default:
+      an empty text). The messages of the fallback do nothing. The error goes to
+      the error handler. An error in [fallback] goes to the error handler, and
+      the root then shows an empty text. *)
 end

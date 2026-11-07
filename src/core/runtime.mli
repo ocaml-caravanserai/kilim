@@ -10,7 +10,15 @@
     + The render, at once in a [Discrete] or [Frame] turn and in the first turn
       of {!start}, at most 3 times in one turn. In the other turns, the render
       is pending: it runs at the next frame, or after 100 ms. In a hidden page,
-      it runs in a new task.
+      it runs in a new task. After the view of a new model, the render calls
+      [subs] (the subscription pass): it stops the removed keys, gives the new
+      message functions to the keys that stay, and starts the new keys. A [send]
+      at a start is new work: the turn settles again.
+    + The early call: if the turn ends with a render that is pending, and the
+      model changed since the last pass, the turn calls [subs] again. It stops
+      the removed keys and gives the new message functions to the keys that
+      stay. The new keys start at the render. The turn settles the work that the
+      end actions of the removed keys push.
 
     A turn never nests: an entry inside a turn only puts its messages in the
     queue. A push outside a turn asks the host for one turn in a microtask.
@@ -24,10 +32,11 @@
     [Micro] turn, or if no tick is pending. After 10 stops in 1 s, the runtime
     writes one warning.
 
-    An error in [init], [update], [view], a task, a message function or a DOM
-    operation unmounts the root instance: its tasks stop, and the root shows the
-    fallback. One more catch around the turn handles the errors outside these
-    scopes, for example a fault of the host. *)
+    An error in [init], [update], [view], [subs], a task, a subscription, a
+    message function or a DOM operation unmounts the root instance: its tasks
+    and its subscriptions stop, and the root shows the fallback. One more catch
+    around the turn handles the errors outside these scopes, for example a fault
+    of the host. *)
 
 (** A virtual cost for the test host. *)
 type cost =
@@ -78,6 +87,7 @@ type inspect =
   ; tick_pending: bool
   ; in_turn: bool
   ; latest_keys: int  (** The keys in the [Cmd.latest] table of the root. *)
+  ; sub_keys: int  (** The recorded subscription keys of the root. *)
   ; token_children: int  (** The children of the token of the root. *)
   ; alive: bool  (** The root instance is alive. *) }
 

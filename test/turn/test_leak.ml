@@ -1,5 +1,6 @@
 (* The leak tests of the turn (design section 14): the latest table, the task
-   tokens, the timers and the model of a root that failed. *)
+   tokens, the subscription keys, the timers and the model of a root that
+   failed. *)
 
 open Windtrap
 open Kilim
@@ -74,6 +75,48 @@ let starts () =
   H.idle h ;
   equal int 0 (H.live_timers h)
 
+(* 1,000 changes of the key of a Sub.run: one key and one token at the end. *)
+let sub_keys () =
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(fun m _ -> (m + 1, Cmd.none))
+         ~view:(fun m -> button Save (string_of_int m))
+         ~subs:(fun m ->
+           Sub.run ~key:(string_of_int m) (fun _ ->
+               Async.make (fun _ ~ok:_ ~error:_ -> ()) ) )
+         () )
+  in
+  for _ = 1 to 1000 do
+    click p
+  done ;
+  equal int 1 (ins p).token_children ;
+  equal int 1 (ins p).sub_keys ;
+  P.stop p ;
+  equal int 0 (ins p).token_children ;
+  no_errors p
+
+(* 1,000 times a start, a click and a stop with a Sub.every on one host. *)
+let every_starts () =
+  let h = H.create () in
+  let app =
+    App.make
+      ~init:(fun () -> (0, Cmd.none))
+      ~update:(fun m _ -> (m + 1, Cmd.none))
+      ~view:(fun m -> button Save (string_of_int m))
+      ~subs:(fun m -> Sub.every (Span.ms (1 + (m mod 2))) Tick)
+      ()
+  in
+  for _ = 1 to 1000 do
+    let p = P.start ~host:h app in
+    click p ; P.stop p
+  done ;
+  equal int 0 (H.live_timers h) ;
+  equal int 0 (List.length (H.errors h)) ;
+  H.idle h ;
+  equal int 0 (H.live_timers h)
+
 exception Boom
 
 (* The model of a root that failed is free. *)
@@ -102,4 +145,7 @@ let tests =
       [ test "1,000 keys with synchronous results leave an empty table" sync_keys
       ; test "1,000 keys that wait leave an empty table after idle" pending_keys
       ; test "1,000 starts, clicks and stops leave no timer" starts
+      ; test "1,000 changes of a Sub.run key leave one key" sub_keys
+      ; test "1,000 starts, clicks and stops with Sub.every leave no timer"
+          every_starts
       ; test "the model of a root that failed is free" model_free ] ]

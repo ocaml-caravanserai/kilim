@@ -81,6 +81,7 @@ let () =
        ~init:(fun () -> (0, cmd))
        ~update:(fun m _ -> (m, Cmd.none))
        ~view:(fun _ -> txt "")
+       ~subs:(fun m -> Sub.every (Span.ms 1) m)
        ~fallback:(fun _ -> txt "")
        () )
 
@@ -117,6 +118,7 @@ let () =
       ~init:(fun () -> (0, Cmd.latest ~key:"k" (Async.return 1)))
       ~update:(fun m n -> (m + n, Cmd.none))
       ~view:(fun m -> El.button ~ev:[Ev.click 1] [txt (string_of_int m)])
+      ~subs:(fun m -> Sub.run ~key:(string_of_int m) (fun _ -> Async.return ()))
       ()
   in
   let rt = Private.Runtime.start env dom ~parent:() app in
