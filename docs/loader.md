@@ -80,7 +80,7 @@ loader then runs no Wasm probe. Use it for a site that never permits
 `kilim page` writes the page with fixed names and the attribute
 `data-dev`. Copy this rule into the `dune` file of your app:
 
-```
+```dune in=examples/counter/dune
 (rule
  (targets index.html)
  (deps page.html main.bc.js main.bc.wasm.js (glob_files main.bc.wasm.assets/*))

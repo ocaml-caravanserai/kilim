@@ -1,0 +1,12 @@
+; The check of the code in the documentation (check.mjs): each tagged block of
+; README.md and docs/loader.md is the code of a file of the repository.
+
+(rule
+ (alias runtest)
+ (deps
+  check.mjs
+  ../../README.md
+  ../../docs/loader.md
+  (source_tree ../../examples))
+ (action
+  (run node check.mjs ../.. README.md 6 docs/loader.md 1)))

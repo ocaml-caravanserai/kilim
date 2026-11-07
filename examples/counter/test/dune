@@ -1,0 +1,5 @@
+; The native test of the counter example, with kilim.testing.
+
+(test
+ (name test_counter)
+ (libraries counter kilim.testing windtrap))

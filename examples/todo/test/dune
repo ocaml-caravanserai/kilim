@@ -1,0 +1,7 @@
+; The native tests of the todo example, with kilim.testing. test_todo is the
+; test of a user. test_counts gives the exact DOM operations of three actions
+; on the fake DOM (docs/budgets.md).
+
+(tests
+ (names test_todo test_counts)
+ (libraries todo kilim.testing windtrap))

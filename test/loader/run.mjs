@@ -49,7 +49,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, wr
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
 import http from 'node:http';
-import { findChrome, launch, text, withPage } from '../dom/chrome.mjs';
+import { findChrome, launch, until, watch, withPage } from '../dom/chrome.mjs';
 
 const argv = process.argv.slice(2);
 const dash = argv.indexOf('--');
@@ -439,30 +439,13 @@ const runScenario = async (sc, n) => {
   sites.set(key, site);
   const ids = [...new Set((sc.apps || [['a']]).map(([a]) => a))];
   const e = sc.expect;
-  const events = { warnings: [], errors: [], exceptions: [], preloads: [] };
+  let events;
   const faults = [];
   const fault = (s) => faults.push(s);
   // The start time of each app, for the log: the time bounds have a margin.
   let starts = '';
   await withPage(browser, 30000, async (page) => {
-    page.on((m) => {
-      if (m.method === 'Runtime.consoleAPICalled') {
-        const line = m.params.args.map(text).join(' ');
-        if (m.params.type === 'warning') events.warnings.push(line);
-        else if (m.params.type === 'error') events.errors.push(line);
-      } else if (m.method === 'Runtime.exceptionThrown') {
-        const d = m.params.exceptionDetails;
-        events.exceptions.push(d.exception?.description ?? d.text);
-      } else if (m.method === 'Log.entryAdded' && /preload/i.test(m.params.entry.text)) {
-        // For example a preload that the request does not use, because its
-        // credentials mode is not the same. A file from the cache then
-        // gives no second request.
-        events.preloads.push(m.params.entry.text);
-      }
-    });
-    await page.send('Runtime.enable');
-    await page.send('Log.enable');
-    await page.send('Page.enable');
+    events = await watch(page);
     await page.send('Page.navigate', { url: origin + prefix + (sc.url || '') });
     const read = async (expr, awaitPromise = false) =>
       (await page.send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise })).result.value;
@@ -473,18 +456,14 @@ const runScenario = async (sc, n) => {
       if (Object.keys(st.loaded).length) fault('an app started');
       return;
     }
+    // A read during the navigation can fail: then the poll goes on.
     const started = async () => {
-      const until = Date.now() + 10000;
-      for (;;) {
-        // A read during the navigation can fail: then the poll goes on.
-        st = JSON.parse((await read(stateJs).catch(() => undefined)) ?? '{"loaded":{}}');
-        if (ids.every((id) => st.loaded[id]?.starts === 1)) return true;
-        if (Date.now() > until) {
-          fault(`no start in 10 s: ${JSON.stringify(st.loaded)}`);
-          return false;
-        }
-        await sleep(20);
-      }
+      const ok = await until(async () => {
+        st = JSON.parse(await read(stateJs));
+        return ids.every((id) => st.loaded[id]?.starts === 1);
+      }, 10000);
+      if (!ok) fault(`no start in 10 s: ${JSON.stringify(st?.loaded ?? {})}`);
+      return ok;
     };
     if (!(await started())) return;
     // Late requests and late errors.
@@ -564,7 +543,11 @@ const runScenario = async (sc, n) => {
   if (thrown.length) fault(`exceptions: ${JSON.stringify(thrown)}`);
   if (e.exceptions !== undefined && events.exceptions.length !== e.exceptions)
     fault(`${events.exceptions.length} exceptions, expected ${e.exceptions}: ${JSON.stringify(events.exceptions)}`);
-  if (events.preloads.length) fault(`preload messages: ${JSON.stringify(events.preloads)}`);
+  // For example a preload that the request does not use, because its
+  // credentials mode is not the same. A file from the cache then gives no
+  // second request.
+  const preloads = events.logs.filter((l) => /preload/i.test(l.text)).map((l) => l.text);
+  if (preloads.length) fault(`preload messages: ${JSON.stringify(preloads)}`);
   sites.delete(key);
   return { faults, log: site.log, starts };
 };

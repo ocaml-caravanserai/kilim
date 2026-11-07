@@ -3,12 +3,18 @@
 #   make build          Build all.
 #   make fmt            Format the code.
 #   make test           Run the tests: native code, js_of_ocaml and
-#                       wasm_of_ocaml (on node, and in Chrome for test/dom).
-#   make size           Build the counter of bench/size in the release
-#                       profile, and compare its gzip size with
-#                       bench/size/budget (docs/budgets.md).
-#   make test-release   Run the loader tests of the release files in Chrome
-#                       (test/loader: kilim dist on the release builds).
+#                       wasm_of_ocaml (on node, and in Chrome for test/dom,
+#                       test/loader and test/examples).
+#   make size           Build the counter of bench/size and the todo example
+#                       in the release profile, and compare their gzip sizes
+#                       with bench/size/budget (docs/budgets.md).
+#   make budgets        The budget gate of CI (docs/budgets.md): the size
+#                       budget (as make size), the allocation counts
+#                       (bench/alloc), and the exact DOM operation counts
+#                       (test/view and the todo example).
+#   make test-release   Run the tests of the release files in Chrome:
+#                       kilim dist on the release builds of the loader tests
+#                       (test/loader) and of the examples (test/examples).
 #   make mutate-loader  Test the hand mutants of the loader text
 #                       (test/loader/mutants.txt) in Chrome, in the dev and
 #                       the release profile.
@@ -53,7 +59,7 @@ SUITES := test/core test/view test/turn test/dist
 report = $(DUNE) exec $(MUTATE) windtrap -- mutants \
   $(if $(1),--since $(1)) $(if $(MIN_SCORE),--min-score $(MIN_SCORE))
 
-.PHONY: help build fmt test size test-release mutate-loader check-windtrap mutate mutate-all mutate-report mutate-arm
+.PHONY: help build fmt test size budgets test-release mutate-loader check-windtrap mutate mutate-all mutate-report mutate-arm
 
 help:
 	@sed -n '1,/^$$/p' Makefile | sed 's/^# \{0,1\}//'
@@ -70,8 +76,14 @@ test:
 size:
 	$(DUNE) build --force @bench/size/size --profile release
 
+budgets:
+	$(DUNE) build --force @bench/size/size --profile release
+	$(DUNE) build --force @bench/alloc/runtest
+	$(DUNE) exec test/view/test_view.exe -- -f budgets
+	$(DUNE) exec examples/todo/test/test_counts.exe
+
 test-release:
-	$(DUNE) build --force @test/loader/runtest --profile release
+	$(DUNE) build --force @test/loader/runtest @test/examples/runtest --profile release
 
 mutate-loader:
 	$(DUNE) build --force @test/loader/mutants

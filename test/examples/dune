@@ -1,0 +1,38 @@
+; The Chrome test of the examples (docs/design.html, "Testing"): run.mjs
+; drives the page of each example with trusted input of DevTools, in the
+; wasm_of_ocaml and the js_of_ocaml builds. In the dev profile, it serves the
+; dev page (index.html) with examples/serve.mjs. In the release profile (`make
+; test-release`), it runs `kilim dist` of docs/loader.md on the release builds,
+; and serves the output at /static/ with the CSP of docs/loader.md. With no
+; Chrome, it writes "SKIP: no Chrome", but CI sets KILIM_REQUIRE_CHROME=1 and
+; fails.
+
+(rule
+ (alias runtest)
+ (deps
+  run.mjs
+  ../dom/chrome.mjs
+  ../../examples/serve.mjs
+  %{bin:kilim}
+  ../../examples/counter/index.html
+  ../../examples/counter/page.html
+  ../../examples/counter/main.bc.js
+  ../../examples/counter/main.bc.wasm.js
+  (glob_files ../../examples/counter/main.bc.wasm.assets/*)
+  ../../examples/todo/index.html
+  ../../examples/todo/page.html
+  ../../examples/todo/main.bc.js
+  ../../examples/todo/main.bc.wasm.js
+  (glob_files ../../examples/todo/main.bc.wasm.assets/*)
+  (env_var KILIM_CHROME)
+  (env_var KILIM_REQUIRE_CHROME))
+ (action
+  (run
+   node
+   run.mjs
+   --kilim
+   %{bin:kilim}
+   --profile
+   %{profile}
+   ../../examples/counter
+   ../../examples/todo)))
