@@ -194,7 +194,51 @@ let burst check =
     && s.requests = 1 && s.turns = 18 ) ;
   check "the clock at the end" (H.now h = 794.3046875)
 
+(* A left-nested batch of 100,000 subscriptions: the walk uses an explicit
+   stack. *)
+let deep_subs check =
+  let n = 100_000 in
+  let left = ref Sub.none in
+  for i = 0 to n - 1 do
+    left :=
+      Sub.batch
+        [!left; Sub.run ~key:(string_of_int i) (fun _ -> Async.return ())]
+  done ;
+  let keys =
+    List.map
+      (function
+        | Private.Sub.Run_leaf (k, _) -> k | Private.Sub.Auto_leaf _ -> "" )
+      (Private.Sub.leaves !left)
+  in
+  check "a left-nested batch of 100,000 subscriptions"
+    (List.length keys = n && List.nth keys (n - 1) = string_of_int (n - 1))
+
+(* 10,000 keys of Sub.run start in one render and stop in the next. *)
+let many_keys check =
+  let never = Async.make (fun _ ~ok:_ ~error:_ -> ()) in
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> (true, Cmd.none))
+         ~update:(fun _ _ -> (false, Cmd.none))
+         ~view:(fun _ -> button)
+         ~subs:(fun on ->
+           if on then
+             Sub.batch
+               (List.init 10_000 (fun i ->
+                    Sub.run ~key:(string_of_int i) (fun _ -> never) ) )
+           else Sub.none )
+         () )
+  in
+  let started = (P.inspect p).token_children in
+  click p ;
+  let i = P.inspect p in
+  check "10,000 keys start in one render and stop in the next"
+    (started = 10_000 && i.token_children = 0 && i.sub_keys = 0)
+
 let run check =
+  deep_subs check ;
+  many_keys check ;
   micro_loop check ;
   sync_loop check ;
   init_tasks check ;
