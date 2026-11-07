@@ -12,6 +12,11 @@ module Private : sig
       action, or from a callback of {!Async.make} after [ok] or [error]. The
       default does nothing. *)
 
+  val set_warning_handler : (string -> unit) -> unit
+  (** The function that gets a warning of the runtime, for example 10 stops at
+      the time limit in 1 s. The default does nothing. kilim.browser gives
+      [console.warn]. *)
+
   module Host = Host
   module Cancel = Cancel
   module Run_queue = Run_queue
