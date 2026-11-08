@@ -23,7 +23,7 @@
   (ocaml
    (>= 5.5.0))
   (brr
-   (>= 0.0.8))
+   (>= 0.0.9))
   (js_of_ocaml-compiler
    (>= 6.4))
   (wasm_of_ocaml-compiler
