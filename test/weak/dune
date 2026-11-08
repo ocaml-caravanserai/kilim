@@ -1,0 +1,22 @@
+; The weak test (weak.ml) in the js_of_ocaml and the wasm_of_ocaml builds, on
+; node with --expose-gc. The native weak tests are in test/turn
+; (test_component.ml and test_leak.ml) and test/core (test_async.ml).
+
+(executable
+ (name weak)
+ (modes js wasm)
+ (libraries kilim kilim.testing brr))
+
+(rule
+ (alias runtest)
+ (deps weak.bc.js)
+ (action
+  (run node --expose-gc weak.bc.js)))
+
+(rule
+ (alias runtest)
+ (deps
+  weak.bc.wasm.js
+  (glob_files weak.bc.wasm.assets/*))
+ (action
+  (run node --expose-gc weak.bc.wasm.js)))
