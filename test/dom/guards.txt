@@ -157,3 +157,37 @@ trusted_types.ml  is_html  isHTML is a function         removed: W3 (an element 
 trusted_types.ml  is_html  isHTML gives true            true: W3 (a JS string, an
                                                         object), D38. false: W3 (a
                                                         TrustedHTML), D38.
+
+The guards of Async.of_fut (src/browser) and Es_module (src/web). W4 to W6
+are in test/dom/test_fut.ml, WC in test/dom/test_csp.ml, and weak_fut in
+test/weak (run `dune test --force test/weak`, and with --profile release).
+
+fut_task.ml  start   the end action clears the cell    removed: H (a cancel
+                                                        empties the cell). The
+                                                        weak tests do not find it:
+                                                        Async.make clears its own
+                                                        cell, thus the cell of
+                                                        of_fut then holds no model.
+fut_task.ml  start   the reaction on the promise        removed: H (the results),
+                                                        W6, WC.
+fut_task.ml  of_fut_or_error  Error e fails the task  another exception: H
+                                                        (rejected), W6 (the
+                                                        fallback gets Jv.Error).
+fut_cell.ml  reaction  take k out of the cell, then     the call first, then the
+                       the call                         clear: no test, the same
+                                                        result for one reaction.
+                                                        No take out: W4 (two
+                                                        reactions).
+fut_cell.ml  reaction  if (k)                           removed: W4 (a clear before
+                                                        the call: a JS TypeError).
+fut_cell.ml  clear     the property is undefined        removed: H (a cancel
+                                                        empties the cell),
+                                                        weak_fut (slot 5), W4.
+es_module.ml  import  ./, ../ and / against baseURI     no resolve: W5 (./ and ../
+                                                        with a <base>). Each
+                                                        specifier: W5 (a bare
+                                                        specifier, the import map).
+es_module.ml  import  a document exists                 removed: H (no document,
+                                                        ./ stays as it is).
+es_module.ml  import  the catch: a rejected promise     removed: H (a throw of the
+                                                        resolve is an error).

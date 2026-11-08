@@ -1,11 +1,19 @@
-; The weak test (weak.ml) in the js_of_ocaml and the wasm_of_ocaml builds, on
-; node with --expose-gc. The native weak tests are in test/turn
-; (test_component.ml and test_leak.ml) and test/core (test_async.ml).
+; The weak tests (weak.ml, and weak_fut.ml for Async.of_fut) in the
+; js_of_ocaml and the wasm_of_ocaml builds, on node with --expose-gc. The
+; native weak tests are in test/turn (test_component.ml and test_leak.ml) and
+; test/core (test_async.ml).
 
 (executable
  (name weak)
+ (modules weak)
  (modes js wasm)
  (libraries kilim kilim.testing brr))
+
+(executable
+ (name weak_fut)
+ (modules weak_fut)
+ (modes js wasm)
+ (libraries kilim kilim.testing kilim.browser brr))
 
 (rule
  (alias runtest)
@@ -20,3 +28,17 @@
   (glob_files weak.bc.wasm.assets/*))
  (action
   (run node --expose-gc weak.bc.wasm.js)))
+
+(rule
+ (alias runtest)
+ (deps weak_fut.bc.js)
+ (action
+  (run node --expose-gc weak_fut.bc.js)))
+
+(rule
+ (alias runtest)
+ (deps
+  weak_fut.bc.wasm.js
+  (glob_files weak_fut.bc.wasm.assets/*))
+ (action
+  (run node --expose-gc weak_fut.bc.wasm.js)))

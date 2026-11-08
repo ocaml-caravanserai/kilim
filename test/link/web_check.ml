@@ -6,5 +6,6 @@ let () =
     Kilim_web.Microtask.queue Jv.null ;
     ignore (Kilim_web.Js_object.is Jv.null Jv.null) ;
     ignore (Kilim_web.Trusted_types.exists ()) ;
-    ignore (Kilim_web.Trusted_types.is_html Jv.null)
+    ignore (Kilim_web.Trusted_types.is_html Jv.null) ;
+    ignore (Kilim_web.Es_module.import (Jstr.v "./m.mjs"))
   end

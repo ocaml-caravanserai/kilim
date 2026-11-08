@@ -202,8 +202,26 @@ The build can run before each `defer` script of the page. Thus:
   blocking script. Put that script after the head part. In the inline
   form, put it also before the start part. A blocking script before the
   head part delays the download of the build.
-- A library that is only an ES module: load it with `import()` in a task
-  (a JS expression and `Async.of_fut`, in Phase 3).
+- A library that is only an ES module: load it with
+  `Kilim_web.Es_module.import` in a task (the example that follows).
+
+A specifier that starts with `./`, `../` or `/` resolves against
+`document.baseURI`, thus the two builds give the same URL. A bare specifier
+stays as it is, for an import map. The import is a JS expression in the
+build, not `eval`. Thus a strict CSP accepts it, if its `script-src`
+permits the origin of the module. The server must send the
+module with a JS MIME type. An error of the import (for example a
+`TypeError` for a missing module) fails the task:
+
+```ocaml in=test/doc/es_load.ml
+type msg = Chart_loaded of Jv.t
+
+let load_chart : msg Kilim_browser.Async.t =
+  Kilim_browser.Async.map
+    (fun m -> Chart_loaded m)
+    (Kilim_browser.Async.of_fut_or_error (fun _ ->
+         Kilim_web.Es_module.import (Jstr.v "/vendor/chart.mjs") ) )
+```
 
 ## Two apps on one page
 

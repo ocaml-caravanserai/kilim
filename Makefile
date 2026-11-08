@@ -16,11 +16,14 @@
 #   make test-release   Run the tests of the release files in Chrome:
 #                       kilim dist on the release builds of the loader tests
 #                       (test/loader) and of the examples (test/examples),
-#                       and the weak test (test/weak) on node.
+#                       the pages of kilim.web and Async.of_fut (test/dom,
+#                       the alias release), and the weak tests (test/weak)
+#                       on node.
 #   make browsers       Run the tests of test/dom, test/loader and
 #                       test/examples in Firefox and WebKit (Playwright),
-#                       and the tests of the release files of test/loader
-#                       and test/examples. Outside the dev
+#                       and the tests of the release files of test/loader,
+#                       test/examples and test/dom (W4 to W6 and WC).
+#                       Outside the dev
 #                       shell `browsers` of flake.nix, the command runs in
 #                       `nix develop .#browsers` (Linux only). On another
 #                       system, it writes "SKIP: no Playwright", with exit
@@ -98,9 +101,11 @@ budgets:
 	$(DUNE) exec examples/todo/test/test_counts.exe
 
 # test/weak runs in the release profile too: there js_of_ocaml inlines more
-# functions, and an inlined closure can keep a variable alive.
+# functions, and an inlined closure can keep a variable alive. The pages of
+# kilim.web and Async.of_fut depend on the dead code elimination and on the
+# JS expressions of the release build.
 test-release:
-	$(DUNE) build --force @test/loader/runtest @test/examples/runtest @test/weak/runtest --profile release
+	$(DUNE) build --force @test/loader/runtest @test/examples/runtest @test/dom/release @test/weak/runtest --profile release
 
 # flake.nix has the shell `browsers` only on Linux.
 browsers:
@@ -109,7 +114,7 @@ ifeq ($(KILIM_PLAYWRIGHT)$(LINUX),)
 	@test "$(KILIM_REQUIRE_PLAYWRIGHT)" != 1
 else
 	$(BDUNE) build --force @browsers
-	$(BDUNE) build --force @test/loader/browsers @test/examples/browsers --profile release
+	$(BDUNE) build --force @test/loader/browsers @test/examples/browsers @test/dom/release_browsers --profile release
 endif
 
 mutate-loader:

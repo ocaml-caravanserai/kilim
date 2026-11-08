@@ -20,6 +20,10 @@ module Private = struct
   let runtime (a : app) = a.rt
 
   let stop = Mount.stop
+
+  module Fut_cell = Fut_cell
+
+  let fut_start = Fut_task.start
 end
 
 let run = Mount.run
@@ -28,6 +32,14 @@ module Unsafe_html = struct
   include Kilim.Unsafe_html
 
   let of_trusted = Trusted.of_trusted
+end
+
+module Async = struct
+  include Kilim.Async
+
+  let of_fut = Fut_task.of_fut
+
+  let of_fut_or_error = Fut_task.of_fut_or_error
 end
 
 module Sub = struct
