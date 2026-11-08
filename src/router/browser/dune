@@ -1,0 +1,11 @@
+; kilim.router.browser (design section 06): the history driver of kilim.router
+; on the History API of the browser, with Brr. main.ml calls
+; Kilim_router_browser.install (). It uses kilim.router, kilim.web and Brr only,
+; and none of Printf, Format, Scanf, Str, Hashtbl, Random, Fun or Printexc
+; (test/link). windtrap runs only native code, thus test/dom/guards.txt lists
+; the guards of this library with their tests.
+
+(library
+ (name kilim_router_browser)
+ (public_name kilim.router.browser)
+ (libraries kilim kilim.router kilim.web brr))
