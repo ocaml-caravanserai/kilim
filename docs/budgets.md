@@ -11,10 +11,10 @@ pull request.
 | Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size`, the todo example and the components example | Done |
 | DOM operations for each action | Yes, each change | `test/view/test_budget.ml`: the four actions, exact counts. `examples/todo/test/test_counts.ml`: three actions of the todo example | Done |
 | Allocations for each action | Yes, each change | `bench/alloc`: the allocated words of the four actions | Done |
-| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), tests D25, D40 and D44 of `test/dom` (listeners, timers, DOM, in Chrome, Firefox and WebKit), and the weak tests (native, and `test/weak` in the js_of_ocaml and wasm_of_ocaml builds) | Done |
+| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), tests D25, D40 and D44 of `test/dom` (listeners, timers, DOM, in Chrome, Firefox and WebKit), HT9 of `test/dom` (20 times, with a request in flight), and the weak tests (native, and `test/weak` in the js_of_ocaml and wasm_of_ocaml builds) | Done |
 | Partial update | Yes, each change | `test/view/test_budget.ml`: three actions on 1,000 keyed component rows, exact counts of the views and of the DOM operations. `bench/alloc`: the allocated words of two actions | Done |
 | Token release | Yes, each change | `test/view/test_budget.ml`: the operations on the token lists when the parent removes 1,000 and 2,000 component rows | Done |
-| Linked modules | Yes, each change | `test/link` (kilim, kilim.browser, kilim.web) | Done |
+| Linked modules | Yes, each change | `test/link` (kilim, kilim.browser, kilim.web, kilim.http, kilim.http.browser) | Done |
 | Time of the actions, wasm start-up time | No | Each night on fixed hardware | Waits: no fixed hardware yet |
 
 The leak tests and the link check run in the CI step "Test", with the other
@@ -165,6 +165,10 @@ these bindings and has no budget, and finds `queueMicrotask` (the binding
 `Kilim_web.Microtask`, which the counter uses) in each file of the
 counter.
 
+The counter also does not use the fetch transport of `kilim.http.browser`:
+its builds do not contain `AbortController`, and the control program
+installs the transport.
+
 ## kilim.web
 
 kilim.browser calls `queueMicrotask`, `Object.is` and Trusted Types through
@@ -190,6 +194,36 @@ release profile):
 
 The cost of `Js_object.is` includes `CamlinternalLazy`, which each kilim app
 links already.
+
+## kilim.http
+
+`kilim.http` is not in the budget programs: a program that does not use it
+does not link it. Its cost, measured one time with the counter and a
+`get_json` of a list of strings, against the counter (gzip -9, the release
+profile):
+
+| Part | `.js` file | Main `.wasm` file | Launcher |
+|---|---|---|---|
+| `Kilim_http` (`Json`, `Decode`, the tasks), with no transport | 2,579 bytes | 3,338 bytes | 2 bytes |
+| With `Kilim_http_browser.install ()` too (total) | 3,816 bytes | 5,681 bytes | 487 bytes |
+
+The JSON parser is OCaml code in all builds (design section 13): one
+behavior in the native tests and in the browsers, and no JS exception to
+catch. It is slower than `JSON.parse`. A parse of a text of 1,000,001
+bytes (an array of small objects with numbers, strings, an escape and a
+boolean), the median of 15 runs on node 24:
+
+| Build | `Json.parse` | `JSON.parse` |
+|---|---|---|
+| js_of_ocaml | 25 to 27 ms | 4.1 ms |
+| wasm_of_ocaml | 21 to 23 ms | 4.1 ms |
+
+Thus a parse is about 5 to 6 times slower than `JSON.parse`, and a response
+of about 1.5 to 2 MB takes more than 50 ms, the limit of a busy turn
+(design section 16). The review of the Phase 4 plan measured about 9 times
+slower, with 27 to 30 ms for 1 MB, on another text. The time is in the
+parse only: the decoders come after it. If users need larger responses, a
+later version can add a parse with `JSON.parse`.
 
 ## DOM operations
 
