@@ -155,10 +155,11 @@ DOM operations are direct calls), and the launcher contains
 
 The rule also checks that an app does not pay for a binding that it does
 not use. The counter does not use `Unsafe_html.of_trusted`,
-`Async.of_fut` and `Kilim_web.Es_module`. Thus its two release builds (the
-`.js` file, and the launcher with the main `.wasm` file, read as bytes) do
-not contain `trustedTypes`, `isHTML`, `kilimFut` (the property of the JS
-cell of `of_fut`) and `import(`. The positive controls: the same read finds
+`Async.of_fut`, `Kilim_web.Es_module`, kilim.router.browser and
+`Kilim_web.Scroll`. Thus its two release builds (the `.js` file, and the
+launcher with the main `.wasm` file, read as bytes) do not contain
+`trustedTypes`, `isHTML`, `kilimFut` (the property of the JS cell of
+`of_fut`), `import(`, `pushState` and `scrollTo`. The positive controls: the same read finds
 each name in the same build of `bench/size/control.ml`, a program that uses
 these bindings and has no budget, and finds `queueMicrotask` (the binding
 `Kilim_web.Microtask`, which the counter uses) in each file of the
