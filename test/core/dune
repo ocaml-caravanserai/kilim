@@ -1,7 +1,8 @@
-; The tests of the core (design section 12), native only: windtrap runs here,
-; and `make mutate` tests the mutants of src/core with this suite. test/cross
-; runs the big tests in the three builds.
+; The tests of the core (design sections 09 and 12), native only: windtrap
+; runs here, and `make mutate` tests the mutants of src/core with this suite.
+; test/cross runs the big tests in the three builds. test/browser runs the
+; property of test/shallow under js_of_ocaml and wasm_of_ocaml.
 
 (test
  (name test_core)
- (libraries kilim windtrap))
+ (libraries kilim shallow_law windtrap))

@@ -162,3 +162,6 @@ let () =
   ignore (Private.Runtime.stats rt) ;
   ignore (Private.Runtime.inspect rt) ;
   Private.Runtime.stop rt
+
+(* The props compare of components. *)
+let () = ignore (Component.shallow_equal (1, "a", 0.) (1, "a", -0.))

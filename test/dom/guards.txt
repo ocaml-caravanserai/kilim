@@ -112,13 +112,22 @@ trusted.ml  of_trusted  no trustedTypes: of_string    true: D38 (a JS string is 
 trusted.ml  of_trusted  isHTML                          true: D38 (a JS string is not
                                                         refused). false: D38 (a
                                                         TrustedHTML is refused).
-browser_host.ml  same  js_of_ocaml: Object.is           ( == ): D17 in the js build.
+browser_host.ml  same  js_of_ocaml: Object.is           ( == ): D17, H shallow_equal
+                                                        (0. and -0., NaN) in the js
+                                                        build.
 browser_host.ml  same  other builds: ( == )             No test: Object.is gives the
                                                         same result under
                                                         wasm_of_ocaml (it compares the
                                                         boxes), at 39 ns for each
                                                         compare. The choice is for
                                                         speed.
+browser_host.ml  same  js_of_ocaml: Shallow.set_same  removed: H shallow_equal (0.
+                                                        and -0., NaN, the JS arrays,
+                                                        the property) in the js
+                                                        build. Object.is or the
+                                                        default: H shallow_equal
+                                                        (the JS arrays [253, 1] and
+                                                        [253, 2]) in the js build.
 browser_host.ml  set_timer  the first clear only        true: H3, D25.
 window.ml   start      the end action removes the listener  removed: D24 (a removed
                                                         key), D25.
