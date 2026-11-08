@@ -1,0 +1,43 @@
+; The chat example. The app is a library with kilim, kilim.http,
+; kilim.websocket and kilim.storage (the pure parts), thus the native test
+; links it with kilim.testing. main.ml installs the browser parts and starts
+; it. The rule of index.html is a copy of the rule in docs/loader.md.
+; examples/serve.mjs gives /chat, /chat/drop and /api/history.
+
+(library
+ (name chat)
+ (modules chat)
+ (libraries kilim kilim.http kilim.websocket kilim.storage))
+
+(executable
+ (name main)
+ (modules main)
+ (modes js wasm)
+ (libraries
+  chat
+  kilim.browser
+  kilim.http.browser
+  kilim.websocket.browser
+  kilim.storage.browser))
+
+(rule
+ (targets index.html)
+ (deps
+  page.html
+  main.bc.js
+  main.bc.wasm.js
+  (glob_files main.bc.wasm.assets/*))
+ (action
+  (run
+   kilim
+   page
+   --template
+   page.html
+   --base
+   /
+   --js
+   main.bc.js
+   --wasm
+   main.bc.wasm.js
+   -o
+   index.html)))

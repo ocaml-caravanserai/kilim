@@ -85,6 +85,7 @@ let make ?host app outputs =
      driver, and can send a request. *)
   History_state.install host ;
   Websocket_state.install host ;
+  Storage_state.install host ;
   let http = Http_mock_state.start host in
   let rt = Runtime.start (Host.env host) ops ~parent:root app in
   Host.microtasks host ;

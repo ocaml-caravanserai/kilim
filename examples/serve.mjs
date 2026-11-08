@@ -20,12 +20,19 @@
 // cities of a fixed list whose names start with TEXT (the ASCII case is
 // ignored). An empty TEXT gives []. &delay=MS sends the answer MS ms later.
 //
+// The API of the chat example: /chat is a WebSocket room (examples/ws.mjs):
+// each text goes to each connection of the room. /api/history gives the last
+// 20 texts of the room as a JSON array. /chat/drop closes each connection of
+// the room (the code 1001), for a test of the reconnect. Another WebSocket
+// path gets 404.
+//
 // The Chrome test of the examples (test/examples/run.mjs) imports serve().
 
 import { readFileSync, statSync } from 'node:fs';
 import http from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { accept, refuse, Room } from './ws.mjs';
 
 const types = {
   '.html': 'text/html; charset=utf-8',
@@ -69,6 +76,8 @@ const isFile = (f) => {
 export const serve = ({ dir, base = null, csp = null, onRequest = () => {}, port = 8000 }) => {
   const root = resolve(dir);
   const prefix = base ?? '/';
+  const room = new Room();
+  const history = [];
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     const send = (status, headers, body) => {
@@ -92,6 +101,15 @@ export const serve = ({ dir, base = null, csp = null, onRequest = () => {}, port
       api(url, send);
       return;
     }
+    if (path === '/api/history') {
+      send(200, { 'content-type': types['.json'], 'cache-control': 'no-store' }, JSON.stringify(history));
+      return;
+    }
+    if (path === '/chat/drop') {
+      for (const c of room.conns) c.close(1001, 'drop');
+      send(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }, 'dropped');
+      return;
+    }
     if (path.startsWith(prefix)) {
       const rest = path.slice(prefix.length);
       const file = normalize(join(root, rest));
@@ -113,6 +131,22 @@ export const serve = ({ dir, base = null, csp = null, onRequest = () => {}, port
     if (req.method === 'GET' && /text\/html/.test(req.headers.accept || '') && isFile(join(root, 'index.html')))
       page();
     else send(404, {}, '');
+  });
+  server.on('upgrade', (req, socket) => {
+    socket.on('error', () => {});
+    if (new URL(req.url, 'http://x').pathname !== '/chat') {
+      refuse(socket);
+      return;
+    }
+    accept(req, socket, (c) => {
+      room.join(c);
+      c.onmessage = (text, binary) => {
+        if (binary) return;
+        history.push(text);
+        if (history.length > 20) history.shift();
+        room.send(text);
+      };
+    });
   });
   return new Promise((ok, ko) => {
     server.on('error', ko);

@@ -1,0 +1,14 @@
+; kilim.storage: localStorage and sessionStorage as tasks with a result, above
+; one global driver record. It uses only the standard library and kilim, thus
+; Storage_mock of kilim.testing runs as native code. kilim.storage.browser
+; (browser/) gives the driver on the Web Storage API. The rule of the banned
+; modules of the core applies (test/link).
+
+(library
+ (name kilim_storage)
+ (public_name kilim.storage)
+ (libraries kilim)
+ (instrumentation
+  (backend ppx_windtrap.coverage))
+ (instrumentation
+  (backend ppx_windtrap.mutate)))

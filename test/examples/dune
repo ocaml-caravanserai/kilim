@@ -24,6 +24,7 @@
   ../dom/chrome.mjs
   ../dom/playwright.mjs
   ../../examples/serve.mjs
+  ../../examples/ws.mjs
   %{bin:kilim}
   ../../examples/counter/index.html
   ../../examples/counter/page.html
@@ -44,7 +45,12 @@
   ../../examples/search/page.html
   ../../examples/search/main.bc.js
   ../../examples/search/main.bc.wasm.js
-  (glob_files ../../examples/search/main.bc.wasm.assets/*)))
+  (glob_files ../../examples/search/main.bc.wasm.assets/*)
+  ../../examples/chat/index.html
+  ../../examples/chat/page.html
+  ../../examples/chat/main.bc.js
+  ../../examples/chat/main.bc.wasm.js
+  (glob_files ../../examples/chat/main.bc.wasm.assets/*)))
 
 (rule
  (alias runtest)
@@ -63,7 +69,8 @@
    ../../examples/counter
    ../../examples/todo
    ../../examples/components
-   ../../examples/search)))
+   ../../examples/search
+   ../../examples/chat)))
 
 (rule
  (alias browsers)
@@ -86,7 +93,8 @@
    ../../examples/counter
    ../../examples/todo
    ../../examples/components
-   ../../examples/search)))
+   ../../examples/search
+   ../../examples/chat)))
 
 (rule
  (alias browsers)
@@ -109,4 +117,5 @@
    ../../examples/counter
    ../../examples/todo
    ../../examples/components
-   ../../examples/search)))
+   ../../examples/search
+   ../../examples/chat)))

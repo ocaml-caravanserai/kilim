@@ -21,9 +21,11 @@ loader and `kilim.testing`. The browser tests run in Chrome, Firefox and
 WebKit. kilim also has the parts of Phase 2: components with props, outputs
 and subscriptions (`Kilim.Component`), error boundaries (`View.boundary`),
 shared state (`Kilim.Context`) and the test of one component
-(`Kilim_testing.mount`). Phase 4 adds `kilim.http` (HTTP requests and JSON)
-and `kilim.router` (routes in the URL), each with a mock in
-`kilim.testing`. There is no release yet, and the API can change.
+(`Kilim_testing.mount`). Phase 4 is complete: it adds `kilim.http` (HTTP
+requests and JSON), `kilim.router` (routes in the URL), `kilim.websocket`
+(a WebSocket as a subscription) and `kilim.storage` (localStorage and
+sessionStorage), each with a mock in `kilim.testing`. There is no release
+yet, and the API can change.
 
 The design is in [docs/design.html](docs/design.html). The results of the
 spikes are in [docs/phase0.md](docs/phase0.md), and the budgets are in
@@ -34,8 +36,8 @@ spikes are in [docs/phase0.md](docs/phase0.md), and the budgets are in
 ### Run the examples
 
 The examples are in [examples](examples): a counter, a todo list, an app
-with components, and a search box with the query in the URL. Build them,
-then serve the dev files of an example:
+with components, a search box with the query in the URL, and a chat. Build
+them, then serve the dev files of an example:
 
 ```sh
 nix develop
@@ -47,7 +49,10 @@ Then open `http://127.0.0.1:8000/`. `examples/serve.mjs` serves the files
 with `cache-control: no-cache`, as [docs/loader.md](docs/loader.md) tells.
 It also gives the API of the search example: `/api/cities?q=TEXT` gives the
 cities whose names start with `TEXT`, and `&delay=MS` sends the answer MS ms
-later.
+later. For the chat example, `/chat` is a WebSocket room, `/api/history`
+gives the last 20 messages, and `/chat/drop` closes each socket of the
+room. `examples/ws.mjs` is the WebSocket server. It uses only the modules of
+node.
 
 ### An app
 
@@ -348,6 +353,89 @@ This test starts at a deep link:
       Http_mock.on_get p "/api/cities?q=par" (`Json {|["Paris","Parma"]|}) ;
       Page.advance p (Span.ms 300) ;
       equal (list string) ["Paris"; "Parma"] (cities p) ;
+```
+
+### Storage
+
+`kilim.storage` reads and writes localStorage and sessionStorage with tasks.
+The result is synchronous: the chat example reads the nickname in an init
+task, thus the first render shows it.
+
+```ocaml in=examples/chat/chat.ml
+  , Cmd.task (Async.map (fun r -> Loaded r) (Storage.get Local "nick")) )
+```
+
+An error is a `Storage.error` in the result, for example `Unavailable` when
+the user blocks the storage of the site. `main.ml` calls
+`Kilim_storage_browser.install ()` (see the next section).
+
+### WebSocket
+
+`kilim.websocket` gives a socket as a subscription. The key comes from the
+URL and `~id`. `Opened` gives the connection, and `Ws.send` sends text on
+it:
+
+```ocaml in=examples/chat/chat.ml
+let subs m = Ws.connect ~id:(string_of_int m.id) "/chat" (fun e -> Socket e)
+```
+
+The library does not connect again by itself. On `Closed`, the chat example
+waits (1 s, 2 s, 4 s, at most 30 s), then gives a new `~id`:
+
+```ocaml in=examples/chat/chat.ml
+  | Socket (Closed _) ->
+      let s = backoff m.attempt in
+      ( {m with status= Waiting s; attempt= m.attempt + 1}
+      , Cmd.task
+          (Async.map (fun () -> Retry) (Async.sleep (Span.ms (s * 1000)))) )
+```
+
+`main.ml` installs the three browser parts:
+
+```ocaml file=examples/chat/main.ml
+let () =
+  Kilim_http_browser.install () ;
+  Kilim_websocket_browser.install () ;
+  Kilim_storage_browser.install () ;
+  Kilim_browser.run ~mount:"app" Chat.app
+```
+
+### Test with mocks
+
+Each page of `kilim.testing` has a mock of each library: `Http_mock`,
+`History_mock`, `Websocket_mock` and `Storage_mock`. The events of a mock
+come on the virtual clock. The chat test opens the room and gives the reply
+of `/api/history`:
+
+```ocaml in=examples/chat/test/test_chat.ml
+let open_room p history =
+  Http_mock.on_get p ~once:true "/api/history" (`Json history) ;
+  Websocket_mock.accept (Websocket_mock.server p "/chat") ;
+  frame p
+```
+
+`Websocket_mock.drop` closes the socket from the server. The test then
+checks the wait at exact times on the virtual clock (`at p t ms` runs the
+host until `ms` after the drop):
+
+```ocaml in=examples/chat/test/test_chat.ml
+      let t = drop () in
+      frame p ;
+      equal string "Disconnected: a new try in 1 s" (status p) ;
+      at p t 999 ;
+      equal int ~msg:"999 ms" 0 (Websocket_mock.connections room) ;
+      at p t 1016 ;
+      equal int ~msg:"1 s and a frame" 1 (Websocket_mock.connections room) ;
+```
+
+A value in the storage before the mount (`History_mock` is in the section
+"Routing"):
+
+```ocaml in=examples/chat/test/test_chat.ml
+  let host = Host.create () in
+  Storage_mock.preset host Local [("nick", "ann")] ;
+  with_page ~host (fun p ->
+      equal string ~msg:"the restore" "ann" (nick p) ;
 ```
 
 ### A release

@@ -29,8 +29,8 @@ exception Query of string
 val start : ?host:Host.t -> Kilim.App.t -> none t
 (** Mounts the app in a new [div] element. [host] defaults to a new host. Before
     the first turn, the page starts an empty [Http_mock] for its host, and sets
-    [History_mock] and [Websocket_mock] as the drivers of kilim.router and
-    kilim.websocket. *)
+    [History_mock], [Websocket_mock] and [Storage_mock] as the drivers of
+    kilim.router, kilim.websocket and kilim.storage. *)
 
 val mount :
   (module C : Kilim.COMPONENT)

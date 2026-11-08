@@ -1,8 +1,8 @@
 ; The size budget (docs/budgets.md): the gzip size of the counter of bench/size
-; and of the todo, components and search examples in the release profile, in
-; the two builds, and the check of the generated code of the counter, with the
-; control program (control.ml) that uses each binding. `make size` and
-; `make budgets` run it.
+; and of the todo, components, search and chat examples in the release
+; profile, in the two builds, and the check of the generated code of the
+; counter, with the control program (control.ml) that uses each binding.
+; `make size` and `make budgets` run it.
 
 (executables
  (names counter control)
@@ -16,7 +16,9 @@
   kilim.http
   kilim.http.browser
   kilim.websocket
-  kilim.websocket.browser))
+  kilim.websocket.browser
+  kilim.storage
+  kilim.storage.browser))
 
 (rule
  (alias size)
@@ -39,7 +41,10 @@
   (glob_files ../../examples/components/main.bc.wasm.assets/*.wasm)
   ../../examples/search/main.bc.js
   ../../examples/search/main.bc.wasm.js
-  (glob_files ../../examples/search/main.bc.wasm.assets/*.wasm))
+  (glob_files ../../examples/search/main.bc.wasm.assets/*.wasm)
+  ../../examples/chat/main.bc.js
+  ../../examples/chat/main.bc.wasm.js
+  (glob_files ../../examples/chat/main.bc.wasm.assets/*.wasm))
  (action
   (run
    node
@@ -64,4 +69,8 @@
    example-search
    ../../examples/search/main.bc.js
    ../../examples/search/main.bc.wasm.js
-   ../../examples/search/main.bc.wasm.assets)))
+   ../../examples/search/main.bc.wasm.assets
+   example-chat
+   ../../examples/chat/main.bc.js
+   ../../examples/chat/main.bc.wasm.js
+   ../../examples/chat/main.bc.wasm.assets)))
