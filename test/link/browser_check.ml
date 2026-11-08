@@ -19,5 +19,13 @@ let () =
     ignore Kilim_browser.Private.host ;
     ignore (Kilim_browser.Private.live_timers ()) ;
     ignore (Kilim_browser.Private.cell Jv.null) ;
-    ignore (Kilim_browser.Unsafe_html.of_trusted Jv.null)
+    ignore (Kilim_browser.Unsafe_html.of_trusted Jv.null) ;
+    ignore (Kilim_browser.Async.of_fut (fun _ -> Fut.return ())) ;
+    ignore (Kilim_browser.Async.of_fut_or_error (fun _ -> Fut.ok ())) ;
+    ignore
+      (Kilim_browser.Private.fut_start
+         (fun _ -> Fut.return ())
+         (Kilim.Private.Cancel.root ())
+         ~ok:ignore ) ;
+    ignore (Kilim_browser.Private.Fut_cell.is_empty Jv.null)
   end

@@ -220,6 +220,113 @@ let shallow () =
   List.iter print_endline !errors ;
   check (name "true means the same view (2,000 cases)") (!errors = [])
 
+(* Async.of_fut and of_fut_or_error (design section 12), and the JS cell of
+   of_fut. Each result comes in a later microtask. *)
+module BA = Kilim_browser.Async
+module FC = Kilim_browser.Private.Fut_cell
+
+type rcd = {name: string; n: int}
+
+let of_fut () =
+  let got = ref [] in
+  let add s = got := s :: !got in
+  let keep name t =
+    start (C.root ()) t
+      ~ok:(fun v -> add (name ^ " ok " ^ v))
+      ~error:(function
+        | Jv.Error e ->
+            add (name ^ " js " ^ Jstr.to_string (Jv.Error.message e))
+        | Failure m ->
+            add (name ^ " failure " ^ m)
+        | _ ->
+            add (name ^ " other") )
+  in
+  keep "int" (BA.map string_of_int (BA.of_fut (fun _ -> Fut.return 42))) ;
+  keep "record"
+    (BA.map
+       (fun r -> r.name ^ string_of_int r.n)
+       (BA.of_fut (fun _ -> Fut.return {name= "r"; n= 7})) ) ;
+  keep "or_error" (BA.of_fut_or_error (fun _ -> Fut.return (Ok "fine"))) ;
+  keep "rejected"
+    (BA.of_fut_or_error (fun _ -> Fut.error (Jv.Error.v (Jstr.v "boom")))) ;
+  keep "raise" (BA.of_fut (fun _ -> failwith "make")) ;
+  (* Cold: make runs at each start, not when the task is made. *)
+  let calls = ref 0 in
+  let cold =
+    BA.of_fut (fun _ ->
+        incr calls ;
+        Fut.return (string_of_int !calls) )
+  in
+  let made = !calls in
+  keep "cold" cold ;
+  keep "cold" cold ;
+  (* A cancel before the future settles: no result. *)
+  let fut, set = Fut.create () in
+  let tok = C.root () in
+  start tok
+    (BA.of_fut (fun _ -> fut))
+    ~ok:(fun () -> add "cancelled ok")
+    ~error:(fun _ -> add "cancelled error") ;
+  C.cancel tok ;
+  set () ;
+  (* The cell: the end of the token clears it (the guard of the clear: the weak
+     tests do not find it). W4 tests the reaction of the cell. *)
+  let never, _ = Fut.create () in
+  let tok = C.root () in
+  let cell = Kilim_browser.Private.fut_start (fun _ -> never) tok ~ok:ignore in
+  let full = not (FC.is_empty cell) in
+  C.cancel tok ;
+  check "H of_fut: the cell holds the continuation until the cancel" full ;
+  check "H of_fut: a cancel empties the cell" (FC.is_empty cell) ;
+  later 50 (fun () ->
+      let l = List.sort compare !got in
+      check
+        ("H of_fut: the results: " ^ String.concat ", " l)
+        ( l
+        = [ "cold ok 1"
+          ; "cold ok 2"
+          ; "int ok 42"
+          ; "or_error ok fine"
+          ; "raise failure make"
+          ; "record ok r7"
+          ; "rejected js boom" ] ) ;
+      check "H of_fut: cold, make runs at each start" (made = 0 && !calls = 2) )
+
+(* A raise in the future chain of make: the promise of Brr rejects, and the task
+   gives nothing until a cancel, which empties the cell. Node reports each
+   unhandled rejection: the test counts them, thus node does not exit. *)
+let late_raise () =
+  let rejections = ref 0 in
+  ignore
+    (Jv.call
+       (Jv.get Jv.global "process")
+       "on"
+       [| Jv.of_string "unhandledRejection"
+        ; Jv.callback ~arity:1 (fun _ -> incr rejections) |] ) ;
+  let late _ = Fut.map (fun () -> failwith "late") (Fut.return ()) in
+  let got = ref 0 in
+  let tok = C.root () in
+  start tok (BA.of_fut late) ~ok:(fun () -> incr got) ~error:(fun _ -> incr got) ;
+  let tok' = C.root () in
+  let cell =
+    Kilim_browser.Private.fut_start late tok' ~ok:(fun () -> incr got)
+  in
+  let finish = wait () in
+  ignore
+    (G.set_timeout ~ms:50 (fun () ->
+         let full = not (FC.is_empty cell) in
+         C.cancel tok ;
+         C.cancel tok' ;
+         ignore
+           (G.set_timeout ~ms:20 (fun () ->
+                finish (fun () ->
+                    check
+                      "H of_fut: a raise in the future chain: no result, two \
+                       unhandled rejections"
+                      (!got = 0 && !rejections = 2 && full) ;
+                    check "H of_fut: after the raise, a cancel empties the cell"
+                      (FC.is_empty cell && !got = 0) ) ) ) ) )
+
 (* Es_module.import on node: a data: URL, a bare specifier stays as it is, and a
    throw of the resolve gives an error (node has no document: a fake one). *)
 let es_module () =
@@ -269,6 +376,8 @@ let es_module () =
 
 let () =
   shallow () ;
+  of_fut () ;
+  late_raise () ;
   es_module () ;
   queues
   @@ fun () ->
