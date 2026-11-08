@@ -21,7 +21,9 @@ loader and `kilim.testing`. The browser tests run in Chrome, Firefox and
 WebKit. kilim also has the parts of Phase 2: components with props, outputs
 and subscriptions (`Kilim.Component`), error boundaries (`View.boundary`),
 shared state (`Kilim.Context`) and the test of one component
-(`Kilim_testing.mount`). There is no release yet, and the API can change.
+(`Kilim_testing.mount`). Phase 4 adds `kilim.http` (HTTP requests and JSON)
+and `kilim.router` (routes in the URL), each with a mock in
+`kilim.testing`. There is no release yet, and the API can change.
 
 The design is in [docs/design.html](docs/design.html). The results of the
 spikes are in [docs/phase0.md](docs/phase0.md), and the budgets are in
@@ -31,8 +33,9 @@ spikes are in [docs/phase0.md](docs/phase0.md), and the budgets are in
 
 ### Run the examples
 
-The examples are in [examples](examples): a counter, a todo list, and an
-app with components. Build them, then serve the dev files of an example:
+The examples are in [examples](examples): a counter, a todo list, an app
+with components, and a search box with the query in the URL. Build them,
+then serve the dev files of an example:
 
 ```sh
 nix develop
@@ -42,6 +45,9 @@ node examples/serve.mjs _build/default/examples/todo
 
 Then open `http://127.0.0.1:8000/`. `examples/serve.mjs` serves the files
 with `cache-control: no-cache`, as [docs/loader.md](docs/loader.md) tells.
+It also gives the API of the search example: `/api/cities?q=TEXT` gives the
+cities whose names start with `TEXT`, and `&delay=MS` sends the answer MS ms
+later.
 
 ### An app
 
@@ -263,6 +269,86 @@ outputs:
 The example also has a filter box with a debounce (`Cmd.latest` and
 `Async.sleep`), a theme context (`Kilim.Context`) and an error boundary
 (`View.boundary`).
+
+### HTTP
+
+`kilim.http` sends requests as tasks. The search box of
+`examples/search/search.ml` waits 250 ms after each key press, then gets the
+cities as JSON and decodes them. `Cmd.latest` cancels the task before it: its
+timer stops, or the browser aborts its request.
+
+```ocaml in=examples/search/search.ml
+  let fetch p q =
+    Cmd.latest ~key:"fetch"
+      (let* () = Async.sleep (Span.ms 250) in
+       let+ r =
+         Http.get_json
+           Http.Decode.(list string)
+           (Url.with_query p.endpoint [("q", q)])
+       in
+       Got (q, r) )
+```
+
+An HTTP failure is an `Http.error` in the result, not an exception.
+`main.ml` installs the browser parts of the libraries before the start:
+
+```ocaml file=examples/search/main.ml
+let () =
+  Kilim_http_browser.install () ;
+  Kilim_router_browser.install () ;
+  Kilim_browser.run ~mount:"app" Search.app
+```
+
+In a test, `Http_mock` gives the replies on the virtual clock:
+
+```ocaml in=examples/search/test/test_search.ml
+    Http_mock.on_get page "/api/cities?q=par" (`Json {|["Paris"]|});
+    Page.type_ page (By.label "City") "par";
+    Page.advance page (Span.ms 300);           (* virtual clock: no real wait *)
+```
+
+### Routing
+
+`kilim.router` keeps a route of the app in the path and the query of the URL.
+The app gives `parse` and `print`. In the search example, the route is the
+query:
+
+```ocaml in=examples/search/search.ml
+let router =
+  Router.make
+    ~parse:(fun (l : Url.location) ->
+      Option.value ~default:"" (List.assoc_opt "q" l.query) )
+    ~print:(fun q ->
+      {Url.path= []; query= (if q = "" then [] else [("q", q)]); fragment= None} )
+    ()
+```
+
+The example has `module Router = Kilim_router`. `Router.current` gives the
+route at the start: thus a deep link (`/?q=par`) loads its results. After
+each result, the box writes the query with `Router.replace`. `Router.link`
+makes a link, and `Router.push` adds its URL to the history.
+`Router.changes` gives each change of the URL. The back button also makes a
+change:
+
+```ocaml in=examples/search/search.ml
+  let subs _ _ = Router.changes router (fun q -> Url q)
+```
+
+In a test, `History_mock` gives the URL of the page and the back button.
+This test starts at a deep link:
+
+```ocaml in=examples/search/test/test_search.ml
+  let host = Host.create () in
+  History_mock.set_url host "/?q=par" ;
+  Kilim_testing.mount ~host
+    (module Search)
+    {Search.endpoint= "/api/cities"}
+    (fun p ->
+      equal string "par" (value p) ;
+      Http_mock.on_get p "/api/cities?q=par" (`Json {|["Paris","Parma"]|}) ;
+      Page.advance p (Span.ms 300) ;
+      equal (list string) ["Paris"; "Parma"] (cities p) ;
+```
 
 ### A release
 

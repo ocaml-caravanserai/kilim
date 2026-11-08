@@ -1,0 +1,6 @@
+; The native test of the search example, with Http_mock and History_mock of
+; kilim.testing on the virtual clock.
+
+(test
+ (name test_search)
+ (libraries search kilim kilim.testing windtrap))

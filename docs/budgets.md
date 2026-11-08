@@ -8,7 +8,7 @@ pull request.
 
 | Budget | Check in CI | Where | State |
 |---|---|---|---|
-| Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size`, the todo example and the components example | Done |
+| Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size`, the todo, components and search examples | Done |
 | DOM operations for each action | Yes, each change | `test/view/test_budget.ml`: the four actions, exact counts. `examples/todo/test/test_counts.ml`: three actions of the todo example | Done |
 | Allocations for each action | Yes, each change | `bench/alloc`: the allocated words of the four actions | Done |
 | Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), tests D25, D40 and D44 of `test/dom` (listeners, timers, DOM, in Chrome, Firefox and WebKit), HT9 of `test/dom` (20 times, with a request in flight), and the weak tests (native, and `test/weak` in the js_of_ocaml and wasm_of_ocaml builds) | Done |
@@ -23,7 +23,7 @@ partial update and the token release checks.
 
 ## Size
 
-`make size` (and `make budgets`) builds three programs in the release
+`make size` (and `make budgets`) builds four programs in the release
 profile and runs `bench/size/size.mjs`:
 
 - `counter`: `bench/size/counter.ml`, one int model, two buttons, one text,
@@ -35,6 +35,8 @@ profile and runs `bench/size/size.mjs`:
   components, the boundaries and the contexts. The dead code elimination
   removes this code from the counter and the todo example. Without this
   program, the budget cannot find a regression in this code.
+- `example-search`: the search example (`examples/search`), with
+  `kilim.http` and `kilim.router`, and their browser parts.
 
 The script gives the gzip size (level 9, the `zlib` module of node) of each
 file, and compares it with `bench/size/budget`. Each line of the budget file
@@ -60,12 +62,25 @@ Measured with OCaml 5.5.1, js_of_ocaml and wasm_of_ocaml 6.4.1, Brr 0.0.9:
 | `example-components` | `main.bc.js` (js_of_ocaml) | 41,805 bytes | 44,000 bytes |
 | `example-components` | The main `.wasm` file (wasm_of_ocaml) | 43,918 bytes | 46,000 bytes |
 | `example-components` | `main.bc.wasm.js` (the launcher) | 6,938 bytes | 7,500 bytes |
+| `example-search` | `main.bc.js` (js_of_ocaml) | 46,854 bytes | 49,500 bytes |
+| `example-search` | The main `.wasm` file (wasm_of_ocaml) | 51,031 bytes | 54,000 bytes |
+| `example-search` | `main.bc.wasm.js` (the launcher) | 7,546 bytes | 8,000 bytes |
 
 The components example adds about 4.0 KB (js_of_ocaml) and 6.1 KB
 (wasm_of_ocaml) to the counter. This includes the code of the four
 components of the example, the instance tree, the boundaries and the
 contexts. Its budget is the measured size plus 5 %, as for the other
 programs.
+
+The search example adds about 9.1 KB (js_of_ocaml) and 13.2 KB
+(wasm_of_ocaml) to the counter: one component, `kilim.http` with the JSON
+parser and the fetch transport, and `kilim.router` with the history driver.
+Its launcher is about 0.6 KB larger than the launcher of the counter: it has
+the JS code of more primitives. The check of the names finds
+`AbortController` and `pushState` in its builds, and no `localStorage`. The
+builds contain `WebSocket`, because `Brr_io` reads `globalThis.WebSocket`
+when it starts: thus this name cannot show that an app does not link
+`kilim.websocket`.
 
 The instance tree of Phase 2 adds about 0.4 KB (js_of_ocaml) and 0.6 KB
 (wasm_of_ocaml) to the counter, which has no component: before it, the

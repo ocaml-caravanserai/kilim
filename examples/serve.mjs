@@ -16,6 +16,10 @@
 // request that is not a file gets 404, and a path outside DIR gets 403. The
 // server listens only on 127.0.0.1 (default port 8000).
 //
+// The API of the search example: /api/cities?q=TEXT gives a JSON array of the
+// cities of a fixed list whose names start with TEXT (the ASCII case is
+// ignored). An empty TEXT gives []. &delay=MS sends the answer MS ms later.
+//
 // The Chrome test of the examples (test/examples/run.mjs) imports serve().
 
 import { readFileSync, statSync } from 'node:fs';
@@ -36,6 +40,19 @@ const immutable = 'public, max-age=31536000, immutable';
 // A content name of kilim dist (16 hexadecimal characters before the last
 // extension), or a file of an .assets directory of wasm_of_ocaml.
 const contentName = (p) => /\.[0-9a-f]{16}\.[^./]+$/.test(p) || /\.assets\//.test(p);
+
+const cities = ['Berlin', 'Bern', 'Lisbon', 'London', 'Lyon', 'Madrid', 'Malaga', 'Milan',
+  'Munich', 'Paris', 'Parma', 'Rome', 'Vienna'];
+
+const api = (url, send) => {
+  const q = (url.searchParams.get('q') ?? '').toLowerCase();
+  const found = q === '' ? [] : cities.filter((c) => c.toLowerCase().startsWith(q));
+  const delay = Number(url.searchParams.get('delay') ?? 0);
+  const answer = () => send(200, { 'content-type': types['.json'], 'cache-control': 'no-store' },
+    JSON.stringify(found));
+  if (delay > 0) setTimeout(answer, delay);
+  else answer();
+};
 
 const isFile = (f) => {
   try {
@@ -71,6 +88,10 @@ export const serve = ({ dir, base = null, csp = null, onRequest = () => {}, port
       if (csp) headers['content-security-policy'] = csp;
       send(200, headers, readFileSync(join(root, 'index.html')));
     };
+    if (path === '/api/cities') {
+      api(url, send);
+      return;
+    }
     if (path.startsWith(prefix)) {
       const rest = path.slice(prefix.length);
       const file = normalize(join(root, rest));

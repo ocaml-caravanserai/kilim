@@ -1322,8 +1322,8 @@ Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope:
     Page.advance page (Span.ms 300);           <span class="cm">(* virtual clock: no real wait *)</span>
     Page.click page (By.text <span class="kw">"Paris"</span>);
     assert (Page.outputs page = [Search.Picked <span class="kw">"Paris"</span>]);
-    Page.unmount page;
-    Page.expect_no_tasks page)                 <span class="cm">(* unmount cancels all tasks *)</span></code></pre>
+    Page.stop page;
+    Page.expect_no_tasks page)                 <span class="cm">(* the stop cancels all tasks *)</span></code></pre>
 </section>
 
 <section id="layout">
@@ -1337,7 +1337,7 @@ Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope:
   src/http/  src/router/  src/storage/  src/websocket/
   src/testing/     fake DOM operations, virtual clock host, queries, mocks
   src/loader/      the loader text, the executable kilim (page, loader, csp, dist)
-  examples/        counter  todo  search  router  chat, and serve.mjs (a dev server)
+  examples/        counter  todo  components  search  chat, and serve.mjs (a dev server)
   test/            unit, property, diff and semantics tests; dom, loader, examples (Chrome, Firefox, WebKit); readme
   bench/           budgets: size, alloc (allocations); timing later
   docs/design.md  docs/budgets.md</code></pre>
@@ -1448,6 +1448,15 @@ Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope:
       <li><code>test/dom/test_router.ml</code>, in Chrome, Firefox and WebKit, in the two builds, in the dev and the release profile, and with no WebAssembly: R1 and R2 (push and replace change <code>location</code> and <code>history.length</code>, with no <code>popstate</code>), R3 (back gives the route through <code>popstate</code>), R4 and R5 (a trusted Ctrl click and a middle click on <code>Router.link</code> do not change the route), R6 (a URL of another origin and a URL that is not valid give a warning and no change), W7 (<code>Kilim_web.Scroll</code> on a page that is tall enough: at once, the limit of the range, and smooth), R7 (a push scrolls to the top, a replace does not, and the location has the query and the fragment), and R8 (20 starts and stops: the listener spy finds no <code>popstate</code> listener). The three browsers gave the same results, thus no new fact. <code>test/dom/guards.txt</code> lists the guards of kilim.router.browser and Scroll, each replaced by hand.</li>
       <li><code>test/weak/weak_router.ml</code> on node, in the two builds and the two profiles, with a JS shim of <code>location</code>, <code>history</code> and the window listeners: after the unmount, no listener stays and the model is free. A mounted control keeps its model, and a sensitivity control (the shim ignores the remove) finds the model that the listener keeps.</li>
       <li>The size check: the counter lacks <code>pushState</code> and <code>scrollTo</code>, and the control program contains them. <code>test/link</code> checks kilim.router as the core, and kilim.router.browser as kilim.browser.</li>
+    </ul>
+    <p>The items of P4-4 and their tests:</p>
+    <ul>
+      <li><code>examples/search</code>: the search box of <a href="#components">section 09</a> (a debounce with <code>Async.sleep</code>, <code>Cmd.latest ~key:"fetch"</code> and <code>Http.get_json</code> with a decoder), with the query in the URL. The box reads the query with <code>Router.current</code> in its <code>init</code>, thus a deep link (<code>/?q=par</code>) loads its results. After each result, it writes the query with <code>Router.replace</code>. It gets each change of the URL with <code>Router.changes</code>. It compares the new query with the last query that it wrote or read. A different query starts a request. A link of the app (<code>Router.push</code>) or the back button can make a different query. A failed request shows the line "The search failed." until the next result. The props stay <code>{ endpoint }</code>, thus the test of <a href="#testing">section 14</a> runs as written, with <code>Page.stop</code> in place of <code>Page.unmount</code>, which does not exist. <code>main.ml</code> calls <code>Kilim_http_browser.install ()</code> and <code>Kilim_router_browser.install ()</code>.</li>
+      <li><code>examples/serve.mjs</code> gives <code>/api/cities?q=TEXT</code>: the cities of a fixed list whose names start with the text, and <code>&amp;delay=MS</code> for a late answer.</li>
+      <li>The native test (<code>examples/search/test</code>): the test of section 14, the debounce (one request for three keys) and the query in the URL with no new entry, an abort by a key press, a failed request (a 500 reply), a deep link with <code>History_mock.set_url</code>, and a link then back.</li>
+      <li><code>test/examples</code>: the example in the dev and the release profile, in Chrome, Firefox and WebKit, with and without WebAssembly. The script types a query, waits for the list and the URL, follows a link, goes back, picks a city, then loads a deep link. The runner counts the requests and the preload messages for each load of the page, with the limit of one request for each URL. The requests of <code>/api/</code> do not count.</li>
+      <li>The size gate has <code>example-search</code> lines (<code>docs/budgets.md</code>). The example contains <code>AbortController</code> and <code>pushState</code>, and lacks <code>localStorage</code>. It contains <code>WebSocket</code>: <code>Brr_io</code> reads <code>globalThis.WebSocket</code> when it starts, thus each app with <code>kilim.http.browser</code> has the name. The check of P4-5 must use a name of the driver of <code>kilim.websocket</code>.</li>
+      <li>README: the sections "HTTP" and "Routing", with code blocks that <code>test/readme</code> ties to the files of the example.</li>
     </ul>
   </div></div>
   <div class="phase"><div class="n">P5</div><div>

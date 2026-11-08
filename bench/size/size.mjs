@@ -43,6 +43,14 @@ const text = (files) => files.map((f) => readFileSync(f, 'latin1')).join('\n');
 const unused = ['trustedTypes', 'isHTML', 'kilimFut', 'import(', 'pushState', 'scrollTo',
   'AbortController'];
 
+// The names that an example must contain (a positive control) and must not
+// contain: the search example uses kilim.http.browser and
+// kilim.router.browser, and not localStorage. It contains "WebSocket": Brr_io
+// (for the fetch) reads globalThis.WebSocket when it starts.
+const programChecks = {
+  'example-search': { has: ['AbortController', 'pushState', 'WebSocket'], lacks: ['localStorage'] },
+};
+
 let failures = 0;
 const measured = new Set();
 for (let i = 0; i < rest.length; i += 4) {
@@ -58,6 +66,17 @@ for (let i = 0; i < rest.length; i += 4) {
     console.log(`${ok ? 'ok  ' : 'FAIL'} ${key}: ${sizes[file]} bytes (budget ${b ?? 'none'})`);
     if (!ok) failures++;
   }
+  const pc = programChecks[name];
+  if (pc)
+    for (const [build, files] of [['js', [js]], ['wasm', [launcher, mainWasm(dir)]]]) {
+      const s = text(files);
+      for (const [want, names] of [[true, pc.has], [false, pc.lacks]])
+        for (const t of names) {
+          const ok = s.includes(t) === want;
+          console.log(`${ok ? 'ok  ' : 'FAIL'} ${name} ${build} ${want ? 'contains' : 'lacks'} ${t}`);
+          if (!ok) failures++;
+        }
+    }
   if (name === 'counter') {
     const has = (file, texts) => {
       const s = readFileSync(file, 'utf8');
