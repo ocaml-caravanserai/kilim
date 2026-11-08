@@ -1,6 +1,7 @@
 (* The leak tests of the turn (design section 14): the latest table, the task
    tokens, the subscription keys, the timers, the model of a root that failed,
-   the instance links and the lists of the boundaries. *)
+   the instance links, the lists of the boundaries and the registrations of the
+   readers. *)
 
 open Windtrap
 open Kilim
@@ -375,6 +376,51 @@ let boundary_free () =
     (Option.is_none (F.parent (Sys.opaque_identity node))) ;
   no_errors p
 
+let theme : string Context.t = Context.create ~default:"" ()
+
+module Reading = Leaf (struct
+  type props = int
+
+  let init _ = Cmd.none
+
+  let view n = Context.read theme (fun t -> txt (t ^ string_of_int n))
+end)
+
+let reading n = Component.v (module Reading) ~on:never n
+
+(* Readers mount and unmount below a provider that stays, and with their own
+   provider. *)
+let readers_app =
+  App.make
+    ~init:(fun () -> (0, Cmd.none))
+    ~update:(fun m _ -> (m + 1, Cmd.none))
+    ~view:(fun m ->
+      El.div
+        [ button Save (string_of_int m)
+        ; Context.provide theme (string_of_int m)
+            (if m mod 2 = 0 then El.div [reading m; reading (m + 1)] else txt "")
+        ; (if m mod 4 = 0 then Context.provide theme "y" (reading m) else txt "")
+        ] )
+    ()
+
+(* 100 mounts and unmounts of readers. *)
+let reader_mounts () =
+  let p = P.start readers_app in
+  for _ = 1 to 200 do
+    click p
+  done ;
+  let t = P.tree p in
+  equal int ~msg:"the last mount" 3 t.readers ;
+  equal int 3 t.reader_links ;
+  equal int 2 t.providers ;
+  click p ;
+  let t = P.tree p in
+  equal int ~msg:"registrations" 0 t.readers ;
+  equal int ~msg:"reader links" 0 t.reader_links ;
+  equal int ~msg:"the provider that stays" 1 t.providers ;
+  equal int ~msg:"instances" 0 t.instances ;
+  no_errors p
+
 let tests =
   [ group "leaks"
       [ test "1,000 keys with synchronous results leave an empty table" sync_keys
@@ -394,4 +440,6 @@ let tests =
           (boundary_rows false)
       ; test "10 pages of 20 cards, each with a boundary: 0 nested entries"
           card_pages
-      ; test "a dead instance does not keep its boundary" boundary_free ] ]
+      ; test "a dead instance does not keep its boundary" boundary_free
+      ; test "100 mounts and unmounts of readers: 0 registrations" reader_mounts
+      ] ]

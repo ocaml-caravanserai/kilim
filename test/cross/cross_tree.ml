@@ -1,7 +1,7 @@
 (* The big loops of the instance tree in each build (design section 14): the
    leak counts after 1,000 repetitions, the supported nesting depth of the
-   components (decision 15 of the Phase 2 plan review), and the lists of the
-   boundaries. *)
+   components (decision 15 of the Phase 2 plan review), the lists of the
+   boundaries, and the registrations of the readers. *)
 
 open Kilim
 module H = Kilim_testing.Host
@@ -272,6 +272,53 @@ let siblings check =
   click p ;
   check "10,000 sibling instances: the unmount" (empty p)
 
+let theme : string Context.t = Context.create ~default:"" ()
+
+module Reading = struct
+  include C.Defaults
+
+  type props = int
+
+  type model = unit
+
+  type msg = unit
+
+  type out = none
+
+  let id : (props, model, msg, out) C.id = C.id ()
+
+  let init _ = ((), Cmd.none)
+
+  let update _ _ () () = ((), Cmd.none)
+
+  let view n () = Context.read theme (fun t -> txt (t ^ string_of_int n))
+end
+
+let reading n = C.v (module Reading) ~on:never n
+
+(* Readers mount and unmount below a provider that stays, and with their own
+   provider. *)
+let readers check =
+  let _, p =
+    start (fun m ->
+        El.div
+          [ Context.provide theme (string_of_int m)
+              ( if m mod 2 = 0 then El.div [reading m; reading (m + 1)]
+                else txt "" )
+          ; ( if m mod 4 = 0 then Context.provide theme "y" (reading m)
+              else txt "" ) ] )
+  in
+  for _ = 1 to 2_000 do
+    click p
+  done ;
+  check "1,000 mounts and unmounts of readers: 3 registrations left"
+    ((P.tree p).readers = 3 && (P.tree p).reader_links = 3) ;
+  click p ;
+  check "then 0 registrations"
+    ( (P.tree p).readers = 0
+    && (P.tree p).reader_links = 0
+    && (P.tree p).providers = 1 && empty p )
+
 (* The supported depth: under js_of_ocaml on node 24 with the default stack, a
    first patch of a chain of 650 levels overflows the stack, and 600 levels
    work. *)
@@ -282,4 +329,5 @@ let run check =
   nesting check 500 ;
   boundary_rows check ;
   card_pages check ;
-  failing_rows check
+  failing_rows check ;
+  readers check
