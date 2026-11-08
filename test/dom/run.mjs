@@ -37,6 +37,7 @@ import { readFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import http from 'node:http';
 import { open } from './browser.mjs';
+import { accept, refuse, Room } from '../../examples/ws.mjs';
 
 const args = process.argv.slice(2);
 const opt = (name) => {
@@ -147,6 +148,36 @@ const server = http.createServer((req, res) => {
     res.end();
   }
 });
+// The WebSocket endpoints of test_websocket (kilim.websocket), with the
+// server of examples/ws.mjs. /ws/echo sends each text back, and the text
+// "bin:T" back as a binary frame of T. /ws/close?code=N&reason=R closes each
+// connection after the open, with the code N (default 1000) and the reason
+// R. /ws/room sends
+// each text to each connection of the room. Another path gets the status 404.
+const room = new Room();
+const upgraded = new Set();
+server.on('upgrade', (req, socket) => {
+  upgraded.add(socket);
+  socket.on('close', () => upgraded.delete(socket));
+  socket.on('error', () => {});
+  const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/ws/echo')
+    accept(req, socket, (c) => {
+      c.onmessage = (t, binary) => {
+        if (!binary && t.startsWith('bin:')) c.sendBinary(Buffer.from(t.slice(4)));
+        else c.send(t);
+      };
+    });
+  else if (url.pathname === '/ws/close')
+    accept(req, socket, (c) =>
+      c.close(Number(url.searchParams.get('code') ?? 1000), url.searchParams.get('reason') ?? ''));
+  else if (url.pathname === '/ws/room')
+    accept(req, socket, (c) => {
+      room.join(c);
+      c.onmessage = (t) => room.send(t);
+    });
+  else refuse(socket);
+});
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
 const port = server.address().port;
 
@@ -155,6 +186,7 @@ const cleanup = async () => {
   await browser.close();
   server.close();
   server.closeAllConnections();
+  for (const socket of upgraded) socket.destroy();
 };
 
 // The run of one page, with one time limit from the creation of its page.

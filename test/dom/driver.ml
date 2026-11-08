@@ -62,7 +62,14 @@ type facts =
             the browser blocks (http://127.0.0.1:1/). *)
   ; header_byte: bool
         (** A request header value with U+00E9 goes as one byte 0xE9 (in WebKit,
-            as the two bytes of UTF-8). *) }
+            as the two bytes of UTF-8). *)
+  ; http_scheme: bool
+        (** The constructor WebSocket accepts a URL with the scheme http (the
+            browser changes it to ws). *)
+  ; scheme_report: string option
+        (** The constructor WebSocket throws a SyntaxError for the URL
+            ftp://127.0.0.1/, and WebKit also reports an error with this first
+            line to the runner. *) }
 
 let facts =
   match browser with
@@ -75,7 +82,9 @@ let facts =
       ; meta_key= true
       ; middle_click= false
       ; network_error= "TypeError: Failed to fetch"
-      ; header_byte= true }
+      ; header_byte= true
+      ; http_scheme= true
+      ; scheme_report= None }
   | Firefox ->
       { ime= false
       ; insert_composes= true
@@ -86,7 +95,9 @@ let facts =
       ; middle_click= false
       ; network_error=
           "TypeError: NetworkError when attempting to fetch resource."
-      ; header_byte= true }
+      ; header_byte= true
+      ; http_scheme= true
+      ; scheme_report= None }
   | Webkit ->
       { ime= false
       ; insert_composes= false
@@ -96,7 +107,9 @@ let facts =
       ; meta_key= true
       ; middle_click= false
       ; network_error= "TypeError: Load failed"
-      ; header_byte= false }
+      ; header_byte= false
+      ; http_scheme= true
+      ; scheme_report= Some "Wrong url scheme for WebSocket ftp: /127.0.0.1/" }
 
 (* A check that does not run in this browser. run.mjs counts these lines. *)
 let skip name reason = log ("SKIP " ^ name ^ ": " ^ reason)

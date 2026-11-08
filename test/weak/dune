@@ -1,8 +1,9 @@
 ; The weak tests (weak.ml, weak_fut.ml for Async.of_fut, weak_router.ml for
-; kilim.router.browser, and weak_http.ml for kilim.http.browser) in the
-; js_of_ocaml and the wasm_of_ocaml builds, on node with --expose-gc. The
-; native weak tests are in test/turn (test_component.ml and test_leak.ml),
-; test/core (test_async.ml), test/router and test/http (test_tasks.ml).
+; kilim.router.browser, weak_http.ml for kilim.http.browser and
+; weak_websocket.ml for kilim.websocket.browser) in the js_of_ocaml and the
+; wasm_of_ocaml builds, on node with --expose-gc. The native weak tests are in
+; test/turn (test_component.ml and test_leak.ml), test/core (test_async.ml),
+; test/router, test/http (test_tasks.ml) and test/websocket.
 
 (executable
  (name weak)
@@ -89,3 +90,26 @@
   (glob_files weak_http.bc.wasm.assets/*))
  (action
   (run node --expose-gc weak_http.bc.wasm.js)))
+
+; weak_websocket: the listeners of kilim.websocket.browser on a socket, with
+; a JS shim of location and of a WebSocket class that never opens.
+
+(executable
+ (name weak_websocket)
+ (modules weak_websocket)
+ (modes js wasm)
+ (libraries kilim kilim.testing kilim.websocket kilim.websocket.browser brr))
+
+(rule
+ (alias runtest)
+ (deps weak_websocket.bc.js)
+ (action
+  (run node --expose-gc weak_websocket.bc.js)))
+
+(rule
+ (alias runtest)
+ (deps
+  weak_websocket.bc.wasm.js
+  (glob_files weak_websocket.bc.wasm.assets/*))
+ (action
+  (run node --expose-gc weak_websocket.bc.wasm.js)))

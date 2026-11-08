@@ -144,3 +144,37 @@
  (action
   (system
    "if ocamlobjinfo %{dep:../../src/http/browser/kilim_http_browser.cma} | grep -E \"\t(CamlinternalFormat|Stdlib__(Printf|Format|Scanf|Hashtbl|Random|Fun|Printexc)|Str)$\"; then echo 'kilim.http.browser imports a banned interface (design section 13)'; exit 1; fi")))
+
+; kilim.websocket: the strict check of the core. kilim.websocket.browser: the
+; two checks of kilim.browser.
+
+(executable
+ (name websocket_check)
+ (modules websocket_check)
+ (modes byte)
+ (libraries kilim kilim.websocket))
+
+(rule
+ (alias runtest)
+ (action
+  (system
+   "if ocamlobjinfo %{dep:websocket_check.bc} | grep -E \"compilation unit .(CamlinternalFormat|Stdlib__(Printf|Format|Scanf|Hashtbl|Random|Fun|Printexc)|Str)'\"; then echo 'kilim.websocket links a banned unit (design section 13)'; exit 1; fi")))
+
+(executable
+ (name websocket_browser_check)
+ (modules websocket_browser_check)
+ (modes byte)
+ (link_flags (-no-check-prims))
+ (libraries kilim.websocket kilim.websocket.browser brr))
+
+(rule
+ (alias runtest)
+ (action
+  (system
+   "banned=\"compilation unit .(CamlinternalFormat|Stdlib__(Printf|Format|Scanf|Hashtbl|Random|Fun|Printexc)|Str)'\"; brr=$(ocamlobjinfo %{dep:brr_only.bc} | grep -E \"$banned\"); test -n \"$brr\" || { echo 'brr_only links no banned unit: the check is not valid'; exit 1; }; if ocamlobjinfo %{dep:websocket_browser_check.bc} | grep -E \"$banned\" | grep -vxF \"$brr\"; then echo 'kilim.websocket.browser links a banned unit (design section 13)'; exit 1; fi")))
+
+(rule
+ (alias runtest)
+ (action
+  (system
+   "if ocamlobjinfo %{dep:../../src/websocket/kilim_websocket.cma} %{dep:../../src/websocket/browser/kilim_websocket_browser.cma} | grep -E \"\t(CamlinternalFormat|Stdlib__(Printf|Format|Scanf|Hashtbl|Random|Fun|Printexc)|Str)$\"; then echo 'kilim.websocket or kilim.websocket.browser imports a banned interface (design section 13)'; exit 1; fi")))

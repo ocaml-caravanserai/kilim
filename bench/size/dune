@@ -14,7 +14,9 @@
   kilim.router
   kilim.router.browser
   kilim.http
-  kilim.http.browser))
+  kilim.http.browser
+  kilim.websocket
+  kilim.websocket.browser))
 
 (rule
  (alias size)

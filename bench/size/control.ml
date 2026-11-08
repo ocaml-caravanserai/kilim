@@ -15,6 +15,9 @@ let router =
 (* The fetch transport of kilim.http.browser: AbortController. *)
 let get = Kilim.Async.map (fun _ -> 3) (Kilim_http.get "/x")
 
+(* The driver of kilim.websocket.browser: the text of its warning. *)
+let socket = Kilim_websocket.connect "/ws" (fun _ -> 4)
+
 let app =
   Kilim.App.make
     ~init:(fun () ->
@@ -25,6 +28,7 @@ let app =
               (Kilim.Async.map (fun () -> 2) (Kilim_router.push router ()))
           ; Kilim.Cmd.task get ] ) )
     ~update:(fun _ m -> (m, Kilim.Cmd.none))
+    ~subs:(fun _ -> socket)
     ~view:(fun _ ->
       Kilim.View.unsafe_html ~el:(Kilim.El.div ~at:[])
         (Kilim_browser.Unsafe_html.of_trusted (Jv.get Jv.global "html")) )
@@ -33,4 +37,5 @@ let app =
 let () =
   Kilim_router_browser.install () ;
   Kilim_http_browser.install () ;
+  Kilim_websocket_browser.install () ;
   Kilim_browser.run ~mount:"app" app
