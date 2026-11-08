@@ -18,11 +18,10 @@ kilim builds with js_of_ocaml and wasm_of_ocaml in their default modes.
 kilim has the parts of Phase 1 of the design: the view, the keyed diff, the
 app, the commands, the subscriptions, the async tasks, the browser host, the
 loader and `kilim.testing`. The browser tests run in Chrome, Firefox and
-WebKit. Phase 2 (components) is in progress: `Kilim.Component` has
-components with props, outputs and subscriptions, `View.boundary` catches
-the errors of the components below it, and `Kilim_testing.mount` tests one
-component. Context comes later in Phase 2. There is no release yet, and the
-API can change.
+WebKit. kilim also has the parts of Phase 2: components with props, outputs
+and subscriptions (`Kilim.Component`), error boundaries (`View.boundary`),
+shared state (`Kilim.Context`) and the test of one component
+(`Kilim_testing.mount`). There is no release yet, and the API can change.
 
 The design is in [docs/design.html](docs/design.html). The results of the
 spikes are in [docs/phase0.md](docs/phase0.md), and the budgets are in
@@ -32,8 +31,8 @@ spikes are in [docs/phase0.md](docs/phase0.md), and the budgets are in
 
 ### Run the examples
 
-The examples are in [examples](examples): a counter and a todo list. Build
-them, then serve the dev files of an example:
+The examples are in [examples](examples): a counter, a todo list, and an
+app with components. Build them, then serve the dev files of an example:
 
 ```sh
 nix develop
@@ -185,6 +184,85 @@ The test stanza:
 ```
 
 `dune test` runs the tests.
+
+### A component
+
+A component is a module with its own model, messages, tasks and
+subscriptions. The parent gives it props and gets its outputs. This counter
+of `examples/components/components.ml` gives its new count to the parent:
+
+```ocaml in=examples/components/components.ml
+module Counter = struct
+  include Component.Defaults
+
+  type props = {label: string; step: int}
+
+  type model = int
+
+  type msg = Incr | Decr
+
+  type out = Changed of int
+
+  let id : (props, model, msg, out) Component.id = Component.id ()
+
+  let init _ = (0, Cmd.none)
+
+  let update ctx p n msg =
+    let n = match msg with Incr -> n + p.step | Decr -> n - p.step in
+    (n, Ctx.emit ctx (Changed n))
+
+  let view p n =
+    Context.read theme (fun t ->
+        El.div
+          ~at:[At.classes ["counter"; theme_class t]]
+          [ El.span [txt p.label]
+          ; El.button
+              ~at:[At.aria_label ("Decrement " ^ p.label)]
+              ~ev:[Ev.click Decr]
+              [txt "-"]
+          ; El.output
+              ~at:[At.aria_label (p.label ^ " count")]
+              [txt (string_of_int n)]
+          ; El.button
+              ~at:[At.aria_label ("Increment " ^ p.label)]
+              ~ev:[Ev.click Incr]
+              [txt "+"] ] )
+end
+```
+
+`include Component.Defaults` gives the default `subs` and `equal_props`.
+`Component.id ()` gives the identity of the component.
+
+`Component.v` puts an instance in the view of the parent. `~on` makes a
+parent message from an output. A new `~key` resets the instance:
+
+```ocaml in=examples/components/components.ml
+Component.v
+  (module Counter)
+  ~key:(key "left")
+  ~on:(fun (Counter.Changed n) -> Left n)
+  {Counter.label= "Ones"; step= 1}
+```
+
+`Kilim_testing.mount` tests one component, and `Page.outputs` gives its
+outputs:
+
+```ocaml in=examples/components/test/test_components.ml
+  Kilim_testing.mount
+    (module Components.Counter)
+    {Components.Counter.label= "n"; step= 2}
+    (fun p ->
+      Page.click p (By.label "Increment n") ;
+      Page.click p (By.label "Increment n") ;
+      Page.click p (By.label "Decrement n") ;
+      equal string "2" (Fake_dom.text (Page.find p (By.label "n count"))) ;
+      is_true ~msg:"the outputs"
+        (Page.outputs p = Components.Counter.[Changed 2; Changed 4; Changed 2]) )
+```
+
+The example also has a filter box with a debounce (`Cmd.latest` and
+`Async.sleep`), a theme context (`Kilim.Context`) and an error boundary
+(`View.boundary`).
 
 ### A release
 
