@@ -1,0 +1,38 @@
+; The search example. The app is a library with kilim, kilim.http and
+; kilim.router (the pure parts), thus the native test links it with
+; kilim.testing. main.ml installs the browser parts and starts it. The rule of
+; index.html is a copy of the rule in docs/loader.md. examples/serve.mjs gives
+; /api/cities.
+
+(library
+ (name search)
+ (modules search)
+ (libraries kilim kilim.http kilim.router))
+
+(executable
+ (name main)
+ (modules main)
+ (modes js wasm)
+ (libraries search kilim.browser kilim.http.browser kilim.router.browser))
+
+(rule
+ (targets index.html)
+ (deps
+  page.html
+  main.bc.js
+  main.bc.wasm.js
+  (glob_files main.bc.wasm.assets/*))
+ (action
+  (run
+   kilim
+   page
+   --template
+   page.html
+   --base
+   /
+   --js
+   main.bc.js
+   --wasm
+   main.bc.wasm.js
+   -o
+   index.html)))

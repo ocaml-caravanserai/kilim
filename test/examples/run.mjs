@@ -1,6 +1,6 @@
-// The browser test of the examples (examples/counter, examples/todo and
-// examples/components). It uses only the built-in modules of node, the
-// browser interface test/dom/browser.mjs and examples/serve.mjs.
+// The browser test of the examples (examples/counter, examples/todo,
+// examples/components and examples/search). It uses only the built-in modules
+// of node, the browser interface test/dom/browser.mjs and examples/serve.mjs.
 //
 //   node run.mjs --kilim PATH --profile dev|release [--browser NAME] DIR...
 //
@@ -32,7 +32,10 @@
 //   - The build: the default browser requests a .wasm file and not the
 //     js_of_ocaml build. The browser with no WebAssembly requests the
 //     js_of_ocaml build, and not the launcher.
-//   - Each URL gets at most one request (the build uses the preload).
+//   - In each load of the page, each URL gets at most one request (the build
+//     uses the preload). The runner counts the requests and the preload
+//     messages from the start of each load to the next load. The requests of
+//     /api/ (the search example) do not count.
 //   - dev: data-kilim-started is "start" (the inline form). release: the
 //     attribute is not set.
 //   - No uncaught exception, no console error, no console warning, no
@@ -111,6 +114,7 @@ const q = {
     `[...document.querySelectorAll('label')].find((l) => l.textContent.trim() === ${JSON.stringify(s)})?.control)`,
   text: (s) => `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(s)})`,
   testId: (s) => `document.querySelector('[data-testid=${s}]')`,
+  link: (s) => `[...document.querySelectorAll('a')].find((a) => a.textContent.trim() === ${JSON.stringify(s)})`,
 };
 
 // The scripts of the examples. ui.until(what, expr) polls until expr is true.
@@ -208,6 +212,39 @@ const scripts = {
     await ui.click(q.text('Clicks: 0'));
     await ui.until('the new panel works', q.text('Clicks: 1'));
   },
+  search: async (ui) => {
+    const city = q.label('City');
+    const cities = (labels) => ui.until(`the cities ${JSON.stringify(labels)}`,
+      `JSON.stringify([...document.querySelectorAll('[aria-label=Cities] li')].map((l) => l.textContent)) === ` +
+      JSON.stringify(JSON.stringify(labels)));
+    const url = (s) => ui.until(`the URL ${s}`, `location.pathname + location.search === ${JSON.stringify(s)}`);
+    const value = (s) => ui.until(`the query "${s}"`, `${city}.value === ${JSON.stringify(s)}`);
+    const li = (s) => `[...document.querySelectorAll('[aria-label=Cities] li')]` +
+      `.find((l) => l.textContent === ${JSON.stringify(s)})`;
+    await ui.until('the start', `${q.testId('picked')}?.textContent === 'No city'`, startMs);
+    // 1. The debounce and the request, then the query in the URL.
+    await ui.type(city, 'par');
+    await cities(['Paris', 'Parma']);
+    await url('/?q=par');
+    // 2. A link pushes a query.
+    await ui.click(q.link('London'));
+    await cities(['London']);
+    await url('/?q=lon');
+    await value('lon');
+    // 3. Back gives the query before it.
+    await ui.read('history.back(), 0');
+    await url('/?q=par');
+    await value('par');
+    await cities(['Paris', 'Parma']);
+    // 4. A click on a city.
+    await ui.click(li('Paris'));
+    await ui.until('the city "Paris"', `${q.testId('picked')}.textContent === 'Picked: Paris'`);
+    // 5. A load of a deep link gives its results.
+    await ui.load('/?q=lon');
+    await ui.until('the start of the deep link', `${q.testId('picked')}?.textContent === 'No city'`, startMs);
+    await value('lon');
+    await cities(['London']);
+  },
 };
 for (const d of dirs)
   if (!scripts[basename(d)]) {
@@ -260,6 +297,9 @@ const runExample = async (browser, dir, noWasm, selfTest = false) => {
     onRequest: (path, status) => log.push({ path, status }),
   });
   let events;
+  // The start of each load of the page in the request log and in the log of
+  // the browser.
+  const starts = [[0, 0]];
   try {
     await browser.withPage(runMs, async (page) => {
       events = watch(page);
@@ -289,6 +329,10 @@ const runExample = async (browser, dir, noWasm, selfTest = false) => {
         until: poll,
         click,
         insert,
+        load: async (path) => {
+          starts.push([log.length, events.logs.length]);
+          await page.goto(`${site.origin}${path}`);
+        },
         type: async (el, s) => {
           await click(el);
           await poll(`the focus on ${el}`, `document.activeElement === ${el}`);
@@ -326,14 +370,21 @@ const runExample = async (browser, dir, noWasm, selfTest = false) => {
     if (!has(/\.wasm$/)) fault('no request for a .wasm file');
     if (has(jsBuild)) fault('a request for the js_of_ocaml build');
   }
+  const segments = (list, k) => starts.map((s, i) => list.slice(s[k], starts[i + 1]?.[k] ?? list.length));
   const counts = {};
-  for (const p of paths) counts[p] = (counts[p] || 0) + 1;
-  for (const [p, c] of Object.entries(counts)) if (c > limit(p)) fault(`${c} requests for ${p}`);
+  for (const segment of segments(paths, 0)) {
+    const n = {};
+    for (const p of segment) if (!p.startsWith('/api/')) n[p] = (n[p] || 0) + 1;
+    for (const [p, c] of Object.entries(n)) {
+      counts[p] = c;
+      if (c > limit(p)) fault(`${c} requests for ${p} in one load`);
+    }
+  }
   if (events) {
     if (events.warnings.length) fault(`console warnings: ${JSON.stringify(events.warnings)}`);
     if (events.errors.length) fault(`console errors: ${JSON.stringify(events.errors)}`);
     if (events.exceptions.length) fault(`exceptions: ${JSON.stringify(events.exceptions)}`);
-    const preloads = preloadFaults(events.logs, Object.keys(counts), preloadLimit);
+    const preloads = segments(events.logs, 1).flatMap((l) => preloadFaults(l, Object.keys(counts), preloadLimit));
     if (preloads.length) fault(`preload messages: ${JSON.stringify(preloads)}`);
     const logs = events.logs.filter((e) => {
       const favicon = /\/favicon\.ico$/.test(e.url || '') && / 404 /.test(e.text);

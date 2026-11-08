@@ -1,6 +1,6 @@
 ; The size budget (docs/budgets.md): the gzip size of the counter of bench/size
-; and of the todo and components examples in the release profile, in the two
-; builds, and the check of the generated code of the counter, with the
+; and of the todo, components and search examples in the release profile, in
+; the two builds, and the check of the generated code of the counter, with the
 ; control program (control.ml) that uses each binding. `make size` and
 ; `make budgets` run it.
 
@@ -34,7 +34,10 @@
   (glob_files ../../examples/todo/main.bc.wasm.assets/*.wasm)
   ../../examples/components/main.bc.js
   ../../examples/components/main.bc.wasm.js
-  (glob_files ../../examples/components/main.bc.wasm.assets/*.wasm))
+  (glob_files ../../examples/components/main.bc.wasm.assets/*.wasm)
+  ../../examples/search/main.bc.js
+  ../../examples/search/main.bc.wasm.js
+  (glob_files ../../examples/search/main.bc.wasm.assets/*.wasm))
  (action
   (run
    node
@@ -55,4 +58,8 @@
    example-components
    ../../examples/components/main.bc.js
    ../../examples/components/main.bc.wasm.js
-   ../../examples/components/main.bc.wasm.assets)))
+   ../../examples/components/main.bc.wasm.assets
+   example-search
+   ../../examples/search/main.bc.js
+   ../../examples/search/main.bc.wasm.js
+   ../../examples/search/main.bc.wasm.assets)))

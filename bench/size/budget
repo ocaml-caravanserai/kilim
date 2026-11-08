@@ -7,3 +7,6 @@ example-todo launcher 7500
 example-components js 44000
 example-components wasm 46000
 example-components launcher 7500
+example-search js 49500
+example-search wasm 54000
+example-search launcher 8000
