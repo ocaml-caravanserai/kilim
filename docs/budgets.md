@@ -11,7 +11,7 @@ pull request.
 | Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size`, the todo example and the components example | Done |
 | DOM operations for each action | Yes, each change | `test/view/test_budget.ml`: the four actions, exact counts. `examples/todo/test/test_counts.ml`: three actions of the todo example | Done |
 | Allocations for each action | Yes, each change | `bench/alloc`: the allocated words of the four actions | Done |
-| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), and test D25 of `test/dom` (listeners, timers, DOM, in Chrome) | Done |
+| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), tests D25, D40 and D44 of `test/dom` (listeners, timers, DOM, in Chrome, Firefox and WebKit), and the weak tests (native, and `test/weak` in the js_of_ocaml and wasm_of_ocaml builds) | Done |
 | Partial update | Yes, each change | `test/view/test_budget.ml`: three actions on 1,000 keyed component rows, exact counts of the views and of the DOM operations. `bench/alloc`: the allocated words of two actions | Done |
 | Token release | Yes, each change | `test/view/test_budget.ml`: the operations on the token lists when the parent removes 1,000 and 2,000 component rows | Done |
 | Linked modules | Yes, each change | `test/link` (kilim, kilim.browser) | Done |
