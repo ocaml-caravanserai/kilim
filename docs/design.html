@@ -593,8 +593,8 @@ footer{color:var(--muted);font-size:13.5px;padding:24px 0 40px}
     <thead><tr><th>Library</th><th>Content</th><th>Depends on</th></tr></thead>
     <tbody>
       <tr><td><code>kilim</code></td><td class="wrap">View, Cmd, Sub, Component, App, Context, Async, Cancel, the instance tree, the keyed diff. The diff calls a record of DOM operations. Async uses a host record for time and timers.</td><td>stdlib</td></tr>
-      <tr><td><code>kilim.web</code></td><td class="wrap"><code>Jv</code> bindings for the APIs that Brr does not have: observers, <code>queueMicrotask</code></td><td>brr</td></tr>
-      <tr><td><code>kilim.browser</code></td><td class="wrap">DOM operations on <code>Jv</code>, event delegation and the listeners on the elements (bindings for <code>Private.Event.dispatch</code> of the core), the browser host, <code>run</code>, <code>Sub.window</code>. It binds <code>queueMicrotask</code> itself until <code>kilim.web</code> exists. <code>Async.of_fut</code> comes in Phase 3, and <code>Unsafe_html.of_trusted</code> with the loader.</td><td class="wrap">kilim, brr (kilim.web from Phase 3)</td></tr>
+      <tr><td><code>kilim.web</code></td><td class="wrap"><code>Jv</code> bindings for the APIs that Brr 0.0.9 does not have: <code>queueMicrotask</code>, <code>Object.is</code> and Trusted Types, then dynamic <code>import()</code>. One unit for each API, and no main module (<a href="#brr">section 13</a>)</td><td>brr</td></tr>
+      <tr><td><code>kilim.browser</code></td><td class="wrap">DOM operations on <code>Jv</code>, event delegation and the listeners on the elements (bindings for <code>Private.Event.dispatch</code> of the core), the browser host, <code>run</code>, <code>Sub.window</code>, <code>Unsafe_html.of_trusted</code>. It keeps its own <code>Jv</code> calls for the DOM operations, the listeners, the timers, the animation frames, <code>performance.now</code>, <code>MessageChannel</code>, <code>readyState</code>, the console and the trap listeners (<a href="#brr">section 13</a>). <code>Async.of_fut</code> comes in Phase 3.</td><td class="wrap">kilim, kilim.web, brr</td></tr>
       <tr><td><code>kilim.http</code></td><td class="wrap">Fetch as <code>Async.t</code>, JSON decoders, cancel through <code>AbortController</code></td><td class="wrap">kilim.browser, <code>Brr_io.Fetch</code>, <code>Brr.Abort</code></td></tr>
       <tr><td><code>kilim.router</code></td><td class="wrap">Typed routes, History API, links</td><td class="wrap">kilim.browser, <code>Brr.Window.History</code></td></tr>
       <tr><td><code>kilim.storage</code></td><td class="wrap">Commands for localStorage and sessionStorage, a subscription to <code>storage</code> events</td><td class="wrap">kilim.browser, <code>Brr_io.Storage</code></td></tr>
@@ -1195,40 +1195,61 @@ Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope:
 
 <section id="brr">
   <h2>Browser bindings: Brr</h2>
-  <p>kilim uses <a href="https://erratique.ch/software/brr">Brr</a> 0.0.8 or later for the DOM and the Web APIs. Brr supports wasm_of_ocaml since version 0.0.7.</p>
+  <p>kilim uses <a href="https://erratique.ch/software/brr">Brr</a> 0.0.9 or later for the DOM and the Web APIs. Brr supports wasm_of_ocaml since version 0.0.7. The audit of Phase 3 and CI use 0.0.9.</p>
   <h3>Does Brr decrease the effort?</h3>
   <p>Yes. The port of webapi-gen was the largest single task of draft 1. With Brr, Phase 1 becomes an audit and a small set of hand bindings. Brr has documentation, an FFI manual and an FFI cookbook. The costs are small: Brr uses <code>Jstr.t</code> for strings and <code>Fut.t</code> for promises. The diff works on OCaml strings and converts only when it writes to the DOM.</p>
   <h3>Missing APIs without a change to Brr</h3>
   <p>Brr is built on <code>Jv</code>, its low-level FFI. Each Brr type converts to and from <code>Jv.t</code> (for example <code>El.to_jv</code> and <code>El.of_jv</code>). <code>kilim.web</code> binds the missing APIs with <code>Jv</code> and uses the Brr types in its signatures. No fork is necessary.</p>
-<pre><code><span class="cm">(* src/web/resize_observer.ml: Brr has no ResizeObserver. *)</span>
-<span class="kw">open</span> Brr
+<pre><code><span class="cm">(* src/web/js_object.ml: Brr has no Object.is. *)</span>
+<span class="kw">let</span> object_ = <span class="kw">lazy</span> (Jv.get Jv.global <span class="kw">"Object"</span>)
 
-<span class="kw">type</span> t = Jv.t
-<span class="kw">include</span> (Jv.Id : Jv.CONV <span class="kw">with type</span> t := t)
-
-<span class="kw">let</span> create (f : El.t list -&gt; unit) : t =
-  <span class="kw">let</span> on_resize entries _observer =
-    f (Jv.to_list (<span class="kw">fun</span> e -&gt; El.of_jv (Jv.get e <span class="kw">"target"</span>)) entries)
-  <span class="kw">in</span>
-  Jv.new' (Jv.get Jv.global <span class="kw">"ResizeObserver"</span>) [| Jv.callback ~arity:2 on_resize |]
-
-<span class="kw">let</span> observe o (el : El.t) = ignore (Jv.call o <span class="kw">"observe"</span> [| El.to_jv el |])
-<span class="kw">let</span> disconnect o = ignore (Jv.call o <span class="kw">"disconnect"</span> [||])</code></pre>
-  <p><code>Sub.resize ~key el</code> uses this binding. Its end action calls <code>disconnect</code>.</p>
-  <h3>Coverage of the APIs that version 1 needs</h3>
+<span class="kw">let</span> is a b = Jv.to_bool (Jv.call (Lazy.force object_) <span class="kw">"is"</span> [|a; b|])</code></pre>
+  <p>The rules of <code>kilim.web</code>:</p>
+  <ul>
+    <li>It depends on Brr only, not on the kilim core.</li>
+    <li>Each binding is one unit with its own <code>.mli</code>. The header of the <code>.mli</code> names the Web API and the reason for the gap.</li>
+    <li>The library has no main module: dune makes the alias module, and the build uses <code>-no-alias-deps</code>. Thus a program links only the units that it uses. This is true in the bytecode build and in the release builds (<code>test/link</code> and the size check). In the dev build of wasm_of_ocaml, the whole library links.</li>
+    <li>Each call has a literal name and a literal array. No module reads a global at initialization: a JS value comes from a <code>lazy</code> value or from the function. No <code>Fun.id</code>, and no module of the banned list (<code>test/link</code>).</li>
+    <li>The size check examines the release counter: it contains no name of a binding that it does not use.</li>
+  </ul>
+  <p>The Resize, Intersection and Mutation observers and <code>Sub.resize</code> come after version 1, with element handles (<a href="#phases">section 16</a>): before handles, a user has no element to observe.</p>
+  <h3>The audit of Brr 0.0.9</h3>
+  <p>The audit of Phase 3 maps each Web API that kilim needs in Phases 1 to 4 to the installed Brr 0.0.9. The column "Binding" gives the library that calls the API. <span class="sev low">Brr</span>: kilim calls the Brr function. <span class="sev med">kilim.browser</span>: kilim.browser keeps its own <code>Jv</code> call, because of the rules of the hot path and of page safety (literal calls, a check of the JS type before each read, one JS function for add and remove), or because the API is a part of the browser host. <span class="sev high">kilim.web</span>: Brr has no binding (a gap), or the binding comes later.</p>
   <div class="tablewrap"><table>
-    <thead><tr><th>Need</th><th>Brr module</th><th>Source</th></tr></thead>
+    <thead><tr><th>Web API</th><th>Phase</th><th>Brr 0.0.9</th><th>Binding</th><th>Note</th></tr></thead>
     <tbody>
-      <tr><td>Elements, attributes, events</td><td><code>Brr.El</code>, <code>Brr.At</code>, <code>Brr.Ev</code></td><td><span class="sev low">Brr</span></td></tr>
-      <tr><td>Document, window, history</td><td class="wrap"><code>Brr.Document</code>, <code>Brr.Window</code>, <code>Brr.Window.History</code></td><td><span class="sev low">Brr</span></td></tr>
-      <tr><td>Fetch with a signal</td><td class="wrap"><code>Brr_io.Fetch</code>, <code>Request.init ?signal</code></td><td><span class="sev low">Brr</span></td></tr>
-      <tr><td>AbortController</td><td><code>Brr.Abort</code></td><td><span class="sev low">Brr</span></td></tr>
-      <tr><td>WebSocket, Web Storage</td><td><code>Brr_io.Websocket</code>, <code>Brr_io.Storage</code></td><td><span class="sev low">Brr</span></td></tr>
-      <tr><td>Promises</td><td><code>Fut</code>, <code>Jv.Promise</code></td><td><span class="sev low">Brr</span></td></tr>
-      <tr><td>Timers, animation frames</td><td class="wrap"><code>Brr.G.set_timeout</code>, <code>Brr.G.request_animation_frame</code></td><td><span class="sev low">Brr</span></td></tr>
-      <tr><td>Monotonic time</td><td><code>Brr.Performance.now_ms</code></td><td><span class="sev low">Brr</span></td></tr>
-      <tr><td>queueMicrotask</td><td>None found</td><td><span class="sev high">kilim.browser, then kilim.web</span></td></tr>
-      <tr><td>Resize, intersection, mutation observers</td><td>None</td><td><span class="sev high">kilim.web</span></td></tr>
+      <tr><td class="wrap">DOM: create, insert, remove, attributes, <code>value</code>, <code>checked</code>, text, <code>innerHTML</code></td><td>P1</td><td class="wrap"><code>Brr.El</code> (<code>El.v</code>, <code>El.set_at</code>, <code>El.set_children</code>, <code>El.Prop</code>)</td><td><span class="sev med">kilim.browser</span></td><td class="wrap">The diff needs literal direct calls (the size check finds them).</td></tr>
+      <tr><td class="wrap">Event listeners (passive, remove)</td><td>P1</td><td class="wrap"><code>Brr.Ev.listen ?opts</code>, <code>Ev.listen_opts ~passive</code>, <code>Ev.unlisten</code></td><td><span class="sev med">kilim.browser</span></td><td class="wrap">kilim removes the same JS function, with literal calls.</td></tr>
+      <tr><td class="wrap">Event reads: <code>target</code>, <code>currentTarget</code>, <code>key</code>, <code>isComposing</code>, <code>preventDefault</code>, <code>stopPropagation</code></td><td>P1</td><td class="wrap"><code>Ev.target</code>, <code>Ev.current_target</code>, <code>Ev.Keyboard.key</code>, <code>Ev.Keyboard.is_composing</code>, <code>Ev.prevent_default</code>, <code>Ev.stop_propagation</code></td><td><span class="sev med">kilim.browser</span></td><td class="wrap">Each read examines the JS type first (the trap rule).</td></tr>
+      <tr><td class="wrap"><code>setTimeout</code>, <code>clearTimeout</code></td><td>P1</td><td class="wrap"><code>Brr.G.set_timeout ~ms</code>, <code>G.stop_timer</code></td><td><span class="sev med">kilim.browser</span></td><td class="wrap">The browser host counts its live timers.</td></tr>
+      <tr><td class="wrap"><code>requestAnimationFrame</code></td><td>P1</td><td class="wrap"><code>Brr.G.request_animation_frame</code></td><td><span class="sev med">kilim.browser</span></td><td class="wrap">The browser host.</td></tr>
+      <tr><td class="wrap"><code>queueMicrotask</code></td><td>P1</td><td class="wrap">None</td><td><span class="sev high">kilim.web</span></td><td class="wrap"><code>Kilim_web.Microtask.queue</code>. The browser host and the trap listener use it.</td></tr>
+      <tr><td class="wrap"><code>MessageChannel</code></td><td>P1</td><td class="wrap"><code>Brr_io.Message.Channel</code>, <code>Brr_io.Message.Port</code></td><td><span class="sev med">kilim.browser</span></td><td class="wrap">The <code>onmessage</code> form needs no <code>start</code> call. kilim.browser does not link <code>Brr_io</code>.</td></tr>
+      <tr><td class="wrap"><code>performance.now</code></td><td>P1</td><td class="wrap"><code>Brr.Performance.now_ms</code></td><td><span class="sev med">kilim.browser</span></td><td class="wrap">The browser host.</td></tr>
+      <tr><td class="wrap"><code>Object.is</code></td><td>P2</td><td class="wrap">None (<code>Jv.strict_equal</code> is <code>===</code>)</td><td><span class="sev high">kilim.web</span></td><td class="wrap"><code>Kilim_web.Js_object.is</code>. The model compare and <code>shallow_equal</code> under js_of_ocaml.</td></tr>
+      <tr><td class="wrap"><code>visibilityState</code>, <code>visibilitychange</code></td><td>P1</td><td class="wrap"><code>Brr.Document.visibility_state</code>, <code>Brr.Ev.visibilitychange</code></td><td><span class="sev med">kilim.browser</span></td><td class="wrap">A compare of JS strings, with no cast.</td></tr>
+      <tr><td class="wrap"><code>document.readyState</code>, <code>readystatechange</code></td><td>P1</td><td class="wrap">None for <code>readyState</code>. <code>Brr.Ev.Type.void</code> for the event</td><td><span class="sev med">kilim.browser</span></td><td class="wrap">A strict compare (an element with the name <code>readyState</code>). No other library needs it.</td></tr>
+      <tr><td class="wrap"><code>getElementById</code></td><td>P1</td><td class="wrap"><code>Brr.Document.find_el_by_id</code></td><td><span class="sev med">kilim.browser</span></td><td class="wrap">The mount.</td></tr>
+      <tr><td class="wrap">Trusted Types: <code>trustedTypes</code>, <code>isHTML</code></td><td>P1</td><td class="wrap">None</td><td><span class="sev high">kilim.web</span></td><td class="wrap"><code>Kilim_web.Trusted_types.exists</code> and <code>is_html</code>. <code>Unsafe_html.of_trusted</code> stays in kilim.browser.</td></tr>
+      <tr><td class="wrap"><code>console.error</code>, <code>console.warn</code></td><td>P1</td><td class="wrap"><code>Brr.Console.error</code>, <code>Brr.Console.warn</code></td><td><span class="sev med">kilim.browser</span></td><td class="wrap">The error and warning handlers.</td></tr>
+      <tr><td class="wrap"><code>error</code> and <code>unhandledrejection</code> events, <code>WebAssembly.RuntimeError</code></td><td>P1</td><td class="wrap"><code>Brr.Ev.error</code>, <code>Ev.Error.error</code>. No WebAssembly binding</td><td><span class="sev med">kilim.browser</span></td><td class="wrap">The trap rule is a part of kilim.browser.</td></tr>
+      <tr><td class="wrap">Promises</td><td>P3</td><td class="wrap"><code>Fut</code>, <code>Fut.of_promise</code>, <code>Fut.to_promise'</code>, <code>Jv.Promise</code></td><td><span class="sev low">Brr</span></td><td class="wrap"><code>Kilim_browser.Async.of_fut</code> is the adapter.</td></tr>
+      <tr><td class="wrap">A promise reaction that holds only a JS cell</td><td>P3</td><td class="wrap">None</td><td><span class="sev med">kilim.browser</span></td><td class="wrap">A private module of kilim.browser for <code>Async.of_fut</code> (<a href="#async">section 12</a>).</td></tr>
+      <tr><td class="wrap">Dynamic <code>import()</code></td><td>P3</td><td class="wrap">None</td><td><span class="sev high">kilim.web</span></td><td class="wrap"><code>Kilim_web.Es_module.import</code>. <code>docs/loader.md</code> promises it.</td></tr>
+      <tr><td class="wrap"><code>fetch</code> with a signal: Request, Response, Headers, Body</td><td>P4 http</td><td class="wrap"><code>Brr_io.Fetch.url ?init</code>, <code>Fetch.Request.init ?signal</code>, <code>Fetch.Response.status</code>, <code>Fetch.Response.ok</code>, <code>Fetch.Body.text</code>, <code>Fetch.Headers.of_assoc</code></td><td><span class="sev low">Brr</span></td><td class="wrap"></td></tr>
+      <tr><td class="wrap"><code>AbortController</code></td><td>P4 http</td><td class="wrap"><code>Brr.Abort.controller</code>, <code>Abort.signal</code>, <code>Abort.abort</code></td><td><span class="sev low">Brr</span></td><td class="wrap">The kind of the error comes from <code>Jv.Error.name</code> (AbortError or TypeError).</td></tr>
+      <tr><td class="wrap">JSON</td><td>P4 http</td><td class="wrap"><code>Brr.Json.encode</code>, <code>Brr.Json.decode</code></td><td><span class="sev low">Brr</span></td><td class="wrap"><code>decode</code> catches the JS exception and gives a result. Under wasm_of_ocaml, the catch needs <code>JSTag</code> (the loader makes sure of it).</td></tr>
+      <tr><td class="wrap">History: push, replace, state, back, go, <code>popstate</code></td><td>P4 router</td><td class="wrap"><code>Brr.Window.History.push_state</code>, <code>History.replace_state</code>, <code>History.state</code>, <code>History.back</code>, <code>History.go</code>, <code>History.Ev.popstate</code>, <code>History.set_scroll_restoration</code></td><td><span class="sev low">Brr</span></td><td class="wrap">The state is JS data (a structured clone): an OCaml value does not survive the clone.</td></tr>
+      <tr><td class="wrap"><code>location</code>: read and assign</td><td>P4 router</td><td class="wrap"><code>Brr.Window.location</code>, <code>Window.set_location</code></td><td><span class="sev low">Brr</span></td><td class="wrap">No binding of <code>location.replace</code>: the router uses <code>History.replace_state</code>.</td></tr>
+      <tr><td class="wrap"><code>hashchange</code></td><td>P4 router</td><td class="wrap"><code>Brr.Ev.hashchange</code>, <code>Brr.Ev.Hash_change</code></td><td><span class="sev low">Brr</span></td><td class="wrap"></td></tr>
+      <tr><td class="wrap">URL: parse, resolve, query parameters, encoding</td><td>P4 router</td><td class="wrap"><code>Brr.Uri.v ?base</code>, <code>Uri.of_jstr</code>, <code>Uri.path_segments</code>, <code>Uri.query_params</code>, <code>Uri.Params</code>, <code>Uri.encode_component</code></td><td><span class="sev low">Brr</span></td><td class="wrap"></td></tr>
+      <tr><td class="wrap">Link clicks: button, modifier keys, <code>defaultPrevented</code></td><td>P4 router</td><td class="wrap"><code>Brr.Ev.Mouse.button</code>, <code>Mouse.ctrl_key</code>, <code>Mouse.meta_key</code>, <code>Mouse.shift_key</code>, <code>Mouse.alt_key</code>, <code>Ev.default_prevented</code></td><td><span class="sev low">Brr</span></td><td class="wrap">The payloads of the core (<code>Dom.payload</code>) have no modifier keys: the core changes before the router (<a href="#phases">section 16</a>).</td></tr>
+      <tr><td class="wrap"><code>window.scrollTo</code></td><td>P4 router</td><td class="wrap">None (<code>Window.scroll_x</code> and <code>scroll_y</code> only read)</td><td><span class="sev high">kilim.web</span></td><td class="wrap"><code>Kilim_web.Scroll</code>, with the first router pull request and its test.</td></tr>
+      <tr><td class="wrap"><code>localStorage</code>, <code>sessionStorage</code></td><td>P4 storage</td><td class="wrap"><code>Brr_io.Storage.local</code>, <code>Storage.session</code>, <code>Storage.get_item</code>, <code>Storage.set_item</code>, <code>Storage.remove_item</code></td><td><span class="sev low">Brr</span></td><td class="wrap"><code>local</code> throws a SecurityError when the page blocks storage: catch <code>Jv.Error</code>.</td></tr>
+      <tr><td class="wrap"><code>storage</code> event</td><td>P4 storage</td><td class="wrap"><code>Brr_io.Storage.Ev.storage</code>, <code>Storage.Ev.key</code>, <code>old_value</code>, <code>new_value</code></td><td><span class="sev low">Brr</span></td><td class="wrap">The event comes only to the other documents of the origin.</td></tr>
+      <tr><td class="wrap">WebSocket</td><td>P4 websocket</td><td class="wrap"><code>Brr_io.Websocket.create ?protocols</code>, <code>Websocket.send_string</code>, <code>close</code>, <code>ready_state</code>, <code>Websocket.Ev.close</code>, <code>Brr_io.Message.Ev.message</code></td><td><span class="sev low">Brr</span></td><td class="wrap">No predefined <code>open</code> event type: <code>Ev.Type.void (Jstr.v "open")</code>.</td></tr>
+      <tr><td class="wrap"><code>online</code>, <code>offline</code></td><td>P4 websocket</td><td class="wrap"><code>Brr.Navigator.online</code>, <code>Ev.Type.void</code></td><td><span class="sev low">Brr</span></td><td class="wrap"></td></tr>
+      <tr><td class="wrap">Resize, Intersection and Mutation observers</td><td>Later</td><td class="wrap">None</td><td><span class="sev high">kilim.web</span></td><td class="wrap">After version 1, with element handles and <code>Sub.resize</code>.</td></tr>
     </tbody>
   </table></div>
   <h3>The hot path under wasm_of_ocaml</h3>
@@ -1260,7 +1281,7 @@ Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope:
       <tr><td><code>Hashtbl</code></td><td>about 27,600</td><td>Yes</td></tr>
     </tbody>
   </table></div>
-  <p>Thus <code>kilim</code> and <code>kilim.browser</code> do not use <code>Printf</code>, <code>Format</code>, <code>Scanf</code>, <code>Str</code>, <code>Hashtbl</code>, <code>Random</code>, <code>Fun</code> or <code>Printexc</code>. The link check examines the full set of linked modules, not only the direct dependencies. But Brr itself links <code>Fun</code>: <code>Jv</code> and <code>Brr</code> use <code>Fun.id</code>, which is a <code>val</code> in OCaml 5.5, not an <code>external</code>, and <code>fun.ml</code> calls <code>Printexc.register_printer</code>. Measured: a hello world with only <code>Fun.id</code> is 23,394 bytes (gzip) against 9,904, and a minimal Brr app is 24,172 bytes. Thus the link check examines the units of kilim and their dependencies other than Brr. The size budget of the browser build starts from a baseline that includes Brr. kilim sends a small pull request to Brr that replaces <code>Fun.id</code> and <code>Fun.const</code> with local functions (this is not a fork). If Brr merges it, a minimal Brr app is about 14 KB (the reviewer measured 14,276 bytes with a patched copy), and the check then covers Brr too. The keyed diff and the keys of <code>Cmd.latest</code> use <code>Map.Make</code> or a small table of kilim. The tests and the test host can use all modules.</p>
+  <p>Thus <code>kilim</code> and <code>kilim.browser</code> do not use <code>Printf</code>, <code>Format</code>, <code>Scanf</code>, <code>Str</code>, <code>Hashtbl</code>, <code>Random</code>, <code>Fun</code> or <code>Printexc</code>. The link check examines the full set of linked modules, not only the direct dependencies. But Brr itself links <code>Fun</code>: <code>Jv</code> and <code>Brr</code> use <code>Fun.id</code>, which is a <code>val</code> in OCaml 5.5, not an <code>external</code>, and <code>fun.ml</code> calls <code>Printexc.register_printer</code>. Measured: a hello world with only <code>Fun.id</code> is 23,394 bytes (gzip) against 9,904, and a minimal Brr app is 24,172 bytes. Thus the link check examines the units of kilim and their dependencies other than Brr. The size budget of the browser build starts from a baseline that includes Brr. kilim sends a small pull request to Brr that replaces <code>Fun.id</code> and <code>Fun.const</code> with local functions (this is not a fork). In Brr 0.0.9, the units that a kilim app or a library of Phase 4 links have 29 sites: <code>jv.ml</code> 2, <code>brr.ml</code> 14 and <code>brr_io.ml</code> 12 <code>Fun.id</code>, and 1 <code>Fun.const</code> in <code>brr_io.ml</code>. <code>brr_webcrypto.ml</code> has 15 more and <code>brr_webgpu.ml</code> 1. If Brr merges it, a minimal Brr app is about 14 KB (the reviewer measured 14,276 bytes with a patched copy), and the check then covers Brr too. The keyed diff and the keys of <code>Cmd.latest</code> use <code>Map.Make</code> or a small table of kilim. The tests and the test host can use all modules.</p>
   <h3>DOM safety</h3>
   <p>The escape rules of <code>caravan.html</code> are for HTML text. A DOM renderer has different risks. kilim has these rules:</p>
   <ul>
@@ -1357,12 +1378,18 @@ Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope:
   </div></div>
   <div class="phase"><div class="n">P3</div><div>
     <h4>Brr audit and kilim.web</h4>
-    <p>Map each Web API that kilim needs to a Brr module. Write <code>Jv</code> bindings in <code>kilim.web</code> for the gaps.</p>
+    <p>Map each Web API that kilim needs to a Brr module (the audit table of <a href="#brr">section 13</a>). Write <code>Jv</code> bindings in <code>kilim.web</code> for the gaps: <code>queueMicrotask</code>, <code>Object.is</code>, Trusted Types and dynamic <code>import()</code>. kilim.browser uses the first three. <code>Kilim_browser.Async.of_fut</code> and <code>of_fut_or_error</code> make a task from a <code>Fut.t</code>. Not in Phase 3: the observers (after version 1, with element handles) and <code>window.scrollTo</code> (the first router pull request).</p>
     <div class="exit"><b>Exit:</b> each binding in <code>kilim.web</code> has a Playwright test in the two builds.</div>
   </div></div>
   <div class="phase"><div class="n">P4</div><div>
     <h4>Libraries</h4>
-    <p><code>kilim.http</code>, <code>kilim.router</code>, <code>kilim.storage</code> and <code>kilim.websocket</code>. <code>Http_mock</code> in <code>kilim.testing</code>.</p>
+    <p><code>kilim.http</code>, <code>kilim.router</code>, <code>kilim.storage</code> and <code>kilim.websocket</code>. <code>Http_mock</code> in <code>kilim.testing</code>. Items from the audit of Phase 3:</p>
+    <ul>
+      <li>Before the router: the payloads of the core (<code>Dom.payload</code>) get the button and the modifier keys of a click, because a link must not catch a click with a modifier key.</li>
+      <li>The first router pull request adds <code>Kilim_web.Scroll</code> (<code>window.scrollTo</code>) and its browser test.</li>
+      <li><code>kilim.http</code> has a pure transport record above <code>Fut</code>, as the host record of the core. Thus <code>Http_mock</code> runs as native code.</li>
+      <li>Each library pull request adds its own endpoints to the test server and the browser tests of the Brr facts that it uses.</li>
+    </ul>
     <div class="exit"><b>Exit:</b> the search and chat examples work, with tests on the virtual clock.</div>
   </div></div>
   <div class="phase"><div class="n">P5</div><div>
@@ -1373,7 +1400,7 @@ Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope:
   </div></div>
   <div class="phase"><div class="n">Later</div><div>
     <h4>After version 1</h4>
-    <p>Handles and <code>api</code>, <code>props_changed</code>, <code>Store</code>, <code>Component.any</code>, slots, <code>View.lazy_</code>, test queries by ARIA role. SSR with <code>caravan.html</code> and hydration. Devtools: a message log and time travel. A JSX-like PPX, if necessary. webapi and webapi-gen. When browsers ship Wasm stack switching, a new look at direct-style tasks.</p>
+    <p>Handles and <code>api</code>, <code>props_changed</code>, <code>Store</code>, <code>Component.any</code>, slots, <code>View.lazy_</code>, test queries by ARIA role. SSR with <code>caravan.html</code> and hydration. Devtools: a message log and time travel. A JSX-like PPX, if necessary. The Resize, Intersection and Mutation observers in <code>kilim.web</code>, and <code>Sub.resize</code>, with element handles. webapi and webapi-gen. When browsers ship Wasm stack switching, a new look at direct-style tasks.</p>
   </div></div>
   <h3>Budgets</h3>
   <p>The CI checks only counts that do not change from one run to the next. <code>make budgets</code> is the budget gate of CI: the size, the allocations and the DOM operations. Timing runs each night on fixed hardware, because timing on shared CI machines fails at random.</p>
