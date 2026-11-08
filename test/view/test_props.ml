@@ -388,6 +388,14 @@ let keyed_fault_law (a, b) =
         (List.sort compare (texts p)) )
     (ul a, ul b)
 
+(* Fixed cases for [fixup], with a fault at each operation of the patch: - A
+   common start and a common end, and a middle with new keys (9, 8), moved keys
+   (4, 3) and two removed keys (2, 5). A fault can come at the second removal. -
+   No common start: the middle moves the key of the old index 0. *)
+let keyed_fault_middle () =
+  keyed_fault_law ([1; 2; 3; 4; 5; 6], [1; 9; 4; 3; 8; 6]) ;
+  keyed_fault_law ([1; 2; 3; 4; 5], [9; 4; 3; 1; 8; 5])
+
 let tests =
   [ group "diff laws"
       [ prop ~count:300
@@ -410,4 +418,6 @@ let tests =
       ; prop "a fault at each operation leaves the retained tree in the DOM"
           (Gen.pair view view) fault_law
       ; prop "a fault in a keyed patch leaves the retained tree in the DOM"
-          (Gen.pair keys keys) keyed_fault_law ] ]
+          (Gen.pair keys keys) keyed_fault_law
+      ; test "two fixed keyed patches with a fault at each operation"
+          keyed_fault_middle ] ]
