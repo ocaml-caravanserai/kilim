@@ -51,11 +51,12 @@ type ('node, 'msg) t
 val mount :
      'node Dom.t
   -> parent:'node
-  -> dispatch:('msg -> unit)
+  -> post:'msg Dom.post
   -> 'msg View.t
   -> ('node, 'msg) t
-(** [mount dom ~parent ~dispatch view] builds the DOM of [view] and appends it
-    to [parent]. The handlers of the cells call [dispatch] with the message. *)
+(** [mount dom ~parent ~post view] builds the DOM of [view] and appends it to
+    [parent]. The handlers of the cells call [post] with the payload and the
+    message function. *)
 
 val patch : ('node, 'msg) t -> 'msg View.t -> unit
 (** [patch t view] changes the DOM and the retained tree of [t] to [view]. *)

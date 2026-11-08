@@ -53,24 +53,69 @@ let settled p =
 
 (* The host reaches idle, and no render stays pending: a later frame renders
    nothing. *)
-let quiet p =
-  let h = P.host p in
+let quiet_with h ~inspect ~stats =
   ( match H.idle ~limit:100_000 h with
   | () ->
       ()
   | exception Failure _ ->
       fail "idle does not end" ) ;
-  is_false ~msg:"no pending render" (ins p).pending ;
-  is_false ~msg:"no scheduled render" (ins p).scheduled ;
-  let renders = (stats p).renders and turns = (stats p).turns in
-  P.advance p (Span.ms 200) ;
-  equal int ~msg:"no render after idle" renders (stats p).renders ;
-  equal int ~msg:"no turn after idle" turns (stats p).turns
+  is_false ~msg:"no pending render" (inspect ()).R.pending ;
+  is_false ~msg:"no scheduled render" (inspect ()).scheduled ;
+  let renders = (stats ()).R.renders and turns = (stats ()).turns in
+  H.advance h (Span.ms 200) ;
+  equal int ~msg:"no render after idle" renders (stats ()).renders ;
+  equal int ~msg:"no turn after idle" turns (stats ()).turns
+
+let quiet p =
+  quiet_with (P.host p) ~inspect:(fun () -> ins p) ~stats:(fun () -> stats p)
 
 (* The DOM of a fresh mount of [v]. *)
 let fresh v =
   let root = F.element "div" in
   let (_ : (F.node, _) Private.Diff.t) =
-    Private.Diff.mount (F.ops (F.create ())) ~parent:root ~dispatch:ignore v
+    Private.Diff.mount
+      (F.ops (F.create ()))
+      ~parent:root
+      ~post:(Private.Dom.post_now ignore)
+      v
   in
   F.dump root
+
+(* A fault of the platform in a re-entrant event (see Runtime.catch): the
+   function of Runtime.event raises inside a turn, for example a payload read
+   that throws. The root catch comes at once, inside the user code that sends
+   the event. Page has no such fault, thus these tests use the runtime alone.
+   [update], [view] and [subs] get the function that sends the fault. *)
+exception Fault
+
+type faulty = {h: H.t; root: F.node; rt: F.node R.t}
+
+let faulty ?subs ~update ~view ?fallback () =
+  let h = H.create () and root = F.element "div" in
+  let self = ref None in
+  let fault () =
+    Option.iter (fun rt -> R.event rt R.Discrete (fun () -> raise Fault)) !self
+  in
+  let rt =
+    R.start (H.env h)
+      (F.ops (F.create ()))
+      ~parent:root
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(update fault) ~view:(view fault)
+         ?subs:(Option.map (fun f -> f fault) subs)
+         ?fallback () )
+  in
+  self := Some rt ;
+  {h; root; rt}
+
+(* A click on the first element of the view. *)
+let fclick f =
+  let b = List.hd (F.children f.root) in
+  R.event f.rt R.Discrete (fun () -> F.fire b "click" Private.Dom.Unit ())
+
+(* As [quiet], for the runtime alone. *)
+let fquiet f =
+  quiet_with f.h
+    ~inspect:(fun () -> R.inspect f.rt)
+    ~stats:(fun () -> R.stats f.rt)

@@ -65,7 +65,11 @@ let actions =
   ; ("remove", rows1000, []) ]
 
 let measure (before, after) =
-  let tree = Diff.mount null ~parent:() ~dispatch:ignore (table before) in
+  let tree =
+    Diff.mount null ~parent:()
+      ~post:(Private.Dom.post_now ignore)
+      (table before)
+  in
   let view = table after in
   let w0 = words () in
   Diff.patch tree view ;

@@ -294,7 +294,11 @@ end
     The options [~prevent_default] and [~stop] are static: the listener applies
     them synchronously, before [update]. The default of each one is [false]. An
     element can have one handler for each DOM event name, thus not {!click} and
-    {!check} together. *)
+    {!check} together.
+
+    The listener reads the payload synchronously. The message function (for
+    example [f] of {!input}) runs when the message leaves the queue, thus its
+    error goes to the instance, as for a task result. *)
 module Ev : sig
   type 'msg t = 'msg Private.View.handler
 
@@ -776,9 +780,10 @@ module App : sig
       An error in [init], [update], [view], [subs], a task, a subscription, a
       message function or a DOM operation of the app unmounts the app: its tasks
       and its subscriptions stop. Then the root shows [fallback exn] (default:
-      an empty text). The messages of the fallback do nothing. The error goes to
-      the error handler. An error in [fallback] goes to the error handler, and
-      the root then shows an empty text. *)
+      an empty text). The messages of the fallback do nothing, and their message
+      functions do not run. The error goes to the error handler. An error in
+      [fallback] goes to the error handler, and the root then shows an empty
+      text. *)
 end
 
 (** Components (design section 09). This version has only the props compare. *)

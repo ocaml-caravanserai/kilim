@@ -64,7 +64,9 @@ let keyed_diffs () =
   let doc = F.create () in
   let root = F.element "div" in
   let tree =
-    Private.Diff.mount (F.ops doc) ~parent:root ~dispatch:ignore (rows keys)
+    Private.Diff.mount (F.ops doc) ~parent:root
+      ~post:(Private.Dom.post_now ignore)
+      (rows keys)
   in
   let ul = Private.Diff.dom (Private.Diff.root tree) in
   let texts () = List.map F.text (F.children ul) in

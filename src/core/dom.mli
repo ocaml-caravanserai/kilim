@@ -27,16 +27,26 @@ type 'msg event =
   ; stop: bool
   ; decode: 'msg decode }
 
-(** An event handler, bound to the dispatch of the runtime. The listener applies
-    the static options synchronously, then calls [fire]. *)
+(** An event handler, bound to the post of an instance. The listener applies the
+    static options synchronously, then calls [fire] with the payload. *)
 type handler =
   | Handler :
       {payload: 'a payload; prevent_default: bool; stop: bool; fire: 'a -> unit}
       -> handler
 
-(** The event handlers of the view of an element and the dispatch, with no
-    ['msg] in the cell. Each DOM event name occurs one time. *)
-type events = Events : 'msg event list * ('msg -> unit) -> events
+(** The post of an instance. [post x f] puts the payload [x] and the message
+    function [f] in the queue of the runtime. The runtime calls [f x] when the
+    message leaves the queue, thus an error of [f] goes to the instance (design
+    section 09). *)
+type 'msg post = {post: 'a. 'a -> ('a -> 'msg) -> unit} [@@unboxed]
+
+val post_now : ('msg -> unit) -> 'msg post
+(** [post_now k] calls [k (f x)] at once, with no queue. For the tests of the
+    diff. *)
+
+(** The event handlers of the view of an element and the post of its instance,
+    with no ['msg] in the cell. Each DOM event name occurs one time. *)
+type events = Events : 'msg event list * 'msg post -> events
 
 (** The cell of an element. The diff makes one cell for each element and
     attaches it when it creates the element. A patch changes the cell with no

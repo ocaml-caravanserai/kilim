@@ -20,7 +20,7 @@ let setup () =
 let text o s = o.Dom.create_text s
 
 let cell evs dispatch =
-  { Dom.events= Events (evs, dispatch)
+  { Dom.events= Events (evs, Dom.post_now dispatch)
   ; value= None
   ; checked= None
   ; composing= false }

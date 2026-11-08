@@ -11,13 +11,17 @@ type 'msg auto =
       {token: Cancel.t; kind: 'p Sub.kind; on: ('p -> 'msg) ref}
       -> 'msg auto
 
-type ('model, 'msg) spec =
-  { update: 'model -> 'msg -> 'model * 'msg Cmd.t
-  ; view: 'model -> 'msg View.t
-  ; subs: ('model -> 'msg Sub.t) option }
+type ('props, 'model, 'msg) spec =
+  { update: 'props -> 'model -> 'msg -> 'model * 'msg Cmd.t
+  ; view: 'props -> 'model -> 'msg View.t
+  ; subs: ('props -> 'model -> 'msg Sub.t) option }
 
 type 'msg state =
-  | State : {spec: ('model, 'msg) spec; mutable model: 'model} -> 'msg state
+  | State :
+      { spec: ('props, 'model, 'msg) spec
+      ; mutable props: 'props
+      ; mutable model: 'model }
+      -> 'msg state
 
 type 'msg t =
   { base: Cancel.t

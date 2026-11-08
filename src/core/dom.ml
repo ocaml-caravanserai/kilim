@@ -22,7 +22,11 @@ type handler =
       {payload: 'a payload; prevent_default: bool; stop: bool; fire: 'a -> unit}
       -> handler
 
-type events = Events : 'msg event list * ('msg -> unit) -> events
+type 'msg post = {post: 'a. 'a -> ('a -> 'msg) -> unit} [@@unboxed]
+
+let post_now k = {post= (fun x f -> k (f x))}
+
+type events = Events : 'msg event list * 'msg post -> events
 
 type cell =
   { mutable events: events
@@ -30,27 +34,27 @@ type cell =
   ; mutable checked: bool option
   ; mutable composing: bool }
 
-let bind dispatch (h : _ event) =
+let bind post (h : _ event) =
   match h.decode with
   | Decode (payload, f) ->
       Handler
         { payload
         ; prevent_default= h.prevent_default
         ; stop= h.stop
-        ; fire= (fun x -> dispatch (f x)) }
+        ; fire= (fun x -> post.post x f) }
 
 let handler cell name =
   match cell.events with
-  | Events (evs, dispatch) ->
+  | Events (evs, post) ->
       List.find_map
         (fun (h : _ event) ->
-          if String.equal h.event name then Some (bind dispatch h) else None )
+          if String.equal h.event name then Some (bind post h) else None )
         evs
 
 let handlers cell =
   match cell.events with
-  | Events (evs, dispatch) ->
-      List.map (fun (h : _ event) -> (h.event, bind dispatch h)) evs
+  | Events (evs, post) ->
+      List.map (fun (h : _ event) -> (h.event, bind post h)) evs
 
 type 'node t =
   { create_element: ns -> string -> 'node

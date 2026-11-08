@@ -71,7 +71,7 @@ let tree name =
     Private.Diff.mount
       (F.ops (F.create ()))
       ~parent:root
-      ~dispatch:(fun m -> got := m :: !got)
+      ~post:(Private.Dom.post_now (fun m -> got := m :: !got))
       v
   in
   let rec deepest n = match F.children n with [c] -> deepest c | _ -> n in
@@ -96,7 +96,7 @@ let walk () =
     Private.Diff.mount
       (F.ops (F.create ()))
       ~parent:root
-      ~dispatch:(fun m -> got := m :: !got)
+      ~post:(Private.Dom.post_now (fun m -> got := m :: !got))
       v
   in
   let rec deepest n = match F.children n with [c] -> deepest c | _ -> n in
@@ -116,10 +116,13 @@ let walk () =
 type msg = Inner | Outer | Focus
 
 let page () =
+  let seen = ref [] in
   let app =
     App.make
       ~init:(fun () -> ([], Cmd.none))
-      ~update:(fun m msg -> (msg :: m, Cmd.none))
+      ~update:(fun m msg ->
+        seen := msg :: !seen ;
+        (msg :: m, Cmd.none) )
       ~view:(fun m ->
         El.div
           ~ev:[Ev.click Outer]
@@ -134,6 +137,8 @@ let page () =
   equal int ~msg:"one turn" 2 (stats p).turns ;
   equal int 2 (stats p).messages ;
   equal int 2 (stats p).renders ;
+  (* The order of the walk: the target first. *)
+  is_true ([Inner; Outer] = List.rev !seen) ;
   equal string "2" (F.text (P.find p (By.test_id "b"))) ;
   (* A focusin: a Macro turn, thus no render at once. *)
   P.focus p (By.test_id "b") ;
@@ -191,9 +196,111 @@ let depth () =
   equal int 2 (stats p).messages ;
   equal int 0 (ins p).continuations_left
 
+(* The message function of a handler runs when its item leaves the queue (design
+   section 09), not in the event. A re-entrant click in update only puts its
+   item in the queue: its message function runs after the update. *)
+type qmsg = First | Second | Mapped
+
+let at_dequeue () =
+  let log = ref [] and page = ref None in
+  let mapped () =
+    log := "map" :: !log ;
+    Mapped
+  in
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> ((), Cmd.none))
+         ~update:(fun () -> function
+           | First ->
+               log := "first" :: !log ;
+               Option.iter (fun p -> P.click p (By.test_id "m")) !page ;
+               log := "first end" :: !log ;
+               ((), Cmd.none)
+           | Second | Mapped ->
+               log := "update" :: !log ;
+               ((), Cmd.none) )
+         ~view:(fun () ->
+           El.div
+             [ button First "f"
+             ; El.button
+                 ~at:[At.data "testid" "m"]
+                 ~ev:[Ev.check (fun _ -> mapped ())]
+                 [] ] )
+         () )
+  in
+  page := Some p ;
+  click p ;
+  equal (list string) ["first"; "first end"; "map"; "update"] (List.rev !log) ;
+  (* Outside a turn, the function runs in the turn of the event. *)
+  log := [] ;
+  P.click p (By.test_id "m") ;
+  equal (list string) ["map"; "update"] (List.rev !log) ;
+  equal int 3 (stats p).messages ;
+  no_errors p
+
+(* Two handlers on the path: the message function of the outer handler raises.
+   The message of the target reaches update first, then the raise leaves the
+   queue and goes to the root catch. *)
+exception Boom
+
+let raise_at_dequeue () =
+  let got = ref [] in
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> ((), Cmd.none))
+         ~update:(fun () m ->
+           got := m :: !got ;
+           ((), Cmd.none) )
+         ~view:(fun () ->
+           El.div ~ev:[Ev.check (fun _ -> raise Boom)] [button Second "b"] )
+         ~fallback:(fun _ -> txt "fallback")
+         () )
+  in
+  click p ;
+  is_true ([Second] = !got) ;
+  equal int 1 (stats p).messages ;
+  is_true (match errors p with [Boom] -> true | _ -> false) ;
+  is_false (ins p).alive ;
+  equal string "<div>fallback</div>" (P.html p) ;
+  quiet p
+
+(* The handlers of the root fallback post to the dead root: the item is dropped,
+   and the message function never runs. *)
+let dead_root () =
+  let calls = ref 0 in
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> ((), Cmd.none))
+         ~update:(fun () _ -> raise Boom)
+         ~view:(fun () -> button First "b")
+         ~fallback:(fun _ ->
+           El.button
+             ~at:[At.data "testid" "fb"]
+             ~ev:[Ev.check (fun _ -> incr calls ; Second)]
+             [txt "fb"] )
+         () )
+  in
+  click p ;
+  is_false (ins p).alive ;
+  P.click p (By.test_id "fb") ;
+  P.click p (By.test_id "fb") ;
+  equal int 0 !calls ;
+  equal int 2 (stats p).dropped ;
+  equal int 1 (List.length (errors p)) ;
+  quiet p
+
 let tests =
   [ group "event"
       [ test "the discrete events and the events that do not bubble" discrete
       ; test "the walk: from the target up, the stop, no bubble" walk
       ; test "Page: two handlers in one turn, and a focus" page
-      ; test "Page: a call that raises" depth ] ]
+      ; test "Page: a call that raises" depth
+      ; test "a message function runs when its message leaves the queue"
+          at_dequeue
+      ; test
+          "a message function that raises goes to the root catch at the dequeue"
+          raise_at_dequeue
+      ; test "the message function of a dead root does not run" dead_root ] ]

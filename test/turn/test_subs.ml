@@ -13,18 +13,16 @@ exception Boom
 let hold ?(on_end = ignore) () =
   Async.make (fun tok ~ok:_ ~error:_ -> Cancel.on_end tok on_end)
 
-(* An input whose message function raises: a click on it in a turn is a
-   re-entrant event that raises (a root catch). *)
+(* An input whose message function raises. A click on it inside a turn puts its
+   item in the queue, and the root catch comes when the item leaves the
+   queue. *)
 let raiser () =
   El.input
     ~at:[At.data "testid" "raise"]
     ~ev:[Ev.check (fun _ -> invalid_arg "a raise")]
     ()
 
-let reraise page =
-  Option.iter
-    (fun p -> try P.click p (By.test_id "raise") with Invalid_argument _ -> ())
-    !page
+let reraise page = Option.iter (fun p -> P.click p (By.test_id "raise")) !page
 
 (* A send of Sub.run from a raw callback: one microtask turn, and the render at
    the next frame. *)
@@ -520,7 +518,7 @@ let errors_in_subs () =
   equal int 0 (ins p).token_children ;
   quiet p
 
-(* User code in the pass can stop the page or make a root catch. *)
+(* User code in the pass can stop the page or send a fault (a root catch). *)
 let guards () =
   (* subs stops the page: the new key does not start, and no DOM stays. *)
   let page = ref None and starts = ref 0 in
@@ -542,54 +540,49 @@ let guards () =
   equal string "<div></div>" (P.html p) ;
   equal int 0 (ins p).token_children ;
   quiet p ;
-  (* The end action of a removed key makes a root catch: the next key does not
+  (* The end action of a removed key stops the page: the next key does not
      start. *)
   let page = ref None and starts = ref [] in
   let subs n =
     Sub.run ~key:(string_of_int n) (fun _ ->
         starts := n :: !starts ;
-        hold ~on_end:(fun () -> reraise page) () )
+        hold ~on_end:(fun () -> Option.iter P.stop !page) () )
   in
   let p =
     P.start
       (App.make
          ~init:(fun () -> (0, Cmd.none))
          ~update:(fun n () -> (n + 1, Cmd.none))
-         ~view:(fun n -> El.div [button () (string_of_int n); raiser ()])
-         ~subs
-         ~fallback:(fun _ -> txt "fallback")
-         () )
+         ~view:(fun n -> button () (string_of_int n))
+         ~subs () )
   in
   page := Some p ;
   click p ;
   equal (list int) [0] !starts ;
-  equal string "<div>fallback</div>" (P.html p) ;
+  equal string "<div></div>" (P.html p) ;
   is_false (ins p).alive ;
   equal int 0 (ins p).token_children ;
   quiet p ;
-  (* The function of Sub.run makes a root catch, and its task fails at once: the
-     task does not start, thus no error item goes to the queue. *)
-  let page = ref None in
-  let p =
-    P.start
-      (App.make
-         ~init:(fun () -> (0, Cmd.none))
-         ~update:(fun n () -> (n + 1, Cmd.none))
-         ~view:(fun n -> El.div [button () (string_of_int n); raiser ()])
-         ~subs:(fun n ->
-           if n > 0 then
-             Sub.run ~key:"k" (fun _ -> reraise page ; Async.fail Boom)
-           else Sub.none )
-         ~fallback:(fun _ -> txt "fallback")
-         () )
+  no_errors p ;
+  (* The function of Sub.run sends a fault (a root catch at once), and its task
+     fails at once: the task does not start, thus no error item goes to the
+     queue. A stop cannot show this: after a stop, the queue takes nothing. *)
+  let f =
+    faulty
+      ~update:(fun _ n () -> (n + 1, Cmd.none))
+      ~view:(fun _ n -> button () (string_of_int n))
+      ~subs:(fun fault n ->
+        if n > 0 then Sub.run ~key:"k" (fun _ -> fault () ; Async.fail Boom)
+        else Sub.none )
+      ~fallback:(fun _ -> txt "fallback")
+      ()
   in
-  page := Some p ;
-  click p ;
-  equal int 0 (stats p).dropped ;
-  equal int 1 (List.length (errors p)) ;
-  equal string "<div>fallback</div>" (P.html p) ;
-  equal int 0 (ins p).continuations_left ;
-  quiet p ;
+  fclick f ;
+  equal int 0 (R.stats f.rt).dropped ;
+  is_true (match H.errors f.h with [Fault] -> true | _ -> false) ;
+  equal string "<div>fallback</div>" (F.to_html f.root) ;
+  equal int 0 (R.inspect f.rt).continuations_left ;
+  fquiet f ;
   (* The function of Sub.run stops the page: no task and no continuation. *)
   let page = ref None in
   let p =
@@ -1066,7 +1059,7 @@ let tests =
       ; test "at most 3 renders in one turn with Sub.run" render_cap
       ; test "an error in subs or in a subscription unmounts the app"
           errors_in_subs
-      ; test "user code in the pass stops the page or makes a root catch" guards
+      ; test "user code in the pass stops the page or sends a fault" guards
       ; test "the early call runs only for a change and a pending render"
           subs_calls
       ; test "a task that ends keeps its key" task_ends

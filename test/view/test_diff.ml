@@ -35,7 +35,8 @@ let mount_order () =
   ignore
     (Diff.mount
        (logged (F.ops doc) log)
-       ~parent:root ~dispatch:ignore
+       ~parent:root
+       ~post:(Private.Dom.post_now ignore)
        (El.div
           ~at:[At.id "i"; At.type_ "t"; At.value "v"; At.checked true]
           ~ev:[Ev.scroll "s"; Ev.click "c"]
@@ -114,7 +115,8 @@ let attributes () =
   let t =
     Diff.mount
       (logged (F.ops doc) log)
-      ~parent:(F.element "div") ~dispatch:ignore
+      ~parent:(F.element "div")
+      ~post:(Private.Dom.post_now ignore)
       (El.svg ~at:[At.v "viewBox" "0"] [])
   in
   log := [] ;
@@ -546,7 +548,8 @@ let inner () =
   let t =
     Diff.mount
       (logged (F.ops doc) log)
-      ~parent:root ~dispatch:ignore
+      ~parent:root
+      ~post:(Private.Dom.post_now ignore)
       (View.unsafe_html ~el:El.div (h "<b>x</b>"))
   in
   equal string "<div><div><b>x</b></div></div>" (F.to_html root) ;

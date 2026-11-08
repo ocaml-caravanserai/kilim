@@ -196,11 +196,12 @@ let law (cost, actions) =
     (List.sort compare m.last)
 
 (* The turn with errors: updates, views, message functions and tasks that raise
-   or fail, held results, re-entrant events (a click, a raising event or a stop)
-   from update, from view and from a message function, and a stop. Each message
-   reaches update at most one time, no update runs after a root error or a stop,
-   and at the end nothing stays. The checks inside update and view only record a
-   violation, because an exception there is a root catch. *)
+   or fail, held results, re-entrant actions (a click, a raising event, a stop,
+   or a stop and a raise) from update, from view and from a message function,
+   and a stop. Each message reaches update at most one time, no update runs
+   after a root error or a stop, and at the end nothing stays. The checks inside
+   update and view only record a violation, because an exception there is a root
+   catch. *)
 
 exception Boom
 
@@ -213,9 +214,9 @@ type ehow =
   | E_fail_raw of int
   | E_held
 
-(* A re-entrant action: a click, a raising event, a stop, or a raising event and
-   then a raise. *)
-type reenter = R_none | R_click | R_raise | R_stop | R_raise_then_raise
+(* A re-entrant action: a click, a raising event, a stop, or a stop and then a
+   raise. A re-entrant event only puts its item in the queue. *)
+type reenter = R_none | R_click | R_raise | R_stop | R_stop_then_raise
 
 type etask =
   {ehow: ehow; ekey: string option; escope: string option; emap: reenter}
@@ -243,8 +244,8 @@ let pp_reenter = function
       "raise"
   | R_stop ->
       "stop"
-  | R_raise_then_raise ->
-      "raise, raise"
+  | R_stop_then_raise ->
+      "stop, raise"
 
 let pp_ehow = function
   | E_now ->
@@ -298,7 +299,7 @@ let gen_reenter =
     ; (1, Gen.constant R_click)
     ; (1, Gen.constant R_raise)
     ; (1, Gen.constant R_stop)
-    ; (1, Gen.constant R_raise_then_raise) ]
+    ; (1, Gen.constant R_stop_then_raise) ]
 
 let gen_etask =
   Gen.map
@@ -353,7 +354,8 @@ let error_law actions =
   let in_update = ref R_none and in_view = ref R_none in
   let live () = match !page with Some p -> (ins p).alive | None -> true in
   (* A re-entrant action inside a turn. The message function of the input "in"
-     raises inside its event: a root catch. *)
+     raises when its item leaves the queue: a root catch. A raise after a stop
+     only goes to the error handler. *)
   let reenter r =
     match !page with
     | None ->
@@ -370,8 +372,9 @@ let error_law actions =
         | R_stop ->
             P.stop p ;
             stopped := true
-        | R_raise_then_raise ->
-            query (fun () -> P.click p (By.test_id "in")) ;
+        | R_stop_then_raise ->
+            P.stop p ;
+            stopped := true ;
             raise Boom )
   in
   let task t =
