@@ -24,8 +24,15 @@ module type S = sig
   val equal_props : props -> props -> bool
 end
 
+module Defaults = struct
+  let subs _ _ = Sub.None
+
+  let equal_props = Shallow.equal
+end
+
 (* The spec of [C]: the last spec of the id if it has the same functions. Thus a
-   render of a parent makes no spec for each child. *)
+   render of a parent makes no spec for each child. [Defaults.subs] gives no
+   [subs] in the spec: then the instance has no subscription pass. *)
 let spec (type p m msg o)
     (module C : S
       with type props = p
@@ -35,7 +42,11 @@ let spec (type p m msg o)
   match C.id.last with
   | Some s
     when ( s.init == C.init && s.update == C.update && s.view == C.view
-         && (match s.subs with Some f -> f == C.subs | None -> false)
+         && ( match s.subs with
+           | Some f ->
+               f == C.subs
+           | None ->
+               C.subs == Defaults.subs )
          && s.equal_props == C.equal_props )
          [@mutate off "a pure shortcut: the new spec has the same fields"] ->
       s
@@ -45,7 +56,7 @@ let spec (type p m msg o)
         ; init= C.init
         ; update= C.update
         ; view= C.view
-        ; subs= Some C.subs
+        ; subs= (if C.subs == Defaults.subs then None else Some C.subs)
         ; equal_props= C.equal_props }
       in
       C.id.last <- Some s ;

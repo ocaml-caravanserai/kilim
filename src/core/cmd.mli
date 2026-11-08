@@ -9,21 +9,28 @@ type 'msg t =
   | Map : string option * ('a -> 'msg) * 'a t -> 'msg t
       (** [Map (scope, f, c)]: the messages of [c] go through [f]. [scope] adds
           a level to the keys of [Latest] in [c]. *)
+  | Emit : ('o -> unit) * 'o -> 'msg t
+      (** [Emit (emit, o)]: the runtime calls [emit o]. [Map] does not change
+          it: [o] is an output for the parent, not a message. *)
 
 (** The context of the [update] of a component (design section 09). ['msg] is
-    the message type of the component. [emit] puts an output in the queue, as a
-    message of the parent. *)
+    the message type of the component. [emit] puts an output at the back of the
+    queue, as an item of the parent. *)
 type ('msg, 'out) ctx = {emit: 'out -> unit}
 
 val no_ctx : ('msg, 'out) ctx
-(** A context whose [emit] does nothing. The App and, in this version, each
-    component get it: the outputs come later. *)
+(** A context whose [emit] does nothing: the context of the App. *)
 
-(** A task of a command, with the path of its key and its message function. *)
+val emit : ('msg, 'out) ctx -> 'out -> 'msg t
+(** [emit ctx o] is [Emit (ctx.emit, o)]. *)
+
+(** A leaf of a command. *)
 type 'msg request =
   | Request :
       {key: string list option; task: 'a Async.t; to_msg: 'a -> 'msg}
       -> 'msg request
+      (** A task, with the path of its key and its message function. *)
+  | Out : ('o -> unit) * 'o -> 'msg request  (** An [Emit]. *)
 
 val requests : 'msg t -> 'msg request list
 (** The leaves in the order of the tree (left to right). [key] is the path of

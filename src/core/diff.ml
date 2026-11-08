@@ -749,7 +749,10 @@ let env () : _ Tree.env =
   ; command= (fun _ _ -> ())
   ; viewed= ignore
   ; serial= 1
-  ; work= Instance.Work.empty }
+  ; work= Instance.Work.empty
+  ; passes= false
+  ; stale= []
+  ; touched= [] }
 
 let mount ops ~parent ~post v =
   let owner = Instance.root (Cancel.root ()) in

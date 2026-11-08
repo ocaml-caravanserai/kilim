@@ -35,7 +35,8 @@ type 'msg auto =
 type ('p, 'm, 'msg, 'o) data =
   { mutable spec: ('p, 'm, 'msg, 'o) View.spec
   ; mutable props: 'p
-  ; mutable model: 'm }
+  ; mutable model: 'm
+  ; ctx: ('msg, 'o) Cmd.ctx (* The context of [update]. *) }
 
 type 'msg state = State : ('p, 'm, 'msg, 'o) data -> 'msg state
 
@@ -123,4 +124,15 @@ and 'node env =
   ; command: 'msg. ('node, 'msg) inst -> 'msg Cmd.t -> unit
   ; viewed: unit -> unit (* Counts a call of a view. *)
   ; mutable serial: int (* The serial of the next instance. *)
-  ; mutable work: 'node any Work.t }
+  ; mutable work: 'node any Work.t
+  ; passes: bool
+        (* The runtime compares the subscriptions, thus [stale] and [touched]
+           record the instances. A diff with no runtime has [false]. *)
+  ; mutable stale: 'node any list
+        (* The instances below the root whose model changed since their last
+           subscription pass, the newest first, one entry for each pass: the
+           early call compares their subscriptions. An entry can be dead. *)
+  ; mutable touched: 'node any list
+        (* The instances below the root whose view ran in this render, the
+           newest first: the pass at the end of the render compares their
+           subscriptions and starts the new keys. An entry can be dead. *) }

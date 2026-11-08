@@ -5,7 +5,7 @@
 open Windtrap
 open Kilim
 open Support
-module C = Private.Component
+module C = Component
 module V = Private.View
 module I = Private.Instance
 
@@ -440,7 +440,10 @@ let dead_token () =
     ; command= (fun _ _ -> ())
     ; viewed= ignore
     ; serial= 1
-    ; work= I.Work.empty }
+    ; work= I.Work.empty
+    ; passes= true
+    ; stale= []
+    ; touched= [] }
   in
   let root : (F.node, unit) I.t = I.root (Private.Cancel.root ()) in
   let a : (F.node, unit) I.t = I.child env root in
@@ -1104,7 +1107,7 @@ let error_equal () =
 
 (* A child that stops the page in its update. *)
 module Stopper = struct
-  type props = P.t option ref
+  type props = P.none P.t option ref
 
   type model = int
 

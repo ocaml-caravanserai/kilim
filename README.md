@@ -18,8 +18,10 @@ kilim builds with js_of_ocaml and wasm_of_ocaml in their default modes.
 kilim has the parts of Phase 1 of the design: the view, the keyed diff, the
 app, the commands, the subscriptions, the async tasks, the browser host, the
 loader and `kilim.testing`. The browser tests run in Chrome, Firefox and
-WebKit. Components come in Phase 2. There is no release yet, and the API can
-change.
+WebKit. Phase 2 (components) is in progress: `Kilim.Component` has
+components with props, outputs and subscriptions, and
+`Kilim_testing.mount` tests one component. Error boundaries and Context
+come later in Phase 2. There is no release yet, and the API can change.
 
 The design is in [docs/design.html](docs/design.html). The results of the
 spikes are in [docs/phase0.md](docs/phase0.md), and the budgets are in

@@ -87,7 +87,7 @@ let key_change () =
 
 (* A patch keeps the newest [~on] of the parent in the component node. *)
 let newest_on () =
-  let v f = Private.Component.v (module Wrap) ~on:f (txt "a") in
+  let v f = Component.v (module Wrap) ~on:f (txt "a") in
   let p = mount (v (fun s -> "1" ^ s)) in
   patch p (v (fun s -> "2" ^ s)) ;
   match (Diff.root p.tree).T.shape with
@@ -100,6 +100,48 @@ let newest_on () =
   | _ ->
       fail "a component node"
 
+(* A component with [Component.Defaults.subs] has no [subs] in its spec, thus no
+   subscription pass. Its own [subs] stays. *)
+module Quiet = struct
+  include Component.Defaults
+
+  type props = unit
+
+  type model = unit
+
+  type msg = unit
+
+  type out = |
+
+  let id : (props, model, msg, out) Component.id = Component.id ()
+
+  let init () = ((), Cmd.none)
+
+  let update _ () () () = ((), Cmd.none)
+
+  let view () () = txt "q"
+end
+
+let defaults () =
+  let has_subs = function
+    | V.Comp (V.C {spec; _}) ->
+        Option.is_some spec.subs
+    | _ ->
+        fail "a component node"
+  in
+  is_false ~msg:"Defaults.subs"
+    (has_subs (Component.v (module Quiet) ~on:(function _ -> .) ())) ;
+  is_true ~msg:"its own subs" (has_subs (wrap (txt "a")))
+
+(* A diff with no runtime has no subscription pass: its env records no instance,
+   thus it keeps no unmounted instance. *)
+let no_passes () =
+  let p = mount (rows [1; 2; 3]) in
+  patch p (rows [4; 2; 3]) ;
+  let env = p.tree.ctx.T.env in
+  equal int ~msg:"touched" 0 (List.length env.T.touched) ;
+  equal int ~msg:"stale" 0 (List.length env.T.stale)
+
 let tests =
   [ group "diff components"
       [ test "a keyed move of a component moves its DOM node" moved
@@ -107,4 +149,7 @@ let tests =
           middle
       ; test "a component node that becomes an element unmounts" to_element
       ; test "a new key of a component replaces its node" key_change
-      ; test "a patch keeps the newest on function" newest_on ] ]
+      ; test "a patch keeps the newest on function" newest_on
+      ; test "Defaults.subs gives a spec with no subs" defaults
+      ; test "a diff with no runtime records no instance for the subscriptions"
+          no_passes ] ]

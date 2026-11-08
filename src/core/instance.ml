@@ -10,7 +10,8 @@ type 'msg auto = 'msg Tree.auto =
 type ('p, 'm, 'msg, 'o) data = ('p, 'm, 'msg, 'o) Tree.data =
   { mutable spec: ('p, 'm, 'msg, 'o) View.spec
   ; mutable props: 'p
-  ; mutable model: 'm }
+  ; mutable model: 'm
+  ; ctx: ('msg, 'o) Cmd.ctx }
 
 type 'msg state = 'msg Tree.state =
   | State : ('p, 'm, 'msg, 'o) data -> 'msg state
@@ -79,8 +80,8 @@ let rec token : 'node 'msg. ('node, 'msg) t -> Cancel.t =
 
 let changed (env : _ env) (i : _ t) =
   i.dirty <- true ;
-  i.early_stale <- true ;
-  if i.pos.depth > 0 then !ext.enqueue env i
+  if i.pos.depth > 0 then !ext.enqueue env i ;
+  i.early_stale <- true
 
 (* The remove of an instance that is not in the queue gives the same map. *)
 let clean (env : _ env) (i : _ t) =

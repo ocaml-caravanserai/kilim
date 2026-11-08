@@ -3,9 +3,11 @@
 //
 //   node check.mjs ROOT DOC MIN [DOC MIN ...]
 //
-// DOC is a Markdown file, relative to ROOT. A fenced block with the info
-// string "LANG file=PATH" must be equal to the file PATH (relative to ROOT).
-// A block with "LANG in=PATH" must be a part of the file PATH. The compare
+// DOC is a Markdown file or an OCaml interface (.mli), relative to ROOT. A
+// fenced block with the info string "LANG file=PATH" must be equal to the
+// file PATH (relative to ROOT). A block with "LANG in=PATH" must be a part of
+// the file PATH. In an .mli file, a code block of a doc comment has the tag
+// after its language: {@ocaml file=PATH[ ... ]}. The compare
 // changes each run of white space to one space, and ignores the white space
 // at the start and at the end. Thus a new line break or a new indent (dune
 // fmt, ocamlformat) does not fail the check, but a change of a token does. A
@@ -43,6 +45,17 @@ const blocks = (md) => {
   return found;
 };
 
+// The code blocks of the doc comments of an .mli text, in the same form. A
+// code block of odoc ends at the first "]}".
+const mliBlocks = (text) => {
+  const found = [];
+  for (const m of text.matchAll(/\{@(\w+)([^\[\n]*)\[([\s\S]*?)\]\}/g)) {
+    const line = text.slice(0, m.index).split('\n').length;
+    found.push({ line, info: `${m[1]} ${m[2].trim()}`, code: m[3] });
+  }
+  return found;
+};
+
 let failures = 0;
 const fail = (s) => {
   console.log(`FAIL ${s}`);
@@ -52,7 +65,8 @@ for (let i = 0; i < pairs.length; i += 2) {
   const doc = pairs[i];
   const min = Number(pairs[i + 1]);
   let tagged = 0;
-  for (const b of blocks(readFileSync(join(root, doc), 'utf8'))) {
+  const text = readFileSync(join(root, doc), 'utf8');
+  for (const b of (doc.endsWith('.mli') ? mliBlocks : blocks)(text)) {
     const tags = b.info.split(/\s+/).slice(1);
     for (const tag of tags) {
       const where = `${doc}:${b.line}`;

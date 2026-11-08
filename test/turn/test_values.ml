@@ -15,16 +15,37 @@ let host =
 (* The key and the message of each request. Each task here has a synchronous
    result. *)
 let results (c : 'msg Cmd.t) =
-  List.map
-    (fun (C.Request {key; task; to_msg}) ->
-      let r = ref None in
-      Private.Async.start ~host
-        ~run:(Private.Run_queue.create ~schedule:ignore)
-        (Private.Cancel.root ()) task
-        ~ok:(fun x -> r := Some (to_msg x))
-        ~error:raise ;
-      match !r with Some m -> (key, m) | None -> fail "no result" )
+  List.filter_map
+    (function
+      | C.Request {key; task; to_msg} -> (
+          let r = ref None in
+          Private.Async.start ~host
+            ~run:(Private.Run_queue.create ~schedule:ignore)
+            (Private.Cancel.root ()) task
+            ~ok:(fun x -> r := Some (to_msg x))
+            ~error:raise ;
+          match !r with Some m -> Some (key, m) | None -> fail "no result" )
+      | C.Out _ ->
+          fail "an output" )
     (C.requests c)
+
+(* An output is a leaf in the order of the tree. Map does not change it. *)
+let outputs () =
+  let got = ref [] in
+  let ctx = {C.emit= (fun o -> got := o :: !got)} in
+  let leaves =
+    C.requests
+      (Cmd.batch
+         [ Cmd.task (Async.return 1)
+         ; Cmd.map (fun x -> x * 10) (Ctx.emit ctx "a")
+         ; Cmd.latest ~key:"k" (Async.return 2)
+         ; Ctx.emit ctx "b" ] )
+  in
+  equal (list string)
+    ["task"; "out"; "task"; "out"]
+    (List.map (function C.Request _ -> "task" | C.Out _ -> "out") leaves) ;
+  List.iter (function C.Out (emit, o) -> emit o | C.Request _ -> ()) leaves ;
+  equal (list string) ["a"; "b"] (List.rev !got)
 
 let key = option (list string)
 
@@ -339,6 +360,7 @@ let tests =
       ; test "the key paths: the scopes, outer first, then the key" paths
       ; test "the maps compose, inner first" maps
       ; test "a deep batch and a deep map do not overflow the stack" deep
+      ; test "an output is a leaf in the order of the tree" outputs
       ; prop ~count:300 "the requests are a naive flatten of the tree" (gen_d 6)
           flatten_law
       ; test "the leaves of a subscription and their keys" leaves

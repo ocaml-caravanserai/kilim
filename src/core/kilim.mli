@@ -2,7 +2,8 @@
 
     This version has the async tasks and the cancel tokens of section 12, the
     view, the commands, the subscriptions and the app of section 08, the diff of
-    section 11, and the props compare of the components of section 09. *)
+    section 11, and the components of section 09, with no boundary and no
+    Context. *)
 
 module Span = Span
 
@@ -48,9 +49,6 @@ module Private : sig
   module Event = Event
   module Runtime = Runtime
   module Shallow = Shallow
-  module Component = Component
-
-  module type COMPONENT = Component.S
 end
 
 (** Cancel tokens. *)
@@ -765,6 +763,21 @@ module Sub : sig
       @raise Invalid_argument for a duplicate key, in [subs]. *)
 end
 
+(** The context of the [update] of a component (design section 09). *)
+module Ctx : sig
+  (** The context of a component with the message type ['msg] and the output
+      type ['out]. *)
+  type ('msg, 'out) t = ('msg, 'out) Private.Cmd.ctx
+
+  val emit : ('msg, 'out) t -> 'out -> 'msg Cmd.t
+  (** [emit ctx o] is a command that gives the output [o] to the parent. The
+      runtime puts [o] at the back of the message queue as an item of the
+      parent, in the same turn. When the item leaves the queue, the newest [~on]
+      function of the parent makes the message of the parent, and an error in
+      [~on] goes to the error scope of the parent. If the parent is not alive
+      then, the item is dropped. {!Cmd.map} does not change an output. *)
+end
+
 (** An application: the root instance. *)
 module App : sig
   type t = Private.App.t
@@ -792,8 +805,105 @@ module App : sig
       text. *)
 end
 
-(** Components (design section 09). This version has only the props compare. *)
+(** Components (design section 09). A component is a module with its own model,
+    messages, tasks and subscriptions. Its interface is [props] (from the
+    parent) and [out] (to the parent). Its [.mli] file keeps [model] and [msg]
+    abstract: the parent cannot read the state or send a private message.
+
+    A counter with an output, in [counter.ml]:
+    {@ocaml file=test/doc/counter.ml[
+    open Kilim
+    include Component.Defaults
+
+    type props = {step: int; label: string}
+
+    type model = int
+
+    type msg = Incr | Decr
+
+    type out = Changed of int
+
+    let id : (props, model, msg, out) Component.id = Component.id ()
+
+    let init _ = (0, Cmd.none)
+
+    let update ctx p n = function
+      | Incr ->
+          let n = n + p.step in
+          (n, Ctx.emit ctx (Changed n))
+      | Decr ->
+          let n = n - p.step in
+          (n, Ctx.emit ctx (Changed n))
+
+    let view p n =
+      El.div
+        [ El.span [txt p.label]
+        ; El.button ~ev:[Ev.click Decr] [txt "-"]
+        ; El.output [txt (string_of_int n)]
+        ; El.button ~ev:[Ev.click Incr] [txt "+"] ]
+    ]}
+
+    Its interface, in [counter.mli]:
+    {@ocaml file=test/doc/counter.mli[
+      type props = {step: int; label: string}
+
+      type out = Changed of int
+
+      include Kilim.COMPONENT with type props := props and type out := out
+    ]}
+
+    In the view of the parent, a new key resets the counter:
+    {@ocaml in=test/doc/parent.ml[
+    Component.v
+      (module Counter)
+      ~key:("left/" ^ string_of_int m.resets)
+      ~on:(fun (Counter.Changed n) -> Count n)
+      {Counter.step= 1; label= "Left"}
+    ]}
+
+    A component with no outputs has the empty type [out], in [light.ml]:
+    {@ocaml file=test/doc/light.ml[
+    open Kilim
+    include Component.Defaults
+
+    type props = unit
+
+    type model = bool
+
+    type msg = Flip
+
+    type out = |
+
+    let id : (props, model, msg, out) Component.id = Component.id ()
+
+    let init () = (false, Cmd.none)
+
+    let update _ () on Flip = (not on, Cmd.none)
+
+    let view () on =
+      El.button ~ev:[Ev.click Flip] [txt (if on then "on" else "off")]
+    ]}
+
+    Its [~on] function has no case:
+    {@ocaml in=test/doc/parent.ml[
+    Component.v (module Light) ~on:(function _ -> .) ()
+    ]}
+
+    In this version, an error of a component goes to the root catch of
+    {!App.make}: an error in [init], [update], [view], [subs], [equal_props], a
+    task, a subscription or a message function of the component, and an error in
+    the [~on] function of its parent. *)
 module Component : sig
+  (** The typed identity of a component: it witnesses the types of the props,
+      the model, the messages and the outputs. *)
+  type ('p, 'm, 'msg, 'o) id = ('p, 'm, 'msg, 'o) Private.View.id
+
+  val id : unit -> ('p, 'm, 'msg, 'o) id
+  (** [id ()] makes a new identity. Make it one time for each component, at the
+      top level: each call gives a different identity. A module that includes a
+      component and changes its props does not compile, because its id has the
+      old props type. *)
+
   val shallow_equal : 'a -> 'a -> bool
   (** The default props compare of a component. It compares two records one
       field at a time. Its contract: if it gives [true], the two values give the
@@ -826,4 +936,93 @@ module Component : sig
 
       The props must be immutable: a mutable field that changes in place
       compares as equal. *)
+
+  (** The signature of a component. *)
+  module type S = sig
+    (** The input from the parent. *)
+    type props
+
+    (** The state of the instance. Keep it immutable: the runtime compares the
+        old and the new model by physical equality. *)
+    type model
+
+    (** The messages of the instance: from its view, its tasks and its
+        subscriptions. *)
+    type msg
+
+    (** The outputs for the parent. Give the empty type [|] for a component with
+        no outputs. *)
+    type out
+
+    val id : (props, model, msg, out) id
+    (** The identity of the component: make it one time, at the top level, with
+        {!Component.id}. *)
+
+    val init : props -> model * msg Cmd.t
+    (** The mount calls [init]. Its commands become task requests: the tasks
+        start in the settle step after the render. *)
+
+    val update : (msg, out) Ctx.t -> props -> model -> msg -> model * msg Cmd.t
+    (** [update ctx props model msg]. [props] are the props of the last render
+        of the instance. The instance renders again if the new model is not
+        physically the same as the old model. {!Ctx.emit} gives an output to the
+        parent. *)
+
+    val view : props -> model -> msg View.t
+    (** The view of the instance. The runtime calls it at the mount, when the
+        model changed, and when [equal_props] gives [false]. It runs before the
+        diff writes the DOM of the instance. *)
+
+    val subs : props -> model -> msg Sub.t
+    (** The subscriptions of the instance, as [?subs] of {!App.make}. At the end
+        of each render, the runtime calls [subs] for each new instance and for
+        each instance with a new model or new props, and starts the new keys. If
+        a turn ends with a render that is pending, the runtime calls [subs] for
+        each instance whose model changed, stops the removed keys, and gives the
+        new message functions to the keys that stay. An instance that the render
+        removes starts no subscription. The unmount stops each subscription of
+        the instance. *)
+
+    val equal_props : props -> props -> bool
+    (** [equal_props old_props new_props]. If it gives [false], the instance
+        renders with the new props. If it gives [true], the instance keeps its
+        old props and renders only if its model changed. *)
+  end
+
+  (** Defaults for [include]: [subs] gives {!Sub.none}, and [equal_props] is
+      {!shallow_equal}. Include it first, before your own [subs] and
+      [equal_props]: a later [include] replaces your functions, with no warning.
+      With [Defaults.subs], the instance has no subscription pass. *)
+  module Defaults : sig
+    val subs : 'p -> 'm -> 'msg Sub.t
+
+    val equal_props : 'p -> 'p -> bool
+  end
+
+  val v :
+    (module C : S)
+    -> ?key:string -> on:(C.out -> 'msg) -> C.props -> 'msg View.t
+  (** [v (module C) ~key ~on props] is a view node with an instance of [C]. The
+      node has no DOM node of its own: its DOM node is the DOM node of the view
+      of the instance.
+
+      The identity of an instance is its parent instance, its place and [C.id].
+      The place is the position among the siblings, or the key in {!View.keyed}:
+      thus a keyed move does not remount. If the id or [key] at a place changes,
+      the runtime unmounts the old instance and mounts a new one: thus a new
+      [key] resets the instance, and [init] runs again. The unmount stops all
+      tasks and subscriptions of the instance and of its children, and drops
+      their messages.
+
+      A render of the parent compares the props with [C.equal_props], and always
+      takes the new [on]. [on] makes a message of the parent from an output,
+      when the output leaves the queue.
+
+      Two edge cases: a module made inside [view] (a local module or a functor
+      application) gets a new id at each render, thus it remounts each time. Two
+      modules that share one id (for example by [include]) do not remount when
+      they change places. Do not do these things. *)
 end
+
+(** The signature of a component: {!Component.S}. *)
+module type COMPONENT = Component.S
