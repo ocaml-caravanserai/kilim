@@ -79,6 +79,9 @@ let make ?host app outputs =
     ; toggles
     ; post_task= (fun f -> Queue.push f tasks) }
   in
+  (* The mocks of the libraries, before the first turn: an init task reads the
+     driver. *)
+  History_state.install host ;
   let rt = Runtime.start (Host.env host) ops ~parent:root app in
   Host.microtasks host ;
   { host

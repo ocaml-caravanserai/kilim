@@ -1,0 +1,14 @@
+; kilim.router (design section 06): the routes of an app, the History API as
+; tasks and a subscription, and the links. It uses only the standard library
+; and kilim, thus kilim.testing can mock it (History_mock). The browser part is
+; kilim.router.browser (src/router/browser). test/link makes sure that it uses
+; none of Printf, Format, Scanf, Str, Hashtbl, Random, Fun or Printexc.
+
+(library
+ (name kilim_router)
+ (public_name kilim.router)
+ (libraries kilim)
+ (instrumentation
+  (backend ppx_windtrap.coverage))
+ (instrumentation
+  (backend ppx_windtrap.mutate)))

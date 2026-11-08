@@ -7,7 +7,7 @@
 (executables
  (names counter control)
  (modes js wasm)
- (libraries kilim kilim.browser kilim.web))
+ (libraries kilim kilim.browser kilim.web kilim.router kilim.router.browser))
 
 (rule
  (alias size)

@@ -1,0 +1,8 @@
+; The tests of kilim.router and History_mock (design sections 06 and 14),
+; native only: windtrap runs here, and `make mutate` tests the mutants of
+; src/router and src/testing with this suite. test/dom/test_router.ml runs the
+; browser driver in Chrome, Firefox and WebKit.
+
+(test
+ (name test_router)
+ (libraries kilim kilim.router kilim.testing windtrap))

@@ -837,9 +837,25 @@ let duplicates () =
   ignore
     (mount (View.keyed El.ul [(Key.int 1, txt "a"); (Key.string "1", txt "b")]))
 
+(* A patch of a read patches the view of the read in place: the same DOM node,
+   one set_attribute and one set_text. A replace of the node would create a new
+   element. *)
+let read_in_place () =
+  let v s =
+    El.div
+      [Private.Context.read ca (fun x -> El.span ~at:[At.title s] [txt (s ^ x)])]
+  in
+  let p = mount (v "a") in
+  let span = List.hd (kids p) in
+  patch p (v "b") ;
+  is_true ~msg:"the same node" (List.hd (kids p) == span) ;
+  equal ops [("set_attribute", 1); ("set_text", 1)] (counts p) ;
+  equal string (fresh (v "b")) (dump p)
+
 let tests =
   [ group "diff"
-      [ test "a mount builds the DOM" mount_html
+      [ test "a patch of a read keeps its node" read_in_place
+      ; test "a mount builds the DOM" mount_html
       ; test "a mount writes attributes (type first), children, properties"
           mount_order
       ; test "a new name or kind replaces the node" replace

@@ -1,12 +1,14 @@
-The guards of kilim.browser and kilim.web and their tests (design section 14)
+The guards of kilim.browser, kilim.web and kilim.router.browser and their
+tests (design section 14)
 
-windtrap runs only native code, thus it makes no mutant of src/browser and
-src/web. Each line gives one guard (file, function, condition) and the test
-that fails when the guard changes: replace the condition with true or with
-false (or remove the call), then run `dune test --force test/dom test/browser
-test/loader`. A line "EXPECT EXCEPTION" in the output is not a failure: look
-for "FAILED". The tests with D are in test/dom/test_dom.ml. The tests with W
-are in test/dom/test_web.ml. The tests with H are in
+windtrap runs only native code, thus it makes no mutant of src/browser,
+src/web and src/router/browser. Each line gives one guard (file, function,
+condition) and the test that fails when the guard changes: replace the
+condition with true or with false (or remove the call), then run `dune test
+--force test/dom test/browser test/loader`. A line "EXPECT EXCEPTION" in the
+output is not a failure: look for "FAILED". The tests with D are in
+test/dom/test_dom.ml. The tests with W are in test/dom/test_web.ml (W4 to W6
+in test_fut.ml, W7 in test_router.ml). The tests with H are in
 test/browser/test_browser.ml. The other names are the scenarios of
 test/loader/run.mjs.
 
@@ -200,3 +202,38 @@ es_module.ml  import  a document exists                 removed: H (no document,
                                                         ./ stays as it is).
 es_module.ml  import  the catch: a rejected promise     removed: H (a throw of the
                                                         resolve is an error).
+
+The guards of kilim.router.browser (src/router/browser) and Kilim_web.Scroll
+(src/web). R1 to R8 and W7 are in test/dom/test_router.ml, weak_router in
+test/weak. Run `dune test --force test/dom test/weak`. The native suite
+test/router (in the mutation gate) tests kilim.router and History_mock.
+
+kilim_router_browser.ml  str  typeof is string          true: no test, the
+                                                        pathname, the search and
+                                                        the hash are strings in a
+                                                        browser (the trap rule).
+                                                        false: R1 (an empty
+                                                        location: no message).
+kilim_router_browser.ml  location  search and hash      removed: R7 (the path, the
+                                                        query and the fragment).
+kilim_router_browser.ml  uri  the URL of the document   removed: R1 (new URL of a
+                         as the base                    path throws: no push).
+kilim_router_browser.ml  push  the catch of Jv.Error    removed: R6 (an exception).
+kilim_router_browser.ml  push  the scroll to the top    removed: R7 (push: the
+                                                        top).
+kilim_router_browser.ml  replace  the catch of Jv.Error removed: R6 (an exception).
+kilim_router_browser.ml  replace  no scroll             a scroll: R7 (replace: no
+                                                        scroll).
+kilim_router_browser.ml  back  history.back             removed: R3 (no popstate).
+kilim_router_browser.ml  listen  the listener calls f   removed: R3 (no route
+                                                        after back).
+kilim_router_browser.ml  listen  Ev.unlisten            removed: R8 (a popstate
+                                                        listener stays),
+                                                        weak_router (slot 0).
+kilim_router_browser.ml  install  set_history           removed: each R test (no
+                                                        driver: Option.get).
+scroll.ml  to_  behavior "smooth" if smooth             "auto": W7 (smooth: not at
+                                                        once). "smooth" always: W7
+                                                        (at once), R7.
+scroll.ml  to_  left and top                            swapped: W7 (the limit of
+                                                        the range), R7.
