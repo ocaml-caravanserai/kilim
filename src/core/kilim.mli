@@ -1135,7 +1135,9 @@ module Context : sig
       A render of the view compares [v] with the last value by
       {!Component.shallow_equal}. If the value changed, the readers render in
       the same render, also a reader below a component that [equal_props] skips.
-      The other components below the provider do not render.
+      The other components below the provider do not render. If the two values
+      are equal, the provider keeps the old value, as a component keeps its old
+      props: the readers get the old value.
 
       A provider is a node kind in identity: if a provider appears or disappears
       at a place, or if its context changes, the subtree at that place remounts,
@@ -1147,10 +1149,13 @@ module Context : sig
       the same view counts. The read is not a node: the diff calls [f] during
       the render, and puts [f v] in the place of the read.
 
-      The read registers the component (or the app) whose view holds it with the
-      provider: a new value of the provider renders that component again. Each
-      render removes the old registrations of the component, thus a read can be
-      conditional. Two reads of one provider in one view give one registration.
+      The read registers the component (or the app) whose view the diff renders:
+      a new value of the provider renders that component again. This is not
+      always the component whose code made the read: a read in the props of a
+      child, which the view of the child gives, registers the child. Each render
+      removes the old registrations of the component, thus a read can be
+      conditional. Many reads of one provider in one view render the component
+      one time.
 
       [f] runs in the diff. An error in [f] goes to the nearest {!View.boundary}
       above the read, whose fallback replaces the subtree, or to the root catch
