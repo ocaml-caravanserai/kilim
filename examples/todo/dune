@@ -1,7 +1,6 @@
 ; The todo example. The app is a library with only kilim, thus the native
 ; test links it with kilim.testing. main.ml starts it in the browser. The rule
-; of index.html is a copy of the rule in docs/loader.md. test/readme makes sure
-; that its tokens stay the same.
+; of index.html is a copy of the rule in docs/loader.md.
 
 (library
  (name todo)
