@@ -338,7 +338,7 @@ and count rt =
 and update : type msg.
     _ -> (_, msg) Instance.t -> msg Instance.state -> msg -> unit =
  fun rt inst (State s) m ->
-  match s.spec.update Cmd.no_ctx s.props s.model m with
+  match s.spec.update s.ctx s.props s.model m with
   | model, cmd -> (
       (* A stop during [update], or a root catch from a fault of the platform in
          a re-entrant event (see [catch]), unmounts the instance: then the model
@@ -360,24 +360,29 @@ and update : type msg.
 (* Each request gets its token at once, under the token of the instance (made at
    the first task). A key of [Cmd.latest] cancels the old token of the key, also
    if its task has not started. An instance that a root catch or a stop
-   unmounted in its [update] gets no request. *)
+   unmounted in its [update] gets no request. An output goes at once to the back
+   of the queue, as an item of the parent: the item of a dead parent is dropped
+   when it leaves the queue, and after a stop the push does nothing. *)
 and command : type msg. _ -> (_, msg) Instance.t -> msg Cmd.t -> unit =
  fun rt inst cmd ->
   List.iter
-    (fun (Cmd.Request {key; task; to_msg}) ->
-      (* The cancel of the old token runs its end actions: they can stop the
-         page or make a root catch, also in the middle of a batch. *)
-      Option.iter
-        (fun k ->
-          Option.iter Cancel.cancel (Instance.Latest.find_opt k inst.latest) )
-        key ;
-      if inst.alive then begin
-        let token = Cancel.child (Instance.token inst) in
-        Option.iter
-          (fun k -> inst.latest <- Instance.Latest.add k token inst.latest)
-          key ;
-        Queue.push (Req {inst; token; key; task; to_msg}) rt.requests
-      end )
+    (function
+      | Cmd.Request {key; task; to_msg} ->
+          (* The cancel of the old token runs its end actions: they can stop the
+             page or make a root catch, also in the middle of a batch. *)
+          Option.iter
+            (fun k ->
+              Option.iter Cancel.cancel (Instance.Latest.find_opt k inst.latest) )
+            key ;
+          if inst.alive then begin
+            let token = Cancel.child (Instance.token inst) in
+            Option.iter
+              (fun k -> inst.latest <- Instance.Latest.add k token inst.latest)
+              key ;
+            Queue.push (Req {inst; token; key; task; to_msg}) rt.requests
+          end
+      | Cmd.Out (emit, o) ->
+          emit o )
     (Cmd.requests cmd)
 
 (* All requests, in the order of their creation. A request whose token is
@@ -489,7 +494,7 @@ and early rt =
 and subs_pass : type msg. _ -> (_, msg) Instance.t -> start:bool -> unit =
  fun rt inst ~start ->
   match inst.state with
-  | Some (State {spec= {subs; _}; props; model}) ->
+  | Some (State {spec= {subs; _}; props; model; _}) ->
       let leaves =
         match subs with Some f -> Sub.leaves (f props model) | None -> []
       in
@@ -843,7 +848,7 @@ let create env dom ~parent (App.App {init; update; view; subs; fallback}) =
               ; subs= Option.map (fun f () m -> f m) subs
               ; equal_props= (fun () () -> true) }
             in
-            inst.state <- Some (State {spec; props= (); model}) ;
+            inst.state <- Some (State {spec; props= (); model; ctx= Cmd.no_ctx}) ;
             Instance.changed rt.tree inst ;
             command rt inst cmd
         | exception e ->

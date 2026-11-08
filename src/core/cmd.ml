@@ -4,15 +4,19 @@ type 'msg t =
   | Task of 'msg Async.t
   | Latest of string * 'msg Async.t
   | Map : string option * ('a -> 'msg) * 'a t -> 'msg t
+  | Emit : ('o -> unit) * 'o -> 'msg t
 
 type ('msg, 'out) ctx = {emit: 'out -> unit}
 
 let no_ctx = {emit= ignore}
 
+let emit ctx o = Emit (ctx.emit, o)
+
 type 'msg request =
   | Request :
       {key: string list option; task: 'a Async.t; to_msg: 'a -> 'msg}
       -> 'msg request
+  | Out : ('o -> unit) * 'o -> 'msg request
 
 (* The functions of the nested maps, inner first. [apply] is a loop, thus a deep
    nest of maps does not overflow the stack under js_of_ocaml. *)
@@ -53,6 +57,8 @@ let requests (c : 'msg t) : 'msg request list =
           let scopes =
             match scope with Some s -> s :: scopes | Option.None -> scopes
           in
-          loop acc (Frame (c, scopes, Then (f, maps)) :: stack) )
+          loop acc (Frame (c, scopes, Then (f, maps)) :: stack)
+      | Emit (emit, o) ->
+          loop (Out (emit, o) :: acc) stack )
   in
   loop [] [Frame (c, [], Id)]

@@ -10,7 +10,8 @@ type 'msg auto = 'msg Tree.auto =
 type ('p, 'm, 'msg, 'o) data = ('p, 'm, 'msg, 'o) Tree.data =
   { mutable spec: ('p, 'm, 'msg, 'o) View.spec
   ; mutable props: 'p
-  ; mutable model: 'm }
+  ; mutable model: 'm
+  ; ctx: ('msg, 'o) Cmd.ctx }
 
 type 'msg state = 'msg Tree.state =
   | State : ('p, 'm, 'msg, 'o) data -> 'msg state

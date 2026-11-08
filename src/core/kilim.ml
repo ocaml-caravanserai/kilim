@@ -93,6 +93,12 @@ module Sub = struct
   let run ~key f = Sub.Run (key, f)
 end
 
+module Ctx = struct
+  type ('msg, 'out) t = ('msg, 'out) Private.Cmd.ctx
+
+  let emit = Private.Cmd.emit
+end
+
 module App = struct
   type t = App.t
 

@@ -35,7 +35,8 @@ type 'msg auto =
 type ('p, 'm, 'msg, 'o) data =
   { mutable spec: ('p, 'm, 'msg, 'o) View.spec
   ; mutable props: 'p
-  ; mutable model: 'm }
+  ; mutable model: 'm
+  ; ctx: ('msg, 'o) Cmd.ctx (* The context of [update]. *) }
 
 type 'msg state = State : ('p, 'm, 'msg, 'o) data -> 'msg state
 

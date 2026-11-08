@@ -134,14 +134,17 @@ let deep check =
   let host = H.host (H.create ()) in
   let values reqs =
     List.map
-      (fun (Private.Cmd.Request {task; to_msg; _}) ->
-        let r = ref (-1) in
-        Private.Async.start ~host
-          ~run:(Private.Run_queue.create ~schedule:ignore)
-          (Private.Cancel.root ()) task
-          ~ok:(fun x -> r := to_msg x)
-          ~error:raise ;
-        !r )
+      (function
+        | Private.Cmd.Request {task; to_msg; _} ->
+            let r = ref (-1) in
+            Private.Async.start ~host
+              ~run:(Private.Run_queue.create ~schedule:ignore)
+              (Private.Cancel.root ()) task
+              ~ok:(fun x -> r := to_msg x)
+              ~error:raise ;
+            !r
+        | Private.Cmd.Out _ ->
+            -1 )
       reqs
   in
   check "a left-nested batch of 100,000" (values reqs = List.init n (fun i -> i)) ;

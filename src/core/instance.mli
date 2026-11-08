@@ -29,7 +29,11 @@ type ('p, 'm, 'msg, 'o) data = ('p, 'm, 'msg, 'o) Tree.data =
         (** The newest spec: two modules can share one id. *)
   ; mutable props: 'p
         (** The props of the last patch where [equal_props] gave [false]. *)
-  ; mutable model: 'm }
+  ; mutable model: 'm
+  ; ctx: ('msg, 'o) Cmd.ctx
+        (** The context of [update]. The [emit] of a child posts the output to
+            its parent, and the newest [~on] of the parent maps it when it
+            leaves the queue. The App gets {!Cmd.no_ctx}. *) }
 
 type 'msg state = 'msg Tree.state =
   | State : ('p, 'm, 'msg, 'o) data -> 'msg state

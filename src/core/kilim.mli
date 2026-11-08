@@ -765,6 +765,21 @@ module Sub : sig
       @raise Invalid_argument for a duplicate key, in [subs]. *)
 end
 
+(** The context of the [update] of a component (design section 09). *)
+module Ctx : sig
+  (** The context of a component with the message type ['msg] and the output
+      type ['out]. *)
+  type ('msg, 'out) t = ('msg, 'out) Private.Cmd.ctx
+
+  val emit : ('msg, 'out) t -> 'out -> 'msg Cmd.t
+  (** [emit ctx o] is a command that gives the output [o] to the parent. The
+      runtime puts [o] at the back of the message queue as an item of the
+      parent, in the same turn. When the item leaves the queue, the newest [~on]
+      function of the parent makes the message of the parent, and an error in
+      [~on] goes to the error scope of the parent. If the parent is not alive
+      then, the item is dropped. {!Cmd.map} does not change an output. *)
+end
+
 (** An application: the root instance. *)
 module App : sig
   type t = Private.App.t

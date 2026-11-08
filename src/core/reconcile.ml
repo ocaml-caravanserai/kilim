@@ -48,8 +48,15 @@ let build : type msg.
   let env = ctx.env in
   let inst = Instance.child env ctx.owner in
   let cctx = {ctx with post= env.post inst; owner= inst} in
+  (* An output is an item of the parent. Its message function reads [on] when
+     the item leaves the queue, thus a patch of the parent gives the newest
+     [~on]. *)
+  let on = ref on in
+  let map o = !on o in
+  let post = ctx.post in
+  let out = {Cmd.emit= (fun o -> post.post o map)} in
   let model, cmd = spec.init props in
-  let data = {spec; props; model} in
+  let data = {spec; props; model; ctx= out} in
   let state = State data in
   inst.state <- Some state ;
   (* The runtime makes no request for a dead instance. *)
@@ -58,7 +65,7 @@ let build : type msg.
   inst.mount <- Some {ctx= cctx; parent; root= child} ;
   (* The DOM node of a component node is the DOM node of [child], and [dom]
      keeps only the DOM parent: a new root of the child does not stay. *)
-  {dom= parent; shape= Comp {key; on= ref on; inst; data; child}}
+  {dom= parent; shape= Comp {key; on; inst; data; child}}
 
 (* The same id, the same [?key] and a live instance keep the instance. Then the
    instance renders if [equal_props] of the new spec gives [false], or if it is
