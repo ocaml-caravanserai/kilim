@@ -162,3 +162,37 @@ let one_render p f =
   let r = (stats p).renders in
   f () ;
   equal int ~msg:"one render" (r + 1) (stats p).renders
+
+(* A log of the events of a test: [say] adds an event, [take] gives the events
+   in order and empties the log. *)
+let log : string list ref = ref []
+
+let say s = log := s :: !log
+
+let take () =
+  let l = List.rev !log in
+  log := [] ;
+  l
+
+type pmsg = Bump | Other
+
+(* A root whose view is a button "p" and [view m]: a click on "p" adds 1. It
+   empties the log. *)
+let page ?host ?fallback view =
+  log := [] ;
+  P.start ?host
+    (App.make
+       ~init:(fun () -> (0, Cmd.none))
+       ~update:(fun m -> function
+         | Bump -> (m + 1, Cmd.none) | Other -> (m, Cmd.none) )
+       ~view:(fun m -> El.div [button ~id:"p" Bump (string_of_int m); view m])
+       ?fallback () )
+
+let bump p = P.click p (By.test_id "p")
+
+let text p id = F.text (P.find p (By.test_id id))
+
+let has p id =
+  match P.find p (By.test_id id) with _ -> true | exception P.Query _ -> false
+
+let tree = P.tree

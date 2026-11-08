@@ -9,15 +9,6 @@ module C = Component
 
 exception Boom
 
-let log = ref []
-
-let say s = log := s :: !log
-
-let take () =
-  let l = List.rev !log in
-  log := [] ;
-  l
-
 (* A task that never ends. The log gets its start and the end of its token. *)
 let hold name =
   Async.make (fun tok ~ok:_ ~error:_ ->
@@ -112,28 +103,6 @@ let fb ?key ?(id = "fb") child =
         ~at:[At.data "testid" id]
         [txt (match e with Boom -> "boom" | _ -> "other")] )
     child
-
-type pmsg = Bump | Other
-
-(* The root: a click on "p" adds 1. *)
-let page ?host ?fallback view =
-  log := [] ;
-  P.start ?host
-    (App.make
-       ~init:(fun () -> (0, Cmd.none))
-       ~update:(fun m -> function
-         | Bump -> (m + 1, Cmd.none) | Other -> (m, Cmd.none) )
-       ~view:(fun m -> El.div [button ~id:"p" Bump (string_of_int m); view m])
-       ?fallback () )
-
-let bump p = P.click p (By.test_id "p")
-
-let text p id = F.text (P.find p (By.test_id id))
-
-let has p id =
-  match P.find p (By.test_id id) with _ -> true | exception P.Query _ -> false
-
-let tree = P.tree
 
 (* After a boundary catch: the fallback shows, the root stays alive, the error
    handler gets nothing. *)

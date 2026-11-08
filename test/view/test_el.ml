@@ -12,7 +12,7 @@ let element (v : string View.t) =
   match v with
   | V.Element e ->
       e
-  | V.Text _ | V.Comp _ | V.Boundary _ ->
+  | V.Text _ | V.Comp _ | V.Boundary _ | V.Provide _ | V.Read _ ->
       fail "not an element"
 
 let refused_elements =

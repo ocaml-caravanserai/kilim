@@ -19,11 +19,24 @@ let rec kill : 'node 'msg. 'node env -> ('node, 'msg) boundary -> unit =
 and kill_nested : 'node. 'node env -> 'node any_boundary -> unit =
  fun env (Bound n) -> Reconcile.leave env n ; kill env n
 
-(* The catch: the boundary unmounts its subtree and keeps the error. A boundary
+(* A registration of a read in a failed subtree: its site is the boundary that
+   failed, or a boundary that its catch removed. *)
+let keep (r : _ reg) =
+  match r.site with
+  | Some (Bound x) when x.left || Option.is_some x.failed ->
+      Dlist.remove r.link ; false
+  | Some _ | None ->
+      true
+
+(* The catch: the boundary unmounts its subtree and keeps the error. The owner
+   keeps no registration of a read in the subtree, also when the diff of the
+   subtree stopped and its providers are not in the retained tree. A boundary
    catch does not call the error handler: the fallback gets the exception. *)
 let catch env b e =
   kill env b ;
   b.failed <- Some e ;
+  let o = b.ctx.owner in
+  o.reads <- List.filter keep o.reads ;
   env.caught ()
 
 (* The write of the fallback in the place of the child. The fallback gets the
@@ -130,7 +143,7 @@ let patch : type msg.
       | Some e ->
           if b.shown then Diff.patch_node b.ctx parent b.child (v.fallback e)
           else show ctx.env b e )
-  | Boundary _ | Text _ | Element _ | Comp _ ->
+  | Boundary _ | Text _ | Element _ | Comp _ | Provider _ ->
       Diff.replace ctx parent r (View.Boundary v)
 
 (* The write of the controlled properties of an element in a boundary, after the

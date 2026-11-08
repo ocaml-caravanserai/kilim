@@ -45,7 +45,8 @@ type 'msg state = 'msg Tree.state =
       into the child list of its parent before its [init] runs.
     - [mount]: the context of the diff, the DOM parent and the root of the
       retained tree of the view of a child. The root has [None]: the runtime
-      keeps its retained tree.
+      keeps its retained tree. The [providers] of the context are the context
+      environment of the child (design section 10).
     - [alive], [token] (made at the first task), [latest], [dirty] (the model
       changed since the last render), [runs] and [autos] (the recorded
       subscription keys), [early_stale] (the model changed since the last
@@ -53,7 +54,10 @@ type 'msg state = 'msg Tree.state =
     - [member]: the node of the instance in the member list of its boundary (see
       {!boundary}).
     - [owned]: the live boundaries in the view of the instance. The list comes
-      at the first boundary. *)
+      at the first boundary.
+    - [reads]: the registrations of the reads of the last render of a live
+      instance (design section 10), the newest first. Two reads in a row with
+      one provider and one boundary give one registration. *)
 type ('node, 'msg) t = ('node, 'msg) Tree.inst
 
 type 'node any = 'node Tree.any = Any : ('node, 'msg) t -> 'node any
@@ -108,18 +112,31 @@ val changed : 'node env -> ('node, 'msg) t -> unit
     root goes into the work queue and into the list of the early call of [env]
     (see {!ext}). The runtime calls it only for a live instance. *)
 
+(** The unlink of registrations from the reader lists of their providers.
+    [Context.provide] and [Context.read] install it: thus an app with no context
+    does not link it. The default does nothing: with no context, no instance has
+    a registration. *)
+type unlinks = {f: 'node. 'node Tree.reg list -> unit}
+
+val unlinks : unlinks ref
+
+val forget : ('node, 'msg) t -> unit
+(** Removes each registration of the instance from the reader list of its
+    provider, in O(1) each, and empties [reads]. A render of the instance calls
+    it first: a read can be conditional. *)
+
 val clean : 'node env -> ('node, 'msg) t -> unit
 (** Clears [dirty], and removes the instance from the work queue. *)
 
 val unmount : 'node env -> ('node, 'msg) t -> unit
-(** Clears [alive] and [dirty], calls [detach] of {!ext} (thus leaves the work
-    queue and its lists, clears [parent] and [mount], unlinks the boundaries of
-    its view, and unmounts each child, also for a dead instance), cancels the
-    token (thus each subscription stops), cancels the token of each recorded key
-    (also of a task that ended), empties [latest], [runs] and [autos], and sets
-    [state] to [None]. Thus a dead instance keeps no model, no DOM node, no
-    boundary and no child. A subscription pass does nothing for an instance with
-    no state, thus [early_stale] does not matter after the unmount. The runtime
-    never makes a dead instance dirty again. Thus after a root catch, the write
-    of the fallback is the last render of the root. A second call does nothing.
-*)
+(** Clears [alive] and [dirty], removes the registrations (see {!forget}), calls
+    [detach] of {!ext} (thus leaves the work queue and its lists, clears
+    [parent] and [mount], unlinks the boundaries of its view, and unmounts each
+    child, also for a dead instance), cancels the token (thus each subscription
+    stops), cancels the token of each recorded key (also of a task that ended),
+    empties [latest], [runs] and [autos], and sets [state] to [None]. Thus a
+    dead instance keeps no model, no DOM node, no boundary, no registration and
+    no child. A subscription pass does nothing for an instance with no state,
+    thus [early_stale] does not matter after the unmount. The runtime never
+    makes a dead instance dirty again. Thus after a root catch, the write of the
+    fallback is the last render of the root. A second call does nothing. *)

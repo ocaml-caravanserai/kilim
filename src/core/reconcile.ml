@@ -29,12 +29,15 @@ let view : type msg. 'node env -> ('node, msg) inst -> msg state -> msg View.t =
 
 (* The render of a child by the patch of its parent, inside the run of the
    parent: the parent writes the controlled properties. The caller first removes
-   the instance from the work queue. *)
+   the instance from the work queue. The render first removes the registrations
+   of the instance, as Diff.patch does. *)
 let redraw : type msg. ('node, msg) inst -> unit =
  fun i ->
   match (i.state, i.mount) with
   | Some s, Some m ->
-      Diff.patch_node m.ctx m.parent m.root (view m.ctx.env i s)
+      let v = view m.ctx.env i s in
+      Instance.forget i ;
+      Diff.patch_node m.ctx m.parent m.root v
   | (None | Some _), _ ->
       (* A dead instance: the callers never give one. *)
       ()
@@ -95,7 +98,7 @@ let patch : type msg.
         end
     | _ ->
         Diff.replace ctx parent r (View.Comp c) )
-  | Text _ | Element _ | Boundary _ ->
+  | Text _ | Element _ | Boundary _ | Provider _ ->
       (* The diff gives only a component node. *)
       Diff.replace ctx parent r (View.Comp c)
 
@@ -126,7 +129,9 @@ let unlink env (Bound b) = leave env b
    boundary unlinks. The walk stops at a component node: the unmount of its
    instance reaches the instances below. The child of a boundary holds each of
    its members: a stopped diff in the child goes to the boundary, which unmounts
-   its members. It allocates nothing. *)
+   its members. A provider node has nothing to unlink: its readers are the
+   owner, whose render removed its registrations first, and the instances below
+   it, which unmount. It allocates nothing. *)
 let rec walk : 'node 'msg. 'node env -> ('node, 'msg) node -> unit =
  fun env r ->
   match r.shape with
@@ -138,6 +143,8 @@ let rec walk : 'node 'msg. 'node env -> ('node, 'msg) node -> unit =
       Instance.unmount env c.inst
   | Boundary b ->
       leave env b ; walk env b.child
+  | Provider {child; _} ->
+      walk env child
 
 and walk_children : 'node 'msg. 'node env -> ('node, 'msg) children -> unit =
  fun env c ->

@@ -38,7 +38,8 @@ let make ~base ~pos ~parent : ('node, 'msg) t =
   ; early_stale= false
   ; state= None
   ; member= None
-  ; owned= None }
+  ; owned= None
+  ; reads= [] }
 
 type ext =
   { detach: 'node 'msg. 'node env -> ('node, 'msg) t -> unit
@@ -99,11 +100,25 @@ let clean (env : _ env) (i : _ t) =
   i.dirty <- false ;
   env.work <- Work.remove i.pos env.work
 
+type unlinks = {f: 'node. 'node Tree.reg list -> unit}
+
+(* Only a read registers, and Context installs the unlink with the read. *)
+let unlinks = ref {f= (fun _ -> ())}
+
+let forget (i : _ t) =
+  match i.reads with
+  | ([] [@mutate off "a pure shortcut: no call and no write with no read"]) ->
+      ()
+  | l ->
+      !unlinks.f l ;
+      i.reads <- []
+
 (* Each step does nothing the second time: a cancelled token stays cancelled,
    and the sets are empty. *)
 let unmount (env : _ env) (i : _ t) =
   i.alive <- false ;
   i.dirty <- false ;
+  forget i ;
   !ext.detach env i ;
   Option.iter Cancel.cancel i.token ;
   i.latest <- Latest.empty ;

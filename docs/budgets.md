@@ -11,7 +11,7 @@ pull request.
 | Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size` and the todo example | Done |
 | DOM operations for each action | Yes, each change | `test/view/test_budget.ml`: the four actions, exact counts. `examples/todo/test/test_counts.ml`: three actions of the todo example | Done |
 | Allocations for each action | Yes, each change | `bench/alloc`: the allocated words of the four actions | Done |
-| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links and the lists of the boundaries, 100 times), `test/cross` (the same, 1,000 times, in the three builds), and test D25 of `test/dom` (listeners, timers, DOM, in Chrome) | Done |
+| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), and test D25 of `test/dom` (listeners, timers, DOM, in Chrome) | Done |
 | Partial update | Yes, each change | `test/view/test_budget.ml`: three actions on 1,000 keyed component rows, exact counts of the views and of the DOM operations. `bench/alloc`: the allocated words of two actions | Done |
 | Token release | Yes, each change | `test/view/test_budget.ml`: the operations on the token lists when the parent removes 1,000 and 2,000 component rows | Done |
 | Linked modules | Yes, each change | `test/link` (kilim, kilim.browser) | Done |
@@ -94,6 +94,23 @@ boundaries (on a null DOM, with no runtime). `View.boundary` installs these func
 code elimination removes them from an app with no boundary, in the two builds
 (a test string in `Boundary` was not in the release files of the counter and
 of the todo example). The budgets do not change.
+
+Context adds about 0.1 KB to the counter in the two builds, which has no
+context: before it, the counter was 37,522 bytes (js_of_ocaml) and 37,400
+bytes (the main `.wasm` file), and after it 37,612 and 37,477 bytes. The
+cost is the code that each app links: the provider node and the read in the
+diff, the default functions of the hooks, and the check for registrations of
+an instance at each render and at its unmount. The code that only contexts
+need is in `Context`: the build and the patch of a provider node, the read
+and its registration, the marks of the readers, and the unlink of the
+registrations. `Context.provide` and `Context.read` install these functions
+in the diff and in `Instance`, thus the dead code elimination removes them
+from an app with no context, in the two builds (a test string in `Context`
+was not in the release files of the counter and of the todo example). The
+registrations of each instance and the environment of each context of the
+diff add one word each: the mount of the 1,000 keyed component rows of
+`bench/alloc` (on a null DOM, with no runtime) allocates 239.4 words for
+each row, against 237.4 words before Context. The budgets do not change.
 
 The baseline is a minimal Brr program, because Brr links `Fun` and thus
 `Printf` (design section 13): 23,845 bytes (js_of_ocaml), and 17,217 bytes

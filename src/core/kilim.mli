@@ -47,6 +47,7 @@ module Private : sig
   module Diff = Diff
   module Reconcile = Reconcile
   module Boundary = Boundary
+  module Context = Context
   module Cmd = Cmd
   module Sub = Sub
   module App = App
@@ -1070,3 +1071,93 @@ end
 
 (** The signature of a component: {!Component.S}. *)
 module type COMPONENT = Component.S
+
+(** Shared state (design section 10). A context is a typed key. A provider in
+    the view gives a value to the views below it, also to the views of the
+    components below it. A read gets the value of the nearest provider above it,
+    or the default value of the context.
+
+    The theme of a page, in [themed.ml]:
+    {@ocaml file=test/doc/themed.ml[
+    open Kilim
+
+    type theme = Light | Dark
+
+    let theme : theme Context.t = Context.create ~default:Light ()
+
+    let theme_class = function Light -> "light" | Dark -> "dark"
+
+    (* A component that reads the theme in its view. *)
+    module Toolbar = struct
+      include Component.Defaults
+
+      type props = string
+
+      type model = unit
+
+      type msg = |
+
+      type out = |
+
+      let id : (props, model, msg, out) Component.id = Component.id ()
+
+      let init _ = ((), Cmd.none)
+
+      let update _ _ () = function (_ : msg) -> .
+
+      let view title () =
+        Context.read theme (fun t ->
+            El.nav ~at:[At.class_ (theme_class t)] [txt title] )
+    end
+
+    let view (dark : bool) : unit View.t =
+      Context.provide theme
+        (if dark then Dark else Light)
+        (El.div
+           [ Component.v (module Toolbar) ~on:(function _ -> .) "Tools"
+           ; Context.read theme (fun t -> El.p [txt (theme_class t)]) ] )
+    ]} *)
+module Context : sig
+  (** A context with values of type ['a]. *)
+  type 'a t
+
+  val create : default:'a -> unit -> 'a t
+  (** [create ~default ()] makes a new context. Make it one time, at the top
+      level: each call gives a different context. A read with no provider of the
+      context above it gets [default]. *)
+
+  val provide : 'a t -> 'a -> 'msg View.t -> 'msg View.t
+  (** [provide c v child] gives the value [v] of [c] to [child] and to the views
+      below it. The node has one child and no DOM node of its own: its DOM node
+      is the DOM node of [child]. It keeps its last value and its readers, also
+      in a keyed move.
+
+      A render of the view compares [v] with the last value by
+      {!Component.shallow_equal}. If the value changed, the readers render in
+      the same render, also a reader below a component that [equal_props] skips.
+      The other components below the provider do not render. If the two values
+      are equal, the provider keeps the old value, as a component keeps its old
+      props: the readers get the old value.
+
+      A provider is a node kind in identity: if a provider appears or disappears
+      at a place, or if its context changes, the subtree at that place remounts,
+      as for {!View.boundary}. *)
+
+  val read : 'a t -> ('a -> 'msg View.t) -> 'msg View.t
+  (** [read c f] is the view [f v], where [v] is the value of the nearest
+      provider of [c] above the read, or the default value of [c]. A provider in
+      the same view counts. The read is not a node: the diff calls [f] during
+      the render, and puts [f v] in the place of the read.
+
+      The read registers the component (or the app) whose view the diff renders:
+      a new value of the provider renders that component again. This is not
+      always the component whose code made the read: a read in the props of a
+      child, which the view of the child gives, registers the child. Each render
+      removes the old registrations of the component, thus a read can be
+      conditional. Many reads of one provider in one view render the component
+      one time.
+
+      [f] runs in the diff. An error in [f] goes to the nearest {!View.boundary}
+      above the read, whose fallback replaces the subtree, or to the root catch
+      of {!App.make}. [f] must have no side effects. *)
+end

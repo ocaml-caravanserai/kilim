@@ -649,7 +649,8 @@ and write : type msg.
         ; controlled= ref []
         ; owner= inst
         ; env= rt.tree
-        ; boundary= None }
+        ; boundary= None
+        ; providers= [] }
       in
       let t = Diff.start ctx ~parent:rt.parent v in
       (* The user code of a component can stop the page during the mount: then
@@ -948,7 +949,10 @@ type tree =
   ; stale: int
   ; owned_links: int
   ; member_links: int
-  ; nested_links: int }
+  ; nested_links: int
+  ; providers: int
+  ; readers: int
+  ; reader_links: int }
 
 (* The walk follows the child lists from the root. A dead instance unlinks from
    the list of its parent, and a boundary that leaves the tree from its lists:
@@ -957,6 +961,7 @@ let tree rt =
   let (Root r) = rt.root in
   let instances = ref 0 and links = ref 0 in
   let owned = ref 0 and members = ref 0 and nested = ref 0 in
+  let readers = ref (List.length r.inst.reads) in
   let rec walk : 'msg. (_, 'msg) Instance.t -> unit =
    fun i ->
     links := !links + Dlist.length i.children ;
@@ -973,10 +978,34 @@ let tree rt =
     Dlist.iter
       (fun (Instance.Any c) ->
         if c.alive then incr instances ;
+        readers := !readers + List.length c.reads ;
         walk c )
       i.children
   in
   walk r.inst ;
+  (* The providers of the retained tree, through the views of the children. *)
+  let providers = ref 0 and reader_links = ref 0 in
+  let rec nodes : 'msg. (_, 'msg) Diff.node -> unit =
+   fun n ->
+    match n.shape with
+    | Text _ ->
+        ()
+    | Element e -> (
+      match e.children with
+      | Plain a | Keyed (_, a) ->
+          Array.iter nodes a
+      | Inner _ ->
+          () )
+    | Comp c ->
+        nodes c.child
+    | Boundary b ->
+        nodes b.child
+    | Provider {p; child; _} ->
+        incr providers ;
+        reader_links := !reader_links + Dlist.length p.readers ;
+        nodes child
+  in
+  Option.iter (fun t -> nodes (Diff.root t)) r.tree ;
   { instances= !instances
   ; tokens=
       (match r.inst.token with Some t -> Cancel.descendants t | None -> 0)
@@ -985,7 +1014,10 @@ let tree rt =
   ; stale= List.length rt.tree.stale
   ; owned_links= !owned
   ; member_links= !members
-  ; nested_links= !nested }
+  ; nested_links= !nested
+  ; providers= !providers
+  ; readers= !readers
+  ; reader_links= !reader_links }
 
 let inspect rt =
   let (Root r) = rt.root in

@@ -22,6 +22,7 @@ module Private = struct
   module Diff = Diff
   module Reconcile = Reconcile
   module Boundary = Boundary
+  module Context = Context
   module Cmd = Cmd
   module Sub = Sub
   module App = App
@@ -120,3 +121,13 @@ module Component = struct
 end
 
 module type COMPONENT = Component.S
+
+module Context = struct
+  type 'a t = 'a Private.View.context
+
+  let create = Context.create
+
+  let provide = Context.provide
+
+  let read = Context.read
+end

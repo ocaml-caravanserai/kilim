@@ -1,7 +1,7 @@
 (* The types of the retained tree and of the instance tree (design section 09).
    An instance keeps its retained tree, and a retained tree keeps the instances
    of its component nodes. Thus the types are in one module. Instance and Diff
-   give the operations. *)
+   give the operations. Section 10 gives the providers and the reads. *)
 
 (* The place of an instance in the render order: the depth, then the order of
    the mount. *)
@@ -65,6 +65,13 @@ and ('node, 'msg) shape =
                component node. *) }
       -> ('node, 'msg) shape
   | Boundary of ('node, 'msg) boundary
+  | Provider :
+      { p: ('node, 'a) provider
+      ; inner: ('node, 'msg) ctx
+            (* The context of the child: the context of the place, with [p]
+               first in its providers. *)
+      ; child: ('node, 'msg) node }
+      -> ('node, 'msg) shape
 
 and ('node, 'msg) element =
   { ns: Dom.ns
@@ -103,7 +110,9 @@ and ('node, 'msg) inst =
   ; mutable owned: 'node any_boundary Dlist.t option
         (* The live boundaries in the view of the instance. The list comes at
            the first boundary: an instance with no boundary saves its words. *)
-  }
+  ; mutable reads: 'node reg list
+        (* The registrations of the reads of the last render, the newest
+           first. *) }
 
 and ('node, 'msg) mount =
   { ctx: ('node, 'msg) ctx
@@ -144,6 +153,21 @@ and ('node, 'msg) boundary =
 
 and 'node any_boundary = Bound : ('node, 'msg) boundary -> 'node any_boundary
 
+(* A provider node (design section 10): its context, its last value and its
+   readers. *)
+and ('node, 'a) provider =
+  {cid: 'a Type.Id.t; mutable value: 'a; readers: 'node any Dlist.t}
+
+and 'node any_provider = Prov : ('node, 'a) provider -> 'node any_provider
+
+(* A registration of an instance with a provider. [site] is the nearest boundary
+   at the read: a catch of that boundary removes the registration of its owner.
+   [link] is the node of the instance in the reader list of the provider. *)
+and 'node reg =
+  { prov: 'node any_provider
+  ; site: 'node any_boundary option
+  ; link: 'node any Dlist.node }
+
 (* An entry of the work queue: a dirty instance, or a failed boundary whose
    fallback is not in the DOM. *)
 and 'node work =
@@ -156,7 +180,9 @@ and 'node work =
    operations of the patch. The diff patches and builds the nodes in the order
    of the document, thus the order of [controlled] is the order of the end tags.
    One render shares one list: renders never nest. [boundary] is the nearest
-   boundary above the place. *)
+   boundary above the place. [providers] is the context environment of the
+   place, the nearest provider first: the context at the mount of an instance
+   keeps the environment of the instance. *)
 and ('node, 'msg) ctx =
   { ops: 'node Dom.t
   ; post: 'msg Dom.post
@@ -164,7 +190,8 @@ and ('node, 'msg) ctx =
   ; controlled: ('node * Dom.cell * 'node any_boundary option) list ref
   ; owner: ('node, 'msg) inst
   ; env: 'node env
-  ; boundary: 'node any_boundary option }
+  ; boundary: 'node any_boundary option
+  ; providers: 'node any_provider list }
 
 (* The parts of the runtime that a mount of an instance needs. *)
 and 'node env =

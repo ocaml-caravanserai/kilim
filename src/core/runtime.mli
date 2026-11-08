@@ -170,7 +170,16 @@ type tree =
   ; member_links: int
         (** The entries of the member lists of the live boundaries. *)
   ; nested_links: int
-        (** The entries of the nested lists of the live boundaries. *) }
+        (** The entries of the nested lists of the live boundaries. *)
+  ; providers: int
+        (** The provider nodes of the retained tree, in the views of the root
+            and of the live instances. *)
+  ; readers: int
+        (** The registrations of the reads, on the root and on the instances of
+            the child lists. *)
+  ; reader_links: int
+        (** The entries of the reader lists of the providers of [providers].
+            With no leak, it is [readers]. *) }
 
 val tree : 'node t -> tree
 
