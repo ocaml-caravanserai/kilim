@@ -8,10 +8,22 @@ open Tree
 
 (* The view of a live instance. The view runs before the diff writes: an error
    leaves no half-changed DOM of the instance. *)
-let view : type msg. 'node env -> msg state -> msg View.t =
- fun env (State d) ->
+(* The instance has subscriptions to compare: a [subs] function, or the keys of
+   an older spec (two modules can share one id). *)
+let subscribes : type msg. ('node, msg) inst -> msg state -> bool =
+ fun i (State d) ->
+  Option.is_some d.spec.subs
+  || not (Subs.is_empty i.runs && Subs.is_empty i.autos)
+
+let view : type msg. 'node env -> ('node, msg) inst -> msg state -> msg View.t =
+ fun env i s ->
   env.viewed () ;
-  d.spec.view d.props d.model
+  let (State d) = s in
+  let v = d.spec.view d.props d.model in
+  (* The pass at the end of the render compares the subscriptions of [i]. The
+     list has the order of the views: a parent comes before its children. *)
+  if env.passes && subscribes i s then env.touched <- Any i :: env.touched ;
+  v
 
 (* The render of a child by the patch of its parent, inside the run of the
    parent: the parent writes the controlled properties. The caller first removes
@@ -20,7 +32,7 @@ let redraw : type msg. ('node, msg) inst -> unit =
  fun i ->
   match (i.state, i.mount) with
   | Some s, Some m ->
-      Diff.patch_node m.ctx m.parent m.root (view m.ctx.env s)
+      Diff.patch_node m.ctx m.parent m.root (view m.ctx.env i s)
   | (None | Some _), _ ->
       (* A dead instance: the callers never give one. *)
       ()
@@ -42,7 +54,7 @@ let build : type msg.
   inst.state <- Some state ;
   (* The runtime makes no request for a dead instance. *)
   env.command inst cmd ;
-  let child = Diff.build cctx parent (view env state) in
+  let child = Diff.build cctx parent (view env inst state) in
   inst.mount <- Some {ctx= cctx; parent; root= child} ;
   (* The DOM node of a component node is the DOM node of [child], and [dom]
      keeps only the DOM parent: a new root of the child does not stay. *)
@@ -84,7 +96,7 @@ let render : type msg. ('node, msg) inst -> unit =
  fun i ->
   match (i.state, i.mount) with
   | Some s, Some m ->
-      Diff.patch m (view m.ctx.env s)
+      Diff.patch m (view m.ctx.env i s)
   | (None | Some _), _ ->
       (* A dead instance: the work queue has none. *)
       ()
@@ -145,8 +157,18 @@ let detach : 'node 'msg. 'node env -> ('node, 'msg) inst -> unit =
     [@mutate off "a pure shortcut: no closure for an empty list"]
   then Dlist.iter (fun (Any c) -> Instance.unmount env c) i.children
 
+(* The model of [i] changed: the render renders it, and the early call compares
+   its subscriptions. [early_stale] is still the flag of the last pass: thus
+   many model changes before a pass give one entry. *)
 let enqueue : 'node 'msg. 'node env -> ('node, 'msg) inst -> unit =
- fun env i -> env.work <- Work.add i.pos (Any i) env.work
+ fun env i ->
+  let a = Any i in
+  env.work <- Work.add i.pos a env.work ;
+  match i.state with
+  | Some s when env.passes && (not i.early_stale) && subscribes i s ->
+      env.stale <- a :: env.stale
+  | Some _ | None ->
+      ()
 
 let hooks = {Diff.build; patch; render; walk; walk_children; flush}
 

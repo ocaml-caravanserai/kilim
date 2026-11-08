@@ -15,7 +15,7 @@ let button = El.button ~at:[At.data "testid" "b"] ~ev:[Ev.click ()] []
 
 let click p = P.click p (Kilim_testing.By.test_id "b")
 
-(* A child with a timer of 1 s. *)
+(* A child with a task of 1 s and a subscription of 2 s: two timers. *)
 module Timed = struct
   type props = int
 
@@ -33,7 +33,7 @@ module Timed = struct
 
   let view _ m = El.span [txt (string_of_int m)]
 
-  let subs _ _ = Sub.none
+  let subs _ _ = Sub.every (Span.s 2) ()
 
   let equal_props = Int.equal
 end
@@ -61,8 +61,8 @@ let mounts check =
   for _ = 1 to 2_000 do
     click p
   done ;
-  check "1,000 mounts and unmounts of a child with a timer: 1 left"
-    ((P.tree p).instances = 1 && H.live_timers h = 1) ;
+  check "1,000 mounts and unmounts of a child with two timers: 1 left"
+    ((P.tree p).instances = 1 && H.live_timers h = 2) ;
   click p ;
   check "then no timer, token, instance or child link"
     (H.live_timers h = 0 && empty p)

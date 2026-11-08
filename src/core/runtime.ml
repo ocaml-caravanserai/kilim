@@ -433,8 +433,23 @@ and render rt =
         false
   in
   let wrote = !Diff.hooks.flush rt.tree (catch_in_render rt) || wrote in
+  touched rt ;
   if wrote then rt.stats.renders <- rt.stats.renders + 1 ;
   restore rt
+
+(* The subscriptions of the instances below the root whose view ran in this
+   render: the new instances, and the instances with a new model or new props.
+   The order is the order of the views. The pass skips an instance that the
+   render removed, thus its subscriptions never start. A component of the root
+   fallback is dead but has a state: the pass skips it too. *)
+and touched rt =
+  let l = rt.tree.touched in
+  rt.tree.touched <- [] ;
+  List.iter
+    (fun (Instance.Any i) ->
+      if i.alive then
+        try subs_pass rt i ~start:true with e -> catch_in_render rt e )
+    (List.rev l)
 
 (* The restores run after the write, thus they compare with the newest view. A
    restore that a restore pushes waits for the next render. A stop clears the
@@ -453,17 +468,31 @@ and restore rt =
    dead instance has no state, thus the pass does nothing for it. *)
 and early rt =
   let (Root r) = rt.root in
-  if r.inst.early_stale then
-    try subs_pass rt r.inst ~start:false with e -> catch rt e
+  ( if r.inst.early_stale then
+      try subs_pass rt r.inst ~start:false with e -> catch rt e ) ;
+  (* The instances below the root, in the order of their model changes. A render
+     can make a pass first, which clears [early_stale]. [alive]: under
+     wasm_of_ocaml, a trap in an end action of [Instance.unmount] leaves the
+     instance with [alive = false] and a state (see [process]). *)
+  let l = rt.tree.stale in
+  rt.tree.stale <- [] ;
+  List.iter
+    (fun (Instance.Any i) ->
+      if i.alive && i.early_stale then
+        try subs_pass rt i ~start:false with e -> catch rt e )
+    (List.rev l)
 
 (* The subscription pass of a live instance. [subs] and the end actions of the
    removed keys are user code: they can stop the page or make a root catch, thus
-   each leaf examines [alive] again. The new keys start only if [start]. *)
+   each leaf examines [alive] again. The new keys start only if [start]. A spec
+   with no [subs] has no keys: the pass stops the keys of an older spec. *)
 and subs_pass : type msg. _ -> (_, msg) Instance.t -> start:bool -> unit =
  fun rt inst ~start ->
   match inst.state with
-  | Some (State {spec= {subs= Some f; _}; props; model}) ->
-      let leaves = Sub.leaves (f props model) in
+  | Some (State {spec= {subs; _}; props; model}) ->
+      let leaves =
+        match subs with Some f -> Sub.leaves (f props model) | None -> []
+      in
       let wanted =
         List.fold_left
           (fun m -> function
@@ -491,7 +520,7 @@ and subs_pass : type msg. _ -> (_, msg) Instance.t -> start:bool -> unit =
         inst.autos ;
       List.iter (fun leaf -> if inst.alive then keep rt inst ~start leaf) leaves ;
       inst.early_stale <- false
-  | _ ->
+  | None ->
       ()
 
 (* A key that stays gets the newest message function. A new key starts if
@@ -742,7 +771,10 @@ let make env dom parent root =
         ; command= (fun i cmd -> command rt i cmd)
         ; viewed= (fun () -> rt.stats.views <- rt.stats.views + 1)
         ; serial= 1
-        ; work= Instance.Work.empty }
+        ; work= Instance.Work.empty
+        ; passes= true
+        ; stale= []
+        ; touched= [] }
     ; stats=
         { turns= 0
         ; clocks= 0
@@ -874,7 +906,8 @@ let stop rt =
 
 let stats rt = {rt.stats with turns= rt.stats.turns}
 
-type tree = {instances: int; tokens: int; child_links: int; queued: int}
+type tree =
+  {instances: int; tokens: int; child_links: int; queued: int; stale: int}
 
 (* The walk follows the child lists from the root. A dead instance unlinks from
    the list of its parent: thus a dead entry in a list is a leak, and
@@ -896,7 +929,8 @@ let tree rt =
   ; tokens=
       (match r.inst.token with Some t -> Cancel.descendants t | None -> 0)
   ; child_links= !links
-  ; queued= Instance.Work.cardinal rt.tree.work }
+  ; queued= Instance.Work.cardinal rt.tree.work
+  ; stale= List.length rt.tree.stale }
 
 let inspect rt =
   let (Root r) = rt.root in

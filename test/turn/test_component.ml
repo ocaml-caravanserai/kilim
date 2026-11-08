@@ -440,7 +440,10 @@ let dead_token () =
     ; command= (fun _ _ -> ())
     ; viewed= ignore
     ; serial= 1
-    ; work= I.Work.empty }
+    ; work= I.Work.empty
+    ; passes= true
+    ; stale= []
+    ; touched= [] }
   in
   let root : (F.node, unit) I.t = I.root (Private.Cancel.root ()) in
   let a : (F.node, unit) I.t = I.child env root in

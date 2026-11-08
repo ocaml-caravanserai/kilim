@@ -11,15 +11,18 @@
       of {!start}, at most 3 times in one turn. In the other turns, the render
       is pending: it runs at the next frame, or after 100 ms. In a hidden page,
       it runs in a new task. After the view of a new model, the render calls
-      [subs] (the subscription pass): it stops the removed keys, gives the new
-      message functions to the keys that stay, and starts the new keys. A [send]
-      at a start is new work: the turn settles again. At its end, the render
-      runs the restores of the discrete events.
-    + The early call: if the turn ends with a render that is pending, and the
-      model changed since the last pass, the turn calls [subs] again. It stops
-      the removed keys and gives the new message functions to the keys that
-      stay. The new keys start at the render. The turn settles the work that the
-      end actions of the removed keys push.
+      [subs] of the root (the subscription pass): it stops the removed keys,
+      gives the new message functions to the keys that stay, and starts the new
+      keys. At the end of the render, the pass runs for each live instance below
+      the root whose view ran in the render: a new instance, or an instance with
+      a new model or new props. A [send] at a start is new work: the turn
+      settles again. At its end, the render runs the restores of the discrete
+      events.
+    + The early call: if the turn ends with a render that is pending, the turn
+      calls [subs] again for each instance whose model changed since its last
+      pass, with its stored props. It stops the removed keys and gives the new
+      message functions to the keys that stay. The new keys start at the render.
+      The turn settles the work that the end actions of the removed keys push.
 
     A turn never nests: an entry inside a turn only puts its messages in the
     queue. A push outside a turn asks the host for one turn in a microtask.
@@ -151,7 +154,11 @@ type tree =
         (** The entries of the child lists, from the root. A dead instance
             leaves the list of its parent: thus [child_links] is [instances]
             with no leak. *)
-  ; queued: int  (** The instances in the work queue of the render. *) }
+  ; queued: int  (** The instances in the work queue of the render. *)
+  ; stale: int
+        (** The entries of the list of the early call. A turn that ends normally
+            ends with the early call, which empties it: thus it is 0 after such
+            a turn. *) }
 
 val tree : 'node t -> tree
 

@@ -56,8 +56,11 @@ type 'node env = 'node Tree.env
     [Component.v] installs them (see {!Reconcile}): [detach env i] removes [i]
     from the work queue and from the child list of its parent, clears [parent]
     and [mount], and unmounts each child. [enqueue env i] puts [i] in the work
-    queue. The default does nothing: an app with no component has only the root.
-*)
+    queue. It also puts [i] in the list of the early call ([stale] of the env)
+    if [early_stale] is [false] (thus one entry for each pass), if the env has
+    subscription passes, and if [i] has subscriptions to compare. {!changed}
+    calls it before it sets [early_stale]. The default does nothing: an app with
+    no component has only the root. *)
 type ext =
   { detach: 'node 'msg. 'node env -> ('node, 'msg) t -> unit
   ; enqueue: 'node 'msg. 'node env -> ('node, 'msg) t -> unit }
@@ -83,8 +86,8 @@ val token : ('node, 'msg) t -> Cancel.t
 
 val changed : 'node env -> ('node, 'msg) t -> unit
 (** The model changed: sets [dirty] and [early_stale]. An instance below the
-    root goes into the work queue of [env] (see {!ext}). The runtime calls it
-    only for a live instance. *)
+    root goes into the work queue and into the list of the early call of [env]
+    (see {!ext}). The runtime calls it only for a live instance. *)
 
 val clean : 'node env -> ('node, 'msg) t -> unit
 (** Clears [dirty], and removes the instance from the work queue. *)

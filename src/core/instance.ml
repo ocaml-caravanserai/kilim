@@ -79,8 +79,8 @@ let rec token : 'node 'msg. ('node, 'msg) t -> Cancel.t =
 
 let changed (env : _ env) (i : _ t) =
   i.dirty <- true ;
-  i.early_stale <- true ;
-  if i.pos.depth > 0 then !ext.enqueue env i
+  if i.pos.depth > 0 then !ext.enqueue env i ;
+  i.early_stale <- true
 
 (* The remove of an instance that is not in the queue gives the same map. *)
 let clean (env : _ env) (i : _ t) =

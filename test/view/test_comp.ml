@@ -100,6 +100,15 @@ let newest_on () =
   | _ ->
       fail "a component node"
 
+(* A diff with no runtime has no subscription pass: its env records no instance,
+   thus it keeps no unmounted instance. *)
+let no_passes () =
+  let p = mount (rows [1; 2; 3]) in
+  patch p (rows [4; 2; 3]) ;
+  let env = p.tree.ctx.T.env in
+  equal int ~msg:"touched" 0 (List.length env.T.touched) ;
+  equal int ~msg:"stale" 0 (List.length env.T.stale)
+
 let tests =
   [ group "diff components"
       [ test "a keyed move of a component moves its DOM node" moved
@@ -107,4 +116,6 @@ let tests =
           middle
       ; test "a component node that becomes an element unmounts" to_element
       ; test "a new key of a component replaces its node" key_change
-      ; test "a patch keeps the newest on function" newest_on ] ]
+      ; test "a patch keeps the newest on function" newest_on
+      ; test "a diff with no runtime records no instance for the subscriptions"
+          no_passes ] ]
