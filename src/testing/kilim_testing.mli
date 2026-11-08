@@ -8,6 +8,7 @@ module Host = Host
 module By = By
 module Page = Page
 module History_mock = History_mock
+module Http_mock = Http_mock
 
 val mount :
   (module C : Kilim.COMPONENT)

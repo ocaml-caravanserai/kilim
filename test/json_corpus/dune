@@ -1,0 +1,6 @@
+; The JSON corpus of kilim.http: test/http (native, in the mutation gate) and
+; test/cross (native, js_of_ocaml and wasm_of_ocaml) use the same cases.
+
+(library
+ (name json_corpus)
+ (libraries kilim.http))

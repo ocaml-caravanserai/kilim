@@ -2,7 +2,8 @@
    js_of_ocaml, a chain of 2,000 synchronous steps overflowed the stack before
    the trampoline. Also keyed diffs of 10,000 rows on the fake DOM (design
    section 14), the hash of the keys, and the big loops of the turn
-   (Cross_turn). *)
+   (Cross_turn), and the JSON corpus of kilim.http with the range of Decode.int
+   (Json_corpus). *)
 
 open Kilim
 open Async.Syntax
@@ -236,4 +237,6 @@ let () =
   hashes () ;
   Cross_turn.run check ;
   Cross_tree.run check ;
+  Json_corpus.run check ;
+  Json_corpus.int_ranges check ;
   if !failures > 0 then exit 1

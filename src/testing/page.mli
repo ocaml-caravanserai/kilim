@@ -27,7 +27,8 @@ type none = |
 exception Query of string
 
 val start : ?host:Host.t -> Kilim.App.t -> none t
-(** Mounts the app in a new [div] element. [host] defaults to a new host. *)
+(** Mounts the app in a new [div] element. [host] defaults to a new host. Before
+    the first turn, the page starts an empty [Http_mock] for its host. *)
 
 val mount :
   (module C : Kilim.COMPONENT)
@@ -46,6 +47,13 @@ val outputs : 'out t -> 'out list
     {!start} has none. *)
 
 val host : 'out t -> Host.t
+
+(**/**)
+
+val http_mock : 'out t -> Http_mock_state.t
+(** The state of [Http_mock] (internal). *)
+
+(**/**)
 
 val doc : 'out t -> Fake_dom.t
 
@@ -160,6 +168,7 @@ val tree : 'out t -> Kilim.Private.Runtime.tree
 (** The counts of the instance tree. *)
 
 val stop : 'out t -> unit
+(** Stops the runtime, then the [Http_mock] of the page. *)
 
 val expect_no_tasks : 'out t -> unit
 (** @raise Failure if a timer is live or the token of the root has a child. *)

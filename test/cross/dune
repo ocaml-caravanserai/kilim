@@ -1,9 +1,10 @@
 ; The big tests in the three builds: native code, js_of_ocaml and
 ; wasm_of_ocaml (on node). The keyed diffs use the fake DOM of kilim.testing,
 ; and the loops of the turn use its virtual host. They are not in the
-; mutation suite, because each mutant would run them.
+; mutation suite, because each mutant would run them. Also the JSON corpus of
+; test/json_corpus and the range of Decode.int in each build.
 
 (test
  (name test_cross)
  (modes exe js wasm)
- (libraries kilim kilim.testing))
+ (libraries kilim kilim.testing kilim.http json_corpus))
