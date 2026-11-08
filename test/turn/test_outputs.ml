@@ -221,6 +221,76 @@ let nested () =
   no_errors p ;
   quiet p
 
+(* The page of one component gives its outputs with their type, the oldest
+   first. *)
+let mount () =
+  let h = H.create () and kept = ref None in
+  let r =
+    Kilim_testing.mount
+      (module Count)
+      ~host:h "c"
+      (fun page ->
+        is_true ~msg:"the host" (P.host page == h) ;
+        P.click page (By.test_id "c") ;
+        P.click page (By.test_id "c2") ;
+        let ns = List.map (fun (Count.Changed n) -> n) (P.outputs page) in
+        equal (list int) [1; 10; 20; 2] ns ;
+        equal string "2" (F.text (P.find page (By.test_id "c"))) ;
+        equal int ~msg:"the first render, then two views of the child alone" 4
+          (stats page).views ;
+        no_errors page ;
+        kept := Some page ;
+        List.length ns )
+  in
+  equal int ~msg:"the result of the function" 4 r ;
+  let page = Option.get !kept in
+  equal string ~msg:"the page stops after the function" "<div></div>"
+    (P.html page) ;
+  P.expect_no_tasks page
+
+(* A component with a timer. *)
+module Timer = struct
+  include Component.Defaults
+
+  type props = unit
+
+  type model = unit
+
+  type msg = unit
+
+  type out = |
+
+  let id : (props, model, msg, out) C.id = C.id ()
+
+  let init () = ((), Cmd.none)
+
+  let update _ () () () = ((), Cmd.none)
+
+  let view () () = txt "t"
+
+  let subs () () = Sub.every (Span.s 1) ()
+end
+
+(* The page stops also when the function raises, and the exception goes on. *)
+let mount_raises () =
+  let kept = ref None in
+  ( match
+      Kilim_testing.mount
+        (module Timer)
+        ()
+        (fun page ->
+          kept := Some page ;
+          equal int ~msg:"a timer" 1 (H.live_timers (P.host page)) ;
+          raise Boom )
+    with
+  | () ->
+      fail "no exception"
+  | exception Boom ->
+      () ) ;
+  let page = Option.get !kept in
+  equal int ~msg:"the stop removes the timer" 0 (H.live_timers (P.host page)) ;
+  equal string "<div></div>" (P.html page)
+
 let tests =
   [ group "outputs"
       [ test
@@ -230,4 +300,7 @@ let tests =
       ; test "the newest on function maps an output" newest
       ; test "an output to a dead parent is dropped" dead_parent
       ; test "an error in on goes to the root catch" on_raises
-      ; test "an output of a nested child reaches the root" nested ] ]
+      ; test "an output of a nested child reaches the root" nested
+      ; test "Kilim_testing.mount gives the outputs with their type" mount
+      ; test "Kilim_testing.mount stops the page when the function raises"
+          mount_raises ] ]

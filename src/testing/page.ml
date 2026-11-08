@@ -332,3 +332,28 @@ let expect_no_tasks t =
   if live > 0 then failwith (string_of_int live ^ " live timers") ;
   let kids = (inspect t).token_children in
   if kids > 0 then failwith (string_of_int kids ^ " children of the root token")
+
+(* The App of the page has the outputs of the component as its messages, and its
+   model is [()]: thus an output does not render the App. The page stops after
+   [f], also when [f] raises. *)
+let mount (module C : Kilim.COMPONENT) ?host props f =
+  let outputs = ref [] in
+  let app =
+    Kilim.App.make
+      ~init:(fun () -> ((), Kilim.Cmd.none))
+      ~update:(fun () o ->
+        outputs := o :: !outputs ;
+        ((), Kilim.Cmd.none) )
+      ~view:(fun () -> Kilim.Component.v (module C) ~on:(fun o -> o) props)
+      ()
+  in
+  let t = make ?host app outputs in
+  (* The rule of the linked modules covers kilim and kilim.browser only
+     (test/link), thus kilim.testing can use Printexc. *)
+  match f t with
+  | r ->
+      stop t ; r
+  | exception e ->
+      let bt = Printexc.get_raw_backtrace () in
+      stop t ;
+      Printexc.raise_with_backtrace e bt

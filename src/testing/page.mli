@@ -29,6 +29,18 @@ exception Query of string
 val start : ?host:Host.t -> Kilim.App.t -> none t
 (** Mounts the app in a new [div] element. [host] defaults to a new host. *)
 
+val mount :
+  (module C : Kilim.COMPONENT)
+  -> ?host:Host.t -> C.props -> (C.out t -> 'a) -> 'a
+(** [mount (module C) ~host props f] mounts one instance of [C] with [props] in
+    a new [div] element, as the only child of an App, and gives the page to [f].
+    The result is the result of [f]. The page gives the outputs of the instance
+    with their type: see {!outputs}. An error of the instance goes to the root
+    catch: the page then shows an empty text. After [f] returns or raises,
+    [mount] stops the page: thus all tasks and subscriptions of the instance
+    stop, and the next test starts with no timer of this page.
+    {!Kilim_testing.mount} is this function. *)
+
 val outputs : 'out t -> 'out list
 (** The outputs of the component of the page, the oldest first. A page of
     {!start} has none. *)

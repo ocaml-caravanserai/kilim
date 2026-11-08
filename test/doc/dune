@@ -1,7 +1,15 @@
-; The code of the examples in the doc comments of src/core/kilim.mli. Each
-; example is a tagged block, and test/readme/check.mjs makes sure that it is
-; the code of a file here. Thus the examples compile.
+; The code of the examples in the doc comments of src/core/kilim.mli and
+; src/testing/kilim_testing.mli. Each example is a tagged block, and
+; test/readme/check.mjs makes sure that it is the code of a file here. Thus
+; the examples compile, and test_doc runs the example of Kilim_testing.mount.
 
 (library
  (name doc_examples)
+ (modules counter light parent)
+ (wrapped false)
  (libraries kilim))
+
+(test
+ (name test_doc)
+ (modules test_doc)
+ (libraries doc_examples kilim.testing))

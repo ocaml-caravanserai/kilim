@@ -1,6 +1,6 @@
 ; The check of the code in the documentation (check.mjs): each tagged block of
-; README.md, docs/loader.md and the doc comments of src/core/kilim.mli is the
-; code of a file of the repository.
+; README.md, docs/loader.md and the doc comments of src/core/kilim.mli and
+; src/testing/kilim_testing.mli is the code of a file of the repository.
 
 (rule
  (alias runtest)
@@ -9,6 +9,7 @@
   ../../README.md
   ../../docs/loader.md
   ../../src/core/kilim.mli
+  ../../src/testing/kilim_testing.mli
   (source_tree ../../examples)
   (source_tree ../doc))
  (action
@@ -21,4 +22,6 @@
    docs/loader.md
    1
    src/core/kilim.mli
-   5)))
+   5
+   src/testing/kilim_testing.mli
+   1)))
