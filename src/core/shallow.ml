@@ -1,5 +1,5 @@
 (* The props compare of design section 09. It reads the tags of the values with
-   Obj, as the spike spikes/dom/eq does. *)
+   Obj, as spike 3 of Phase 0 did (docs/phase0.md). *)
 
 type same = {same: 'a. 'a -> 'a -> bool}
 

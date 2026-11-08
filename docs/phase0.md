@@ -3,7 +3,11 @@
 Phase 0 builds three spikes before the real work (section 16 of
 [design.html](design.html)). Each spike runs in the builds that it targets:
 native code, js_of_ocaml 6.4.1 and wasm_of_ocaml 6.4.1, with OCaml 5.5.1 on
-node 24. `make test` runs all of them.
+node 24.
+
+The repository does not keep the spike code. The folder `spikes/` is in the
+git history: the last commit that has it is c31b1cc. For example, `git show
+c31b1cc:spikes/dom/eq/eq.ml` shows the props compare of spike 3.
 
 ## Spike 1: Async and Cancel
 
