@@ -5,7 +5,10 @@
 //   node run.mjs [--browser NAME] [--no-wasm] prog.bc.js prog.bc.wasm.js ...
 //
 // --browser NAME: chrome (the default), firefox or webkit. --no-wasm: a
-// browser with no WebAssembly (browser.mjs).
+// browser with no WebAssembly (browser.mjs). A page of a program whose name
+// starts with "test_csp" has a CSP with no 'unsafe-eval' (the header of
+// cspPolicy). The head of each other page has an import map: the bare
+// specifier "kilim-bare" is /mod/web_mod.mjs.
 //
 // For each program, the runner opens a new page, with the query
 // ?browser=NAME: thus a page knows its browser. The server sends the head of the
@@ -56,6 +59,7 @@ const backend = await open(name);
 // The launcher of wasm_of_ocaml fetches its assets, thus no file: URL.
 const types = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.map': 'application/json' };
 const held = new Map();
+const cspPolicy = "script-src 'self' 'wasm-unsafe-eval'";
 const body =
   '<body><div id="wrap"><div id="app"><p>placeholder</p></div></div>' +
   '<div id="other"></div></body>';
@@ -63,9 +67,14 @@ const server = http.createServer((req, res) => {
   const path = decodeURIComponent(req.url.split('?')[0]);
   if (path.startsWith('/page/')) {
     const prog = path.slice('/page/'.length);
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' };
+    const csp = prog.startsWith('test_csp');
+    if (csp) headers['content-security-policy'] = cspPolicy;
+    const importMap = csp ? '' :
+      '<script type="importmap">{"imports":{"kilim-bare":"/mod/web_mod.mjs"}}</script>';
+    res.writeHead(200, headers);
     res.write(`<!doctype html><html><head><meta charset="utf-8"><title>${prog}</title>` +
-      `<!--${' '.repeat(1024)}--><script src="/${prog}"></script></head>`);
+      `<!--${' '.repeat(1024)}-->${importMap}<script src="/${prog}"></script></head>`);
     held.set(prog, res);
     return;
   }

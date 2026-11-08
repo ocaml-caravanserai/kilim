@@ -135,6 +135,11 @@ let sleep ms =
        [|Jv.callback ~arity:1 (fun _ -> set ()); Jv.of_int ms|] ) ;
   fut
 
+(* Wait until [ok ()], at most 2 s. *)
+let rec until ?(n = 200) ok =
+  if ok () || n = 0 then Fut.return ()
+  else Fut.bind (sleep 10) (fun () -> until ~n:(n - 1) ok)
+
 (* The document is not "loading". *)
 let loaded () =
   let fut, set = Fut.create () in
