@@ -1,5 +1,6 @@
 (* The async tasks of kilim on the host of kilim.browser (design section 12),
-   and the order of its queues. *)
+   and the order of its queues. Also Component.shallow_equal with the identity
+   that kilim.browser installs (design section 09). *)
 
 open Brr
 open Kilim
@@ -144,7 +145,83 @@ let queues k =
         (List.rev !log = ["t1"; "m1"; "t2"; "t3"]) ;
       timers () )
 
+(* Component.shallow_equal with the identity that kilim.browser installs:
+   Object.is under js_of_ocaml, ( == ) under wasm_of_ocaml. [f] makes a new
+   float box, and [s] a new string. *)
+type fr = {x: float; y: float} [@@warning "-69"]
+
+let shallow () =
+  let eq = Component.shallow_equal in
+  let name s = "H shallow_equal: " ^ s in
+  let f x = Int64.float_of_bits (Int64.bits_of_float (Sys.opaque_identity x)) in
+  let s n = "row " ^ string_of_int (Sys.opaque_identity n) in
+  let jstr n = Jstr.v (s n) in
+  check
+    (name "a string built two times is equal")
+    (eq (s 1) (s 1) && eq (1, s 1) (1, s 1) && not (eq (1, s 1) (1, s 2))) ;
+  (* Under wasm_of_ocaml, ( == ) gives true for two equal JS strings. *)
+  check
+    (name "a JS string built two times is equal")
+    (eq (1, jstr 1) (1, jstr 1) && not (eq (1, jstr 1) (1, jstr 2))) ;
+  check
+    (name "the JS numbers 0 and -0 are not equal")
+    ( (not (eq (Jv.of_float 0.) (Jv.of_float (-0.))))
+    && eq (Jv.of_float 2.) (Jv.of_float 2.) ) ;
+  check
+    (name "0. and -0. are not equal, also in a field, a float record and array")
+    ( (not (eq (f 0.) (f (-0.))))
+    && (not (eq (1, f 0.) (1, f (-0.))))
+    && (not (eq {x= f 0.; y= 1.} {x= f (-0.); y= 1.}))
+    && not (eq [|f 0.|] [|f (-0.)|]) ) ;
+  check
+    (name "NaN and NaN are equal, also in a field and a float record")
+    ( eq (f nan) (f nan)
+    && eq (1, f nan) (1, f nan)
+    && eq {x= f nan; y= 1.} {x= f nan; y= 1.} ) ;
+  check
+    (name "a float record built two times is equal")
+    ( eq {x= f 1.; y= f 2.} {x= f 1.; y= f 2.}
+    && not (eq {x= f 1.; y= 2.} {x= f 3.; y= 2.}) ) ;
+  let o = Jv.obj [||] in
+  check
+    (name "two JS objects are not equal")
+    ( (not (eq (Jv.obj [||]) (Jv.obj [||])))
+    && not (eq (1, Jv.obj [||]) (1, Jv.obj [||])) ) ;
+  check (name "the same JS object is equal") (eq o o && eq (1, o) (1, o)) ;
+  (* Under js_of_ocaml, the tag of these JS arrays is 253 (a float) and 254 (a
+     float array). *)
+  let arr l = Jv.of_jv_array (Array.of_list l) in
+  let a253 n = arr [Jv.of_int 253; Jv.of_int n] in
+  let a254 v = arr [Jv.of_int 254; Jv.of_string v] in
+  check
+    (name "the JS arrays [253, 1] and [253, 2] are not equal, also in a field")
+    ((not (eq (a253 1) (a253 2))) && not (eq (1, a253 1) (1, a253 2))) ;
+  check
+    (name "the JS arrays [254, \"a\"] and [254, \"b\"] are not equal")
+    ((not (eq (a254 "a") (a254 "b"))) && not (eq (1, a254 "a") (1, a254 "b"))) ;
+  let mk n x = x + n in
+  let g = mk (Sys.opaque_identity 1) in
+  check
+    (name "a closure field compares by identity")
+    ( (not (eq (1, mk (Sys.opaque_identity 1)) (1, mk (Sys.opaque_identity 1))))
+    && eq (1, g) (1, g)
+    && not (eq (mk (Sys.opaque_identity 1)) (mk (Sys.opaque_identity 1))) ) ;
+  (* The property of test/core, with 2,000 lists of numbers. *)
+  let rng = Random.State.make [|42|] in
+  let errors = ref [] in
+  for _ = 1 to 2000 do
+    let draws =
+      List.init
+        (1 + Random.State.int rng 40)
+        (fun _ -> Random.State.int rng 1001)
+    in
+    errors := Shallow_law.check draws @ !errors
+  done ;
+  List.iter print_endline !errors ;
+  check (name "true means the same view (2,000 cases)") (!errors = [])
+
 let () =
+  shallow () ;
   queues
   @@ fun () ->
   (* A real timer. *)

@@ -72,16 +72,19 @@ let hidden () =
 
 (* The model compare. Under js_of_ocaml, [==] is [===], which does not keep 0.
    and -0. apart: thus [Object.is]. Under wasm_of_ocaml, a float is a box and
-   [==] compares the boxes. *)
-type same = {same: 'a. 'a -> 'a -> bool}
-
+   [==] compares the boxes. Under js_of_ocaml, [Object.is] is also all of the
+   field compare of Component.shallow_equal: its compare by tag finds the JS
+   arrays [253, 1] and [253, 2] equal, as two NaN floats. The other builds keep
+   the default field compare. *)
 let object_is a b =
   Jv.to_bool (Jv.call (Lazy.force Js.object_) "is" [|Jv.repr a; Jv.repr b|])
 
 let same =
   match Sys.backend_type with
   | Other "js_of_ocaml" ->
-      {same= object_is}
+      let s = {Kilim.Private.Shallow.same= object_is} in
+      Kilim.Private.Shallow.set_same s ;
+      s
   | Native | Bytecode | Other _ ->
       {same= ( == )}
 
