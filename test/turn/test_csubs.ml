@@ -320,7 +320,7 @@ module Many = struct
 
   let id : (props, model, msg, out) C.id = C.id ()
 
-  let page : P.t option ref = ref None
+  let page : P.none P.t option ref = ref None
 
   let seen = ref []
 

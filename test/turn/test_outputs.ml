@@ -100,6 +100,7 @@ let back () =
   equal int ~msg:"the model of the root stays: the view of the child only"
     (v + 1) (stats p).views ;
   equal string "1" (F.text (P.find p (By.test_id "c"))) ;
+  equal int ~msg:"a page of an app has no outputs" 0 (List.length (P.outputs p)) ;
   settled p ;
   no_errors p ;
   quiet p

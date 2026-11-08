@@ -1107,7 +1107,7 @@ let error_equal () =
 
 (* A child that stops the page in its update. *)
 module Stopper = struct
-  type props = P.t option ref
+  type props = P.none P.t option ref
 
   type model = int
 

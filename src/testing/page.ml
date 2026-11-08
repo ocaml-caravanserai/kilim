@@ -3,7 +3,7 @@ module Diff = Kilim.Private.Diff
 module Event = Kilim.Private.Event
 module Runtime = Kilim.Private.Runtime
 
-type t =
+type 'out t =
   { host: Host.t
   ; doc: Fake_dom.t
   ; root: Fake_dom.node
@@ -12,7 +12,10 @@ type t =
   ; mutable undo: (unit -> unit) list
         (** The undo of a prevented click, after the microtasks. *)
   ; tasks: (unit -> unit) Queue.t  (** The tasks of [Event.dispatch]. *)
-  ; mutable depth: int  (** The nested calls. *) }
+  ; mutable depth: int  (** The nested calls. *)
+  ; outputs: 'out list ref  (** The outputs, the newest first. *) }
+
+type none = |
 
 exception Query of string
 
@@ -58,7 +61,8 @@ let toggles n =
   | Some _ | None ->
       false
 
-let start ?host app =
+(* The page of [app]. The update of [app] puts the outputs in [outputs]. *)
+let make ?host app outputs =
   let host = match host with Some h -> h | None -> Host.create () in
   let doc = Fake_dom.create () in
   let root = Fake_dom.element "div" in
@@ -75,7 +79,11 @@ let start ?host app =
   in
   let rt = Runtime.start (Host.env host) ops ~parent:root app in
   Host.microtasks host ;
-  {host; doc; root; rt; env; undo= []; tasks; depth= 0}
+  {host; doc; root; rt; env; undo= []; tasks; depth= 0; outputs}
+
+let start ?host app : none t = make ?host app (ref [])
+
+let outputs t = List.rev !(t.outputs)
 
 let host t = t.host
 
