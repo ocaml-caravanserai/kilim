@@ -10,7 +10,7 @@
 ; name of its browser.
 
 (executables
- (names smoke test_dom test_web test_fut test_csp test_router)
+ (names smoke test_dom test_web test_fut test_csp test_router test_http)
  (modes js wasm)
  (libraries
   kilim
@@ -18,11 +18,14 @@
   kilim.web
   kilim.router
   kilim.router.browser
+  kilim.http
+  kilim.http.browser
   brr
   url_corpus))
 
 ; The files of each rule: the runner, the pages and the ES module of the
-; tests W5, W6 and WC.
+; tests W5, W6 and WC. test_http (HT0 to HT9) uses the /http endpoints of
+; run.mjs.
 
 (alias
  (name pages)
@@ -49,7 +52,10 @@
   (glob_files test_csp.bc.wasm.assets/*.wasm)
   test_router.bc.js
   test_router.bc.wasm.js
-  (glob_files test_router.bc.wasm.assets/*.wasm)))
+  (glob_files test_router.bc.wasm.assets/*.wasm)
+  test_http.bc.js
+  test_http.bc.wasm.js
+  (glob_files test_http.bc.wasm.assets/*.wasm)))
 
 ; The dev profile. Chrome in the alias runtest, Firefox and WebKit in the alias
 ; browsers. --no-wasm: the js_of_ocaml pages in a browser with no WebAssembly:
@@ -76,6 +82,8 @@
    test_web.bc.wasm.js
    test_fut.bc.js
    test_fut.bc.wasm.js
+   test_http.bc.js
+   test_http.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
@@ -96,6 +104,7 @@
    test_dom.bc.js
    test_web.bc.js
    test_fut.bc.js
+   test_http.bc.js
    test_csp.bc.js
    test_router.bc.js)))
 
@@ -121,6 +130,8 @@
    test_web.bc.wasm.js
    test_fut.bc.js
    test_fut.bc.wasm.js
+   test_http.bc.js
+   test_http.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
@@ -145,6 +156,7 @@
    test_dom.bc.js
    test_web.bc.js
    test_fut.bc.js
+   test_http.bc.js
    test_csp.bc.js
    test_router.bc.js)))
 
@@ -170,6 +182,8 @@
    test_web.bc.wasm.js
    test_fut.bc.js
    test_fut.bc.wasm.js
+   test_http.bc.js
+   test_http.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
@@ -178,7 +192,8 @@
 ; The release profile (make test-release and make browsers): the bindings
 ; depend on the dead code elimination and on the JS expressions of the release
 ; build. Chrome runs W1 to W6 and WC, Firefox and WebKit run W4 to W6 and WC.
-; The three browsers run the router page (R1 to R8 and W7).
+; The three browsers run the router page (R1 to R8 and W7) and the http page
+; (HT0 to HT9).
 
 (rule
  (alias release)
@@ -196,6 +211,8 @@
    test_web.bc.wasm.js
    test_fut.bc.js
    test_fut.bc.wasm.js
+   test_http.bc.js
+   test_http.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
@@ -219,6 +236,8 @@
    firefox
    test_fut.bc.js
    test_fut.bc.wasm.js
+   test_http.bc.js
+   test_http.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
@@ -242,6 +261,8 @@
    webkit
    test_fut.bc.js
    test_fut.bc.wasm.js
+   test_http.bc.js
+   test_http.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js

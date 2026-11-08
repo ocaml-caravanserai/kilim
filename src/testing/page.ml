@@ -15,6 +15,8 @@ type 'out t =
   ; mutable depth: int  (** The nested calls. *)
   ; mutable prevented: bool
         (** The default of the last event of the page is prevented. *)
+  ; mutable stopped: bool
+  ; http: Http_mock_state.t  (** The mock of kilim.http. *)
   ; outputs: 'out list ref  (** The outputs, the newest first. *) }
 
 type none = |
@@ -80,8 +82,9 @@ let make ?host app outputs =
     ; post_task= (fun f -> Queue.push f tasks) }
   in
   (* The mocks of the libraries, before the first turn: an init task reads the
-     driver. *)
+     driver, and can send a request. *)
   History_state.install host ;
+  let http = Http_mock_state.start host in
   let rt = Runtime.start (Host.env host) ops ~parent:root app in
   Host.microtasks host ;
   { host
@@ -93,6 +96,8 @@ let make ?host app outputs =
   ; tasks
   ; depth= 0
   ; prevented= false
+  ; stopped= false
+  ; http
   ; outputs }
 
 let start ?host app : none t = make ?host app (ref [])
@@ -100,6 +105,8 @@ let start ?host app : none t = make ?host app (ref [])
 let outputs t = List.rev !(t.outputs)
 
 let host t = t.host
+
+let http_mock t = t.http
 
 let doc t = t.doc
 
@@ -361,7 +368,14 @@ let inspect t = Runtime.inspect t.rt
 
 let tree t = Runtime.tree t.rt
 
-let stop t = top t (fun () -> Runtime.stop t.rt)
+(* The stop hook: the mocks of the host stop after the runtime, thus a cancel of
+   the stop counts as an abort. A second stop does not stop them again. *)
+let stop t =
+  top t (fun () -> Runtime.stop t.rt) ;
+  if not t.stopped then begin
+    t.stopped <- true ;
+    Http_mock_state.stop t.http
+  end
 
 let expect_no_tasks t =
   let live = Host.live_timers t.host in

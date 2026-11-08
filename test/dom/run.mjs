@@ -61,11 +61,61 @@ const backend = await open(name);
 const types = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.map': 'application/json' };
 const held = new Map();
 const cspPolicy = "script-src 'self' 'wasm-unsafe-eval'";
+// The head of a page of a program whose name starts with "test_http" wraps
+// fetch before the program starts (Brr reads fetch at its start): the
+// wrapper records the signal of each call for test_http.
+const fetchSpy = `<script>(() => {
+  const fetch = globalThis.fetch, signals = [];
+  globalThis.fetch = function (url, init) {
+    signals.push(init && init.signal ? init.signal : null);
+    return fetch.apply(this, arguments);
+  };
+  globalThis.kilimFetches = () => signals.length;
+  globalThis.kilimSignals = (from) => signals.slice(from)
+    .map((s) => (s === null ? 'N' : s.aborted ? 'A' : 'P')).join('');
+})()</script>`;
 const body =
   '<body><div id="wrap"><div id="app"><p>placeholder</p></div></div>' +
   '<div id="other"></div></body>';
+// The endpoints of test_http (kilim.http). /http/echo gives the method, the
+// headers and the body of the request as JSON. /http/status/N gives the
+// status N. /http/never gives no answer: the abort of the client or the end of
+// the runner closes the connection. /http/body-slow sends the headers and a
+// part of the body at once, and the rest after 300 ms. /http/body-broken
+// sends the headers and a part of the body, then closes the connection.
+// /http/bad-json gives a body that is not JSON.
+const httpEndpoint = (req, res, path) => {
+  if (path === '/http/echo') {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ method: req.method, headers: req.headers, body }));
+    });
+  } else if (path.startsWith('/http/status/')) {
+    const n = Number(path.slice('/http/status/'.length));
+    res.writeHead(n, { 'content-type': 'text/plain' });
+    res.end(`status ${n}`);
+  } else if (path === '/http/body-slow') {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.write('slow ');
+    setTimeout(() => res.end('body'), 300);
+  } else if (path === '/http/body-broken') {
+    res.writeHead(200, { 'content-type': 'text/plain', 'content-length': '100' });
+    res.write('part');
+    setTimeout(() => res.destroy(), 100);
+  } else if (path === '/http/bad-json') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{"a":');
+  } else if (path !== '/http/never') {
+    res.writeHead(404);
+    res.end();
+  }
+};
 const server = http.createServer((req, res) => {
   const path = decodeURIComponent(req.url.split('?')[0]);
+  if (path.startsWith('/http/')) return httpEndpoint(req, res, path);
   if (path.startsWith('/page/')) {
     // /page/<prog>/<deep path> is the page of <prog> too: a reload of a path
     // of a router works.
@@ -77,7 +127,8 @@ const server = http.createServer((req, res) => {
       '<script type="importmap">{"imports":{"kilim-bare":"/mod/web_mod.mjs"}}</script>';
     res.writeHead(200, headers);
     res.write(`<!doctype html><html><head><meta charset="utf-8"><title>${prog}</title>` +
-      `<!--${' '.repeat(1024)}-->${importMap}<script src="/${prog}"></script></head>`);
+      `<!--${' '.repeat(1024)}-->${importMap}` +
+      `${prog.startsWith('test_http') ? fetchSpy : ''}<script src="/${prog}"></script></head>`);
     held.set(prog, res);
     return;
   }

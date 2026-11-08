@@ -1,0 +1,9 @@
+; The tests of kilim.http and Http_mock (design sections 13 and 14), native
+; only: windtrap runs here, and `make mutate` tests the mutants of src/http
+; and src/testing with this suite. test/cross runs the JSON corpus in the
+; three builds, and test/dom/test_http.ml runs the fetch transport in the
+; browsers.
+
+(test
+ (name test_http)
+ (libraries kilim kilim.http kilim.testing json_corpus windtrap))

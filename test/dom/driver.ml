@@ -56,7 +56,13 @@ type facts =
         (** A trusted click with the Meta key down has [metaKey] true. *)
   ; middle_click: bool
         (** A trusted click of the middle button sends a [click] event to
-            window, after [auxclick]. *) }
+            window, after [auxclick]. *)
+  ; network_error: string
+        (** The name and the message of the rejection of a fetch to a port that
+            the browser blocks (http://127.0.0.1:1/). *)
+  ; header_byte: bool
+        (** A request header value with U+00E9 goes as one byte 0xE9 (in WebKit,
+            as the two bytes of UTF-8). *) }
 
 let facts =
   match browser with
@@ -67,7 +73,9 @@ let facts =
       ; null_traps= false
       ; removal_blurs= 1
       ; meta_key= true
-      ; middle_click= false }
+      ; middle_click= false
+      ; network_error= "TypeError: Failed to fetch"
+      ; header_byte= true }
   | Firefox ->
       { ime= false
       ; insert_composes= true
@@ -75,7 +83,10 @@ let facts =
       ; null_traps= false
       ; removal_blurs= 0
       ; meta_key= true
-      ; middle_click= false }
+      ; middle_click= false
+      ; network_error=
+          "TypeError: NetworkError when attempting to fetch resource."
+      ; header_byte= true }
   | Webkit ->
       { ime= false
       ; insert_composes= false
@@ -83,7 +94,9 @@ let facts =
       ; null_traps= true
       ; removal_blurs= 0
       ; meta_key= true
-      ; middle_click= false }
+      ; middle_click= false
+      ; network_error= "TypeError: Load failed"
+      ; header_byte= false }
 
 (* A check that does not run in this browser. run.mjs counts these lines. *)
 let skip name reason = log ("SKIP " ^ name ^ ": " ^ reason)
