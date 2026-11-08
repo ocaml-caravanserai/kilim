@@ -23,6 +23,7 @@ module Private = struct
   module Instance = Instance
   module Event = Event
   module Runtime = Runtime
+  module Shallow = Shallow
 end
 
 module Cancel = Cancel
@@ -90,4 +91,8 @@ module App = struct
   type t = App.t
 
   let make = App.make
+end
+
+module Component = struct
+  let shallow_equal = Shallow.equal
 end

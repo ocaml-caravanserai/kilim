@@ -1,0 +1,6 @@
+; The property of Component.shallow_equal (design section 14), for the native
+; suite of test/core and for test/browser (js_of_ocaml and wasm_of_ocaml).
+
+(library
+ (name shallow_law)
+ (libraries kilim))

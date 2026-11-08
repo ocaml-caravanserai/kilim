@@ -1,8 +1,8 @@
 (** kilim: a browser application library for OCaml (docs/design.html).
 
     This version has the async tasks and the cancel tokens of section 12, the
-    view, the commands, the subscriptions and the app of section 08, and the
-    diff of section 11. *)
+    view, the commands, the subscriptions and the app of section 08, the diff of
+    section 11, and the props compare of the components of section 09. *)
 
 module Span = Span
 
@@ -44,6 +44,7 @@ module Private : sig
   module Instance = Instance
   module Event = Event
   module Runtime = Runtime
+  module Shallow = Shallow
 end
 
 (** Cancel tokens. *)
@@ -778,4 +779,40 @@ module App : sig
       an empty text). The messages of the fallback do nothing. The error goes to
       the error handler. An error in [fallback] goes to the error handler, and
       the root then shows an empty text. *)
+end
+
+(** Components (design section 09). This version has only the props compare. *)
+module Component : sig
+  val shallow_equal : 'a -> 'a -> bool
+  (** The default props compare of a component. It compares two records one
+      field at a time. Its contract: if it gives [true], the two values give the
+      same view. A [false] result for equal values costs only one more render.
+
+      [shallow_equal a b] is [true] if the field compare finds [a] and [b]
+      equal. If not, and [a] and [b] are two records, two tuples, two values of
+      a variant with the same constructor, or two arrays, it compares their
+      fields with the field compare. A closure, a lazy value that is not forced,
+      an object and a custom block (for example an [int64]) have no scan. In
+      native code, a forced lazy value can become its value, and then it
+      compares as its value.
+
+      The field compare depends on the build:
+      - Native code and wasm_of_ocaml: [x == y], or two strings with the same
+        characters, or two floats with the same bits, also in a record or an
+        array of floats.
+      - js_of_ocaml with kilim.browser: [Object.is].
+
+      Thus [0.] and [-0.] are not equal in these builds, also in a field. A
+      js_of_ocaml program without kilim.browser (for example a test with
+      kilim.testing) keeps the default compare: [==] and the compare by tag.
+      There [==] is [===], thus [0.] and [-0.] can compare equal. Also a JS
+      array that starts with an unsigned integer can take the compare by tag:
+      for example the JS arrays [[253, 1]] and [[253, 2]] compare equal, as two
+      NaN floats. Two closures are equal only if they are the same closure. Some
+      results differ by build, but only in the safe direction: for example two
+      equal [int32] values are equal under js_of_ocaml only, and two NaN values
+      with different bits are equal under js_of_ocaml only.
+
+      The props must be immutable: a mutable field that changes in place
+      compares as equal. *)
 end
