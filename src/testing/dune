@@ -1,12 +1,13 @@
 ; The test library (design section 14): a strict fake DOM for the diff tests,
 ; a host with a virtual clock, and the mocks of the libraries. It uses only the
-; standard library, kilim and the pure libraries (kilim.router, kilim.http),
-; thus it builds also for js_of_ocaml and wasm_of_ocaml (test/cross).
+; standard library, kilim and the pure libraries (kilim.router, kilim.http,
+; kilim.websocket), thus it builds also for js_of_ocaml and wasm_of_ocaml
+; (test/cross).
 
 (library
  (name kilim_testing)
  (public_name kilim.testing)
- (libraries kilim kilim.router kilim.http)
+ (libraries kilim kilim.router kilim.http kilim.websocket)
  (instrumentation
   (backend ppx_windtrap.coverage))
  (instrumentation

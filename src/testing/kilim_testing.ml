@@ -4,5 +4,6 @@ module By = By
 module Page = Page
 module History_mock = History_mock
 module Http_mock = Http_mock
+module Websocket_mock = Websocket_mock
 
 let mount = Page.mount
