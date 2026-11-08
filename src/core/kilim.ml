@@ -17,14 +17,19 @@ module Private = struct
   module Names = Names
   module View = View
   module Dom = Dom
+  module Tree = Tree
+  module Instance = Instance
   module Diff = Diff
+  module Reconcile = Reconcile
   module Cmd = Cmd
   module Sub = Sub
   module App = App
-  module Instance = Instance
   module Event = Event
   module Runtime = Runtime
   module Shallow = Shallow
+  module Component = Component
+
+  module type COMPONENT = Component.S
 end
 
 module Cancel = Cancel

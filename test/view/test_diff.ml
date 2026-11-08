@@ -96,8 +96,9 @@ let text () =
   equal ops [("set_text", 1)] (counts p) ;
   equal string "<div><p>a</p></div>" (html p) ;
   is_true
-    ( Diff.children (List.hd (Option.get (Diff.children (Diff.root p.tree))))
-    = None )
+    ( match List.hd (Option.get (Diff.children (Diff.root p.tree))) with
+    | Diff.Child c ->
+        Diff.children c = None )
 
 let attributes () =
   let p = mount (El.div ~at:[At.id "a"; At.title "t"] []) in

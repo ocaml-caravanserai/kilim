@@ -1,5 +1,5 @@
 (** The virtual DOM tree (design section 08). The values are immutable. Later
-    versions add nodes for components, boundaries and providers. *)
+    versions add nodes for boundaries and providers. *)
 
 (** An attribute or a controlled property. *)
 type at =
@@ -19,7 +19,14 @@ type 'msg handler = 'msg Dom.event =
   ; stop: bool
   ; decode: 'msg decode }
 
-type 'msg t = Text of string | Element of 'msg element
+(** The identity of a component: a witness of its four types (design section
+    09). [last] is the spec of the last call of [Component.v]: a cache with one
+    entry. *)
+type ('p, 'm, 'msg, 'o) id =
+  { tid: ('p * 'm * 'msg * 'o) Type.Id.t
+  ; mutable last: ('p, 'm, 'msg, 'o) spec option }
+
+and 'msg t = Text of string | Element of 'msg element | Comp of 'msg comp
 
 and 'msg element =
   { name: string
@@ -36,6 +43,31 @@ and 'msg children =
   | Plain of 'msg t list
   | Keyed of (Key.t * 'msg t) list
   | Inner of Unsafe_html.t
+
+(** The functions of an instance: of a component, or of the App. Each function
+    gets the props first. The App has the props [()]. *)
+and ('p, 'm, 'msg, 'o) spec =
+  { id: ('p, 'm, 'msg, 'o) id
+  ; init: 'p -> 'm * 'msg Cmd.t
+  ; update: ('msg, 'o) Cmd.ctx -> 'p -> 'm -> 'msg -> 'm * 'msg Cmd.t
+  ; view: 'p -> 'm -> 'msg t
+  ; subs: ('p -> 'm -> 'msg Sub.t) option  (** [None]: no subscription pass. *)
+  ; equal_props: 'p -> 'p -> bool }
+
+(** A component node: the spec, the [?key] of [Component.v], the function that
+    maps an output to a message of the parent, and the props. The node has no
+    DOM node of its own: its DOM node is the DOM node of the view of its
+    instance. *)
+and 'msg comp =
+  | C :
+      { spec: ('p, 'm, 'c, 'o) spec
+      ; key: string option
+      ; on: 'o -> 'msg
+      ; props: 'p }
+      -> 'msg comp
+
+val id : unit -> ('p, 'm, 'msg, 'o) id
+(** A new identity, with an empty cache. *)
 
 val element : string -> at list -> 'msg handler list -> 'msg children -> 'msg t
 (** [element name at ev children] makes an element. It does not check [name]. It

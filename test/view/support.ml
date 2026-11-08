@@ -34,10 +34,12 @@ let node p = Diff.dom (Diff.root p.tree)
 
 let kids p = F.children (node p)
 
+let child_dom (Diff.Child c) = Diff.dom c
+
 let retained_kids p =
   match Diff.children (Diff.root p.tree) with
   | Some l ->
-      List.map Diff.dom l
+      List.map child_dom l
   | None ->
       []
 
@@ -48,7 +50,9 @@ let same_nodes a b = List.length a = List.length b && List.for_all2 ( == ) a b
 (* Each retained node is a DOM child of its retained parent, and each DOM child
    of a retained element is retained. With [~order], the order is also the
    same. *)
-let rec check_node ~order parent r =
+let rec check_node :
+    'msg. order:bool -> F.node -> (F.node, 'msg) Diff.node -> unit =
+ fun ~order parent r ->
   let d = Diff.dom r in
   is_true ~msg:"the retained node is in its parent"
     (match F.parent d with Some q -> q == parent | None -> false) ;
@@ -56,7 +60,7 @@ let rec check_node ~order parent r =
   | None ->
       ()
   | Some l ->
-      let doms = List.map Diff.dom l in
+      let doms = List.map child_dom l in
       let dom_kids = F.children d in
       equal int ~msg:"the number of children" (List.length dom_kids)
         (List.length doms) ;
@@ -66,15 +70,49 @@ let rec check_node ~order parent r =
             (List.exists (( == ) c) doms) )
         dom_kids ;
       if order then is_true ~msg:"the order" (same_nodes dom_kids doms) ;
-      List.iter (check_node ~order d) l
+      List.iter (fun (Diff.Child c) -> check_node ~order d c) l
 
 let check_tree ?(order = true) p = check_node ~order p.root (Diff.root p.tree)
+
+(* A component whose view is its props: a view of the props. Its messages are
+   strings, as in the views of the tests. [equal_props] is [( == )]. *)
+module Wrap = struct
+  type props = string View.t
+
+  type model = unit
+
+  type msg = string
+
+  type out = string
+
+  let id : (props, model, msg, out) Private.Component.id =
+    Private.Component.id ()
+
+  let init _ = ((), Cmd.none)
+
+  let update _ _ () _ = ((), Cmd.none)
+
+  let view p () = p
+
+  let subs _ () = Sub.none
+
+  let equal_props = ( == )
+end
+
+let wrap ?key v = Private.Component.v (module Wrap) ?key ~on:Fun.id v
 
 (* A printer of views for the counterexamples. *)
 let rec show (v : string View.t) =
   match v with
   | V.Text s ->
       "\"" ^ s ^ "\""
+  | V.Comp (V.C {spec; key; props; _}) -> (
+      let key = match key with Some k -> " key=" ^ k | None -> "" in
+      match Type.Id.provably_equal spec.id.tid Wrap.id.tid with
+      | Some Type.Equal ->
+          "<Wrap" ^ key ^ ">" ^ show props ^ "</Wrap>"
+      | None ->
+          "<comp" ^ key ^ ">" )
   | V.Element e ->
       let attrs = List.map (fun (k, v) -> " " ^ k ^ "=" ^ v) e.attrs in
       let value = match e.value with Some v -> " .value=" ^ v | None -> "" in

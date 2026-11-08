@@ -5,6 +5,10 @@ type 'msg t =
   | Latest of string * 'msg Async.t
   | Map : string option * ('a -> 'msg) * 'a t -> 'msg t
 
+type ('msg, 'out) ctx = {emit: 'out -> unit}
+
+let no_ctx = {emit= ignore}
+
 type 'msg request =
   | Request :
       {key: string list option; task: 'a Async.t; to_msg: 'a -> 'msg}

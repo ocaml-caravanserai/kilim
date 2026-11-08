@@ -56,6 +56,18 @@ let children t =
   let rec count n = function None -> n | Some c -> count (n + 1) c.next in
   count 0 t.first
 
+(* An explicit stack: a deep tree of tokens does not overflow the stack. *)
+let descendants t =
+  let rec count n = function
+    | [] ->
+        n
+    | None :: rest ->
+        count n rest
+    | Some c :: rest ->
+        count (n + 1) (c.first :: c.next :: rest)
+  in
+  count 0 [t.first]
+
 (* The token detaches from its parent, is marked as ended, and runs its end
    actions. A second release, or a release after a cancel, finds no parent and
    no action. *)

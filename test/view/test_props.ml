@@ -65,7 +65,15 @@ let names =
 let gen_text = Gen.map txt (Gen.of_list ["a"; "b"; "c"])
 
 let rec gen_view d =
-  if d = 0 then gen_text else Gen.frequency [(1, gen_text); (3, gen_element d)]
+  if d = 0 then gen_text
+  else Gen.frequency [(1, gen_text); (3, gen_element d); (1, gen_comp d)]
+
+(* A component whose view is its props, with no key or a key: decision 12 of the
+   Phase 2 plan review. *)
+and gen_comp d =
+  Gen.map
+    (fun (key, v) -> wrap ?key v)
+    (Gen.pair (Gen.of_list [None; Some "a"; Some "b"]) (gen_view (d - 1)))
 
 and gen_element d =
   let open Gen in
@@ -208,6 +216,16 @@ let rec identity (a : string View.t) (b : string View.t) (Sh (n, kids)) n' =
   match (a, b) with
   | V.Text _, V.Text _ ->
       is_true ~msg:"a text node stays" (n == n')
+  | V.Comp (V.C ca), V.Comp (V.C cb) -> (
+    match
+      ( Type.Id.provably_equal ca.spec.id.tid Wrap.id.tid
+      , Type.Id.provably_equal cb.spec.id.tid Wrap.id.tid )
+    with
+    | Some Type.Equal, Some Type.Equal when ca.key = cb.key ->
+        (* The instance stays, and its view is the props. *)
+        identity ca.props cb.props (Sh (n, kids)) n'
+    | _ ->
+        () )
   | V.Element ea, V.Element eb when String.equal ea.name eb.name -> (
       is_true ~msg:"an element stays" (n == n') ;
       let kids' = F.children n' in
@@ -245,6 +263,12 @@ let rec size (v : string View.t) =
   match v with
   | V.Text _ ->
       1
+  | V.Comp (V.C {spec; props; _}) -> (
+    match Type.Id.provably_equal spec.id.tid Wrap.id.tid with
+    | Some Type.Equal ->
+        1 + size props
+    | None ->
+        1 )
   | V.Element e -> (
       1
       +

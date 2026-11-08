@@ -114,6 +114,9 @@ val stats : t -> Kilim.Private.Runtime.stats
 
 val inspect : t -> Kilim.Private.Runtime.inspect
 
+val tree : t -> Kilim.Private.Runtime.tree
+(** The counts of the instance tree. *)
+
 val stop : t -> unit
 
 val expect_no_tasks : t -> unit
