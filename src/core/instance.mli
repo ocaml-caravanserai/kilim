@@ -19,13 +19,20 @@ type 'msg auto =
       (** [on] is the newest message function: a pass of a key that stays
           changes it, and a payload takes it when it leaves the queue. *)
 
-type ('model, 'msg) spec =
-  { update: 'model -> 'msg -> 'model * 'msg Cmd.t
-  ; view: 'model -> 'msg View.t
-  ; subs: ('model -> 'msg Sub.t) option  (** [None]: no subscription pass. *) }
+(** The functions of an instance. Each function gets the props first. The App
+    has the props [()]. *)
+type ('props, 'model, 'msg) spec =
+  { update: 'props -> 'model -> 'msg -> 'model * 'msg Cmd.t
+  ; view: 'props -> 'model -> 'msg View.t
+  ; subs: ('props -> 'model -> 'msg Sub.t) option
+        (** [None]: no subscription pass. *) }
 
 type 'msg state =
-  | State : {spec: ('model, 'msg) spec; mutable model: 'model} -> 'msg state
+  | State :
+      { spec: ('props, 'model, 'msg) spec
+      ; mutable props: 'props  (** The newest props. *)
+      ; mutable model: 'model }
+      -> 'msg state
 
 type 'msg t =
   { base: Cancel.t  (** The runtime token: the parent of the instance token. *)

@@ -325,7 +325,7 @@ and count rt =
 and update : type msg. _ -> msg Instance.t -> msg Instance.state -> msg -> unit
     =
  fun rt inst (State s) m ->
-  match s.spec.update s.model m with
+  match s.spec.update s.props s.model m with
   | model, cmd -> (
       (* A root catch or a stop during [update] (a re-entrant event) unmounts
          the instance: then the model does not change. *)
@@ -401,7 +401,7 @@ and render rt =
         (* The view runs before the diff writes: an error in the view leaves no
            half-changed DOM. A stop or a root catch in the view (a re-entrant
            event) unmounts the root: then no write. *)
-        ( match s.spec.view s.model with
+        ( match s.spec.view s.props s.model with
         | v -> (
             if r.inst.alive then
               try r.tree <- write rt r.inst r.tree v
@@ -445,8 +445,8 @@ and early rt =
 and subs_pass : type msg. _ -> msg Instance.t -> start:bool -> unit =
  fun rt inst ~start ->
   match inst.state with
-  | Some (State {spec= {subs= Some f; _}; model}) ->
-      let leaves = Sub.leaves (f model) in
+  | Some (State {spec= {subs= Some f; _}; props; model}) ->
+      let leaves = Sub.leaves (f props model) in
       let wanted =
         List.fold_left
           (fun m -> function
@@ -752,7 +752,12 @@ let create env dom ~parent (App.App {init; update; view; subs; fallback}) =
         | model, cmd ->
             (* init cannot reach the runtime, thus the instance is alive
                here. *)
-            inst.state <- Some (State {spec= {update; view; subs}; model}) ;
+            let spec =
+              { Instance.update= (fun () m msg -> update m msg)
+              ; view= (fun () m -> view m)
+              ; subs= Option.map (fun f () m -> f m) subs }
+            in
+            inst.state <- Some (State {spec; props= (); model}) ;
             Instance.changed inst ;
             command rt inst cmd
         | exception e ->
