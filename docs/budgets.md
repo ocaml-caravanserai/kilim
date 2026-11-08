@@ -46,12 +46,12 @@ Measured with OCaml 5.5.1, js_of_ocaml and wasm_of_ocaml 6.4.1, Brr 0.0.9:
 
 | Program | File | Measured | Budget |
 |---|---|---|---|
-| `counter` | `counter.bc.js` (js_of_ocaml) | 37,268 bytes | 38,500 bytes |
-| `counter` | The main `.wasm` file (wasm_of_ocaml) | 37,010 bytes | 38,000 bytes |
-| `counter` | `counter.bc.wasm.js` (the launcher) | 6,889 bytes | 7,500 bytes |
-| `example-todo` | `main.bc.js` (js_of_ocaml) | 39,092 bytes | 41,000 bytes |
-| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 39,417 bytes | 40,500 bytes |
-| `example-todo` | `main.bc.wasm.js` (the launcher) | 6,886 bytes | 7,500 bytes |
+| `counter` | `counter.bc.js` (js_of_ocaml) | 37,400 bytes | 38,500 bytes |
+| `counter` | The main `.wasm` file (wasm_of_ocaml) | 37,118 bytes | 38,000 bytes |
+| `counter` | `counter.bc.wasm.js` (the launcher) | 6,890 bytes | 7,500 bytes |
+| `example-todo` | `main.bc.js` (js_of_ocaml) | 39,211 bytes | 41,000 bytes |
+| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 39,526 bytes | 40,500 bytes |
+| `example-todo` | `main.bc.wasm.js` (the launcher) | 6,885 bytes | 7,500 bytes |
 
 The instance tree of Phase 2 adds about 0.4 KB (js_of_ocaml) and 0.6 KB
 (wasm_of_ocaml) to the counter, which has no component: before it, the
@@ -67,6 +67,17 @@ diff and in `Instance`, thus the dead code elimination removes them from an
 app with no component, in the two builds. With an install at the start of
 the runtime and the walk in the diff, the counter was 38,110 bytes
 (js_of_ocaml) and 38,453 bytes (wasm_of_ocaml).
+
+The subscriptions and the outputs of each instance add about 0.1 KB to the
+counter in the two builds: before them, the counter was 37,268 bytes
+(js_of_ocaml) and 37,010 bytes (the main `.wasm` file). The cost is in the
+runtime, thus each app links it: the early call and the pass at the end of
+the render walk the lists of the instances below the root, and a command
+can have an output. The budgets do not change. A component with
+`Component.Defaults.subs` has no subscription pass: on the fake DOM, a
+click on 1 of 1,000 such component rows allocates 353 words in its turn
+(with the dispatch of the fake DOM), and 389 words if each row has its own
+`subs`.
 
 The baseline is a minimal Brr program, because Brr links `Fun` and thus
 `Printf` (design section 13): 23,845 bytes (js_of_ocaml), and 17,217 bytes
@@ -135,7 +146,8 @@ Measured with OCaml 5.5.1, no flambda:
 The counts are the same in each run. The two component actions mount 1,000
 keyed component rows with the diff and no runtime. `row-model` counts the
 render of the row alone, with its view: the model changes before the first
-read. `header` counts the patch of the parent: each row skips its view, and
+read. The row has `Component.Defaults.subs`, thus no subscription pass,
+and a diff with no runtime records no instance for the pass. `header` counts the patch of the parent: each row skips its view, and
 the parent makes its new view before the first read. `remove-rows` counts
 the patch that removes all rows: the unmount of an instance with no child
 makes no closure for the walk of its child list.
