@@ -39,11 +39,11 @@ let show : 'node 'msg. 'node env -> ('node, 'msg) boundary -> exn -> unit =
   b.shown <- true
 
 (* The catch outside the diff: an error of [update], of a task, of a message
-   function, of [subs], or of the render of an instance alone. The boundary goes
-   into the work queue: thus a render is pending, and the render writes the
-   fallback. A boundary fails one time: the callers give no failed boundary,
-   thus [shown] is still [false]. Only a live boundary catches: an error after a
-   stop goes to the error handler. *)
+   function, of [subs], of the render of an instance alone, or of a controlled
+   property. The boundary goes into the work queue: thus a render is pending,
+   and the render writes the fallback. A boundary fails one time: the callers
+   give no failed boundary, thus [shown] is still [false]. Only a live boundary
+   catches: an error after a stop goes to the error handler. *)
 let fail env (Bound b) e =
   if b.live then begin
     catch env b e ;
@@ -133,7 +133,16 @@ let patch : type msg.
   | Boundary _ | Text _ | Element _ | Comp _ ->
       Diff.replace ctx parent r (View.Boundary v)
 
-let bounds = {Diff.build_boundary= build; patch_boundary= patch; show; fail}
+(* The write of the controlled properties of an element in a boundary, after the
+   diff: an exception goes to the nearest boundary of the element, as a catch
+   outside the diff. An element whose boundary failed (also in this run) or left
+   the tree is in a subtree that the fallback replaces: no write. *)
+let write env (Bound b as a) ops d cell =
+  if (not b.left) && Option.is_none b.failed then
+    try Diff.restore ops d cell with e -> fail env a e
+
+let bounds =
+  {Diff.build_boundary= build; patch_boundary= patch; show; fail; write}
 
 let install () =
   Reconcile.install () ;

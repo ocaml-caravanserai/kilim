@@ -692,8 +692,9 @@ let keyed_rows () =
   equal int 3 (tree p).owned_links ;
   no_errors p
 
-(* A fault of a DOM operation in the patch of the child goes to the boundary,
-   inside the diff. *)
+(* A fault of a DOM operation goes to the boundary: the fault of the patch of
+   the child, inside the diff, and the fault of a controlled property, outside
+   the diff. *)
 let dom_fault () =
   let p = page (fun m -> fb (El.p [txt (string_of_int m)])) in
   F.reset (P.doc p) ;
@@ -701,9 +702,113 @@ let dom_fault () =
   F.fail_at (P.doc p) 2 ;
   bump p ;
   shows ~text:"other" p ;
-  equal string "1" (text p "p")
+  equal string "1" (text p "p") ;
+  let p =
+    page (fun m ->
+        if m = 0 then txt "" else fb (El.input ~at:[At.value "v"] ()) )
+  in
+  F.reset (P.doc p) ;
+  bump p ;
+  let total = F.total (P.doc p) in
+  let p =
+    page (fun m ->
+        if m = 0 then txt "" else fb (El.input ~at:[At.value "v"] ()) )
+  in
+  F.reset (P.doc p) ;
+  (* The last operation is the write of [value]. *)
+  F.fail_at (P.doc p) total ;
+  bump p ;
+  shows ~text:"other" p ;
+  quiet p
+
+(* An element of a subtree that a catch unmounted in the same render gets no
+   property write: an element of the failed boundary, and an element of a nested
+   boundary that the catch unlinked. *)
+let dead_property () =
+  let p =
+    page (fun m ->
+        if m = 0 then txt ""
+        else
+          fb
+            (El.div
+               [ El.input ~at:[At.value "v"] ()
+               ; fb ~id:"in" (El.input ~at:[At.value "w"] ())
+               ; probe ~at:Init "x" ] ) )
+  in
+  F.reset (P.doc p) ;
+  bump p ;
+  shows p ;
+  let counts = F.counts (P.doc p) in
+  is_false ~msg:"no read" (List.mem_assoc "get_value" counts) ;
+  is_false ~msg:"no write" (List.mem_assoc "set_property" counts)
 
 let input id v = El.input ~at:[At.data "testid" id; At.value v] ()
+
+(* A fault of the property write of a child in a boundary: the fallback in the
+   same render. The other element of the failed boundary gets no write, and the
+   other controlled values of the app get their writes. *)
+let property_fault () =
+  let view m =
+    if m = 0 then txt ""
+    else
+      El.div
+        [ fb ~id:"f1" (El.div [input "a1" "x"; input "a2" "y"])
+        ; input "b" "z"
+        ; fb ~id:"f2" (input "c" "w") ]
+  in
+  let p = page view in
+  F.reset (P.doc p) ;
+  bump p ;
+  let total = F.total (P.doc p) in
+  let p = page view in
+  F.reset (P.doc p) ;
+  (* The last 8 operations read and write a1, a2, b and c. *)
+  F.fail_at (P.doc p) (total - 6) ;
+  one_render p (fun () -> bump p) ;
+  shows ~text:"other" ~id:"f1" p ;
+  equal string "z" (F.value (P.find p (By.test_id "b"))) ;
+  equal string "w" (F.value (P.find p (By.test_id "c"))) ;
+  let counts = F.counts (P.doc p) in
+  equal int ~msg:"the reads of a1, b and c" 3 (List.assoc "get_value" counts) ;
+  equal int ~msg:"the writes of b and c" 2 (List.assoc "set_property" counts) ;
+  quiet p
+
+(* The radio group case: the diff writes the properties after all the other
+   operations, also in a boundary. The name of B changes after the boundary of
+   A, thus a write of A before that change would be lost. *)
+let radio_order () =
+  let radio id name c =
+    El.input
+      ~at:[At.data "testid" id; At.type_ "radio"; At.name name; At.checked c]
+      ()
+  in
+  let p =
+    page (fun m ->
+        if m = 0 then El.div [fb (radio "A" "g" false); radio "B" "h" true]
+        else El.div [fb (radio "A" "g" true); radio "B" "g" false] )
+  in
+  is_true (F.checked (P.find p (By.test_id "B"))) ;
+  bump p ;
+  is_true ~msg:"A" (F.checked (P.find p (By.test_id "A"))) ;
+  is_false ~msg:"B" (F.checked (P.find p (By.test_id "B"))) ;
+  no_errors p
+
+(* A fault of the property write of an element with no boundary: the root
+   catch. *)
+let property_root () =
+  let view m = if m = 0 then txt "" else input "i" "v" in
+  let p = page view in
+  F.reset (P.doc p) ;
+  bump p ;
+  let total = F.total (P.doc p) in
+  let p = page ~fallback:(fun _ -> txt "root") view in
+  F.reset (P.doc p) ;
+  F.fail_at (P.doc p) total ;
+  bump p ;
+  is_false (ins p).alive ;
+  equal string "<div>root</div>" (P.html p) ;
+  is_true (match errors p with [F.Fault] -> true | _ -> false) ;
+  equal int 0 (stats p).caught
 
 (* A boundary that appears or disappears at a place remounts the subtree. *)
 let appears () =
@@ -874,7 +979,8 @@ let reset_hooks () =
     { build_boundary= (fun _ _ -> no)
     ; patch_boundary= (fun _ _ _ -> no)
     ; show= (fun _ _ _ -> ())
-    ; fail= (fun _ _ _ -> ()) }
+    ; fail= (fun _ _ _ -> ())
+    ; write= (fun _ _ _ _ _ -> ()) }
 
 (* View.boundary installs the functions of the boundary nodes, and of the
    component nodes: the removal walk unlinks a boundary with no component, and
@@ -1014,6 +1120,50 @@ let pending_then_owner () =
   shows ~caught:2 ~id:"outer" p ;
   equal int 0 (tree p).nested_links ;
   equal int 0 (tree p).queued
+
+(* A component with a controlled value in a boundary and one outside it. *)
+module Inp = struct
+  include Component.Defaults
+
+  type props = unit
+
+  type model = int
+
+  type msg = Incr
+
+  type out = none
+
+  let id : (props, model, msg, out) C.id = C.id ()
+
+  let init () = (0, Cmd.none)
+
+  let update _ () m Incr = (m + 1, Cmd.none)
+
+  let view () m =
+    El.div
+      [ button ~id:"inc" Incr (string_of_int m)
+      ; fb ~id:"fi" (input "ii" (string_of_int m))
+      ; input "jj" (string_of_int m) ]
+end
+
+(* A fault of a controlled property in a component that renders alone. *)
+let alone_fault () =
+  let view _ = fb ~id:"outer" (C.v (module Inp) ~on:never ()) in
+  let p = page view in
+  F.reset (P.doc p) ;
+  P.click p (By.test_id "inc") ;
+  let total = F.total (P.doc p) in
+  let p = page view in
+  F.reset (P.doc p) ;
+  (* The last operations read and write ii, then jj. *)
+  F.fail_at (P.doc p) (total - 2) ;
+  P.click p (By.test_id "inc") ;
+  shows ~text:"other" ~id:"fi" p ;
+  equal string "1" (F.value (P.find p (By.test_id "jj"))) ;
+  P.click p (By.test_id "inc") ;
+  equal string "2" (F.value (P.find p (By.test_id "jj"))) ;
+  equal string "other" (text p "fi") ;
+  quiet p
 
 (* One click, two raising instances of one boundary: one catch. *)
 let two_in_one () =
@@ -1182,6 +1332,14 @@ let tests =
       ; test "a keyed diff from [1; 2; 3] to [3; 2; 4] where row 2 raises"
           keyed_rows
       ; test "an exception of a DOM operation goes to the boundary" dom_fault
+      ; test "an element of a failed subtree gets no property write"
+          dead_property
+      ; test "a property fault in a boundary: the other values get their writes"
+          property_fault
+      ; test "radio buttons in a boundary: the order of the property writes"
+          radio_order
+      ; test "a property fault with no boundary goes to the root catch"
+          property_root
       ; test "a boundary that appears or disappears remounts the subtree"
           appears
       ; test "the messages of a fallback go to the owner" fallback_messages
@@ -1201,6 +1359,7 @@ let tests =
       ; test
           "a pending fallback, then the owner renders and its fallback raises"
           pending_then_owner
+      ; test "a property fault in a component that renders alone" alone_fault
       ; test "two catches of one boundary in one turn" two_in_one
       ; test "a new key while the fallback waits" key_while_pending
       ; test "a fallback with a nested boundary, then the outer catch"

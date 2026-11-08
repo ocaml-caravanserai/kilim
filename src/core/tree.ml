@@ -151,16 +151,17 @@ and 'node work =
   | Show : {b: ('node, 'msg) boundary; e: exn} -> 'node work
 
 (* The context of the diff of the view of [owner]. [controlled] holds the
-   elements with a controlled property in the view, in reverse order: the diff
-   writes their properties after all the other operations of the patch. The diff
-   patches and builds the nodes in the order of the document, thus the order of
-   [controlled] is the order of the end tags. One render shares one list:
-   renders never nest. [boundary] is the nearest boundary above the place. *)
+   elements with a controlled property in the view, with their boundaries, in
+   reverse order: the diff writes their properties after all the other
+   operations of the patch. The diff patches and builds the nodes in the order
+   of the document, thus the order of [controlled] is the order of the end tags.
+   One render shares one list: renders never nest. [boundary] is the nearest
+   boundary above the place. *)
 and ('node, 'msg) ctx =
   { ops: 'node Dom.t
   ; post: 'msg Dom.post
   ; ns: Dom.ns
-  ; controlled: ('node * Dom.cell) list ref
+  ; controlled: ('node * Dom.cell * 'node any_boundary option) list ref
   ; owner: ('node, 'msg) inst
   ; env: 'node env
   ; boundary: 'node any_boundary option }

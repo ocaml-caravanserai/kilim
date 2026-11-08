@@ -30,7 +30,7 @@ type ('node, 'msg) ctx = ('node, 'msg) Tree.ctx =
   { ops: 'node Dom.t
   ; post: 'msg Dom.post
   ; ns: Dom.ns
-  ; controlled: ('node * Dom.cell) list ref
+  ; controlled: ('node * Dom.cell * 'node Tree.any_boundary option) list ref
   ; owner: ('node, 'msg) Tree.inst
   ; env: 'node Tree.env
   ; boundary: 'node Tree.any_boundary option }
@@ -82,7 +82,15 @@ type bounds =
       -> unit
   ; show:
       'node 'msg. 'node Tree.env -> ('node, 'msg) Tree.boundary -> exn -> unit
-  ; fail: 'node. 'node Tree.env -> 'node Tree.any_boundary -> exn -> unit }
+  ; fail: 'node. 'node Tree.env -> 'node Tree.any_boundary -> exn -> unit
+  ; write:
+      'node.
+         'node Tree.env
+      -> 'node Tree.any_boundary
+      -> 'node Dom.t
+      -> 'node
+      -> Dom.cell
+      -> unit }
 
 let no_boundary () = invalid_arg "kilim: a boundary node with no View.boundary"
 
@@ -91,7 +99,8 @@ let bounds =
     { build_boundary= (fun _ _ _ -> no_boundary ())
     ; patch_boundary= (fun _ _ _ _ -> no_boundary ())
     ; show= (fun _ _ _ -> ())
-    ; fail= (fun _ _ _ -> ()) }
+    ; fail= (fun _ _ _ -> ())
+    ; write= (fun _ _ _ _ _ -> ()) }
 
 (* The DOM node of a retained node. A component node and a boundary node are
    transparent: the DOM node of a component node is the DOM node of the root of
@@ -350,7 +359,7 @@ let control ctx d (cell : Dom.cell) (ve : _ View.element) =
   | None, None ->
       ()
   | Some _, _ | _, Some _ ->
-      ctx.controlled := (d, cell) :: !(ctx.controlled)
+      ctx.controlled := (d, cell, ctx.boundary) :: !(ctx.controlled)
 
 (* The composition flag stops a [value] write only while the element has the
    focus. A composition cannot go on in an element with no focus. A move or a
@@ -383,6 +392,15 @@ let set_props (ops : _ Dom.t) (d, (cell : Dom.cell)) =
 
 let restore ops d cell = set_props ops (d, cell)
 
+(* The properties of an element in a boundary go to [write] of {!bounds}. With
+   no boundary, an exception stops the run and goes to the root catch. *)
+let write ctx (d, cell, b) =
+  match b with
+  | None ->
+      set_props ctx.ops (d, cell)
+  | Some b ->
+      !bounds.write ctx.env b ctx.ops d cell
+
 (* [run ctx f] runs [f ()], then writes the properties of the controlled
    elements, in the order of their end tags in the document: a child before its
    parent. A mount and a patch thus write in the same order, and give the same
@@ -393,7 +411,7 @@ let restore ops d cell = set_props ops (d, cell)
 let run ctx f =
   ctx.controlled := [] ;
   let x = f () in
-  List.iter (set_props ctx.ops) (List.rev !(ctx.controlled)) ;
+  List.iter (write ctx) (List.rev !(ctx.controlled)) ;
   x
 
 (* [has k l] is [true] if the list [l] of pairs has the name [k]. *)

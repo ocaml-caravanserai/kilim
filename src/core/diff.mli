@@ -51,7 +51,11 @@
       node, puts it in the place of the old node, then unmounts each instance of
       the old node and unlinks each old boundary from its lists. The diff builds
       and patches the child of a boundary in [try]: an exception goes to the
-      boundary, which shows its fallback (see {!Boundary}).
+      boundary, which shows its fallback (see {!Boundary}). The diff writes a
+      controlled property after the diff: an exception of an element in a
+      boundary goes to the nearest boundary of the element, as a catch outside
+      the diff, in the same render, and the other elements get their writes. An
+      element whose boundary failed or left the tree gets no write.
 
     If a DOM operation raises, the diff stops and gives the exception. Each node
     of the retained tree then is a child of the DOM node of its retained parent,
@@ -106,7 +110,9 @@ val hooks : hooks ref
     of the boundary [b], which failed with [e], in the place of its child, and
     removes [b] from the work queue. [fail env b e] is the catch outside the
     diff: [b] unmounts its subtree, keeps [e], and goes into the work queue:
-    thus a render is pending, and the render writes the fallback. *)
+    thus a render is pending, and the render writes the fallback.
+    [write env b dom node cell] writes the controlled properties of an element
+    in [b] after the diff (see {!run}). *)
 type bounds =
   { build_boundary:
       'node 'msg.
@@ -120,13 +126,22 @@ type bounds =
       -> unit
   ; show:
       'node 'msg. 'node Tree.env -> ('node, 'msg) Tree.boundary -> exn -> unit
-  ; fail: 'node. 'node Tree.env -> 'node Tree.any_boundary -> exn -> unit }
+  ; fail: 'node. 'node Tree.env -> 'node Tree.any_boundary -> exn -> unit
+  ; write:
+      'node.
+         'node Tree.env
+      -> 'node Tree.any_boundary
+      -> 'node Dom.t
+      -> 'node
+      -> Dom.cell
+      -> unit }
 
 val bounds : bounds ref
 (** The functions of the boundary nodes. [View.boundary] installs them: thus an
     app with no boundary does not link them. The default [build_boundary] and
-    [patch_boundary] raise [Invalid_argument]. The default [show] and [fail] do
-    nothing: an app with no boundary has no instance with a boundary. *)
+    [patch_boundary] raise [Invalid_argument]. The default [show], [fail] and
+    [write] do nothing: an app with no boundary has no instance and no element
+    with a boundary. *)
 
 val start : ('node, 'msg) ctx -> parent:'node -> 'msg View.t -> ('node, 'msg) t
 (** [start ctx ~parent view] builds the DOM of [view] with [ctx] and appends it
