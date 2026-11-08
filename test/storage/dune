@@ -1,0 +1,8 @@
+; The tests of kilim.storage and Storage_mock (design sections 13 and 14),
+; native only: windtrap runs here, and `make mutate` tests the mutants of
+; src/storage and src/testing with this suite. test/dom/test_storage.ml runs
+; the browser driver in Chrome, Firefox and WebKit.
+
+(test
+ (name test_storage)
+ (libraries kilim kilim.storage kilim.testing windtrap))
