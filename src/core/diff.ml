@@ -24,7 +24,7 @@ and 'node children =
    tags. *)
 type ('node, 'msg) ctx =
   { ops: 'node Dom.t
-  ; dispatch: 'msg -> unit
+  ; post: 'msg Dom.post
   ; ns: Dom.ns
   ; controlled: ('node * Dom.cell) list ref }
 
@@ -394,7 +394,7 @@ let rec build : 'node 'msg. ('node, 'msg) ctx -> 'msg View.t -> 'node node =
       (* The cell keeps the handlers of the view: the handlers are made only
          when an event occurs. *)
       let cell =
-        { Dom.events= Events (ve.events, ctx.dispatch)
+        { Dom.events= Events (ve.events, ctx.post)
         ; value= None
         ; checked= None
         ; composing= false }
@@ -487,7 +487,7 @@ and patch_element :
     ->
       ()
   | evs, _ ->
-      e.cell.events <- Events (evs, ctx.dispatch) ;
+      e.cell.events <- Events (evs, ctx.post) ;
       if not (same_listened e.listened evs) then begin
         let listened = listened evs in
         patch_listeners ctx.ops d e.listened listened ;
@@ -651,8 +651,8 @@ and patch_keyed :
         raise exn
   end
 
-let mount ops ~parent ~dispatch v =
-  let ctx = {ops; dispatch; ns= Html; controlled= ref []} in
+let mount ops ~parent ~post v =
+  let ctx = {ops; post; ns= Html; controlled= ref []} in
   let root =
     run ctx (fun () ->
         let root = build ctx v in

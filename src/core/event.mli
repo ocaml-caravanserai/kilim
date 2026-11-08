@@ -88,6 +88,8 @@ val dispatch : 'node env -> 'node Runtime.t -> 'node event -> bool
       prevented toggle after the dispatch, before the task.
 
     A handler with [prevent_default] calls [prevent], a handler with [stop]
-    calls [stop], then the handler gets the payload. The restore of a target
-    writes the view values of the target and of its radio group, if the target
-    is connected. *)
+    calls [stop], then the handler gets the payload. The handler only puts the
+    payload and its message function in the queue of the runtime: the message
+    function runs when the item leaves the queue (design section 09). The
+    restore of a target writes the view values of the target and of its radio
+    group, if the target is connected. *)

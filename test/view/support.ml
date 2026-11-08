@@ -15,7 +15,7 @@ let mount_with doc v =
   let msgs = ref [] in
   let tree =
     Diff.mount (F.ops doc) ~parent:root
-      ~dispatch:(fun m -> msgs := m :: !msgs)
+      ~post:(Private.Dom.post_now (fun m -> msgs := m :: !msgs))
       v
   in
   {doc; root; tree; msgs}

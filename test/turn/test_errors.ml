@@ -120,13 +120,6 @@ let in_task () =
   equal int 1 (List.length (errors p)) ;
   equal int 0 (stats p).messages ;
   equal int 0 (H.live_timers (P.host p)) ;
-  (* An error after the unmount only goes to the error handler. *)
-  let view _ = El.button ~at:[At.data "testid" "fb"] ~ev:[raising] [txt "r"] in
-  let p = P.start (app ~view ~fallback:view ()) in
-  P.click p (By.test_id "fb") ;
-  P.click p (By.test_id "fb") ;
-  equal int 2 (List.length (errors p)) ;
-  equal int 2 (stats p).renders ;
   settled p
 
 (* An update that raises: the next message of the turn is dropped, and the next
@@ -313,41 +306,43 @@ let in_map () =
   equal int ~msg:"the result does not reach update" 1 (stats p).messages ;
   quiet p
 
-(* A handler that raises in a re-entrant event, inside update: the root catch
-   runs during the update. The dead instance does not become dirty, thus no
-   render runs after the fallback. *)
-type rmsg = Outer | Chk of bool
-
-let reentrant_raise () =
-  let page = ref None in
-  let app =
-    App.make
-      ~init:(fun () -> (0, Cmd.none))
-      ~update:(fun m -> function
-        | Outer ->
-            (* The message function of the handler of "c" raises. *)
-            Option.iter (fun p -> P.click p (By.test_id "c")) !page ;
-            (m + 1, Cmd.none)
-        | Chk _ ->
-            (m, Cmd.none) )
-      ~view:(fun m ->
-        El.div
-          [ button ~id:"o" Outer (string_of_int m)
-          ; El.button
-              ~at:[At.data "testid" "c"]
-              ~ev:[Ev.check (fun _ -> invalid_arg "a raise")]
-              [txt "c"] ] )
+(* A fault inside update: the root catch comes during the update. The model of
+   the dead instance does not change, and the instance does not become dirty.
+   Thus no render runs after the fallback. *)
+let fault_in_update () =
+  let f =
+    faulty
+      ~update:(fun fault m () ->
+        fault () ;
+        (m + 1, Cmd.none) )
+      ~view:(fun _ m -> button () (string_of_int m))
       ()
   in
-  let p = P.start app in
-  page := Some p ;
-  P.click p (By.test_id "o") ;
-  equal int 1 (List.length (errors p)) ;
-  is_false (ins p).alive ;
-  equal string "<div></div>" (P.html p) ;
-  equal int 2 (stats p).renders ;
-  quiet p ;
-  equal int 2 (stats p).renders
+  fclick f ;
+  is_true (match H.errors f.h with [Fault] -> true | _ -> false) ;
+  is_false (R.inspect f.rt).alive ;
+  equal string "<div></div>" (F.to_html f.root) ;
+  equal int 2 (R.stats f.rt).renders ;
+  fquiet f ;
+  equal int 2 (R.stats f.rt).renders
+
+(* A fault in view, then the view raises: the fallback gets the first error, and
+   the second error only goes to the error handler. *)
+let fault_in_view () =
+  let f =
+    faulty
+      ~update:(fun _ m () -> (m + 1, Cmd.none))
+      ~view:(fun fault m ->
+        if m = 1 then (fault () ; raise Boom) ;
+        button () (string_of_int m) )
+      ~fallback:(fun e -> txt (match e with Fault -> "first" | _ -> "other"))
+      ()
+  in
+  fclick f ;
+  equal string "<div>first</div>" (F.to_html f.root) ;
+  is_true (match H.errors f.h with [Fault; Boom] -> true | _ -> false) ;
+  equal int 2 (R.stats f.rt).renders ;
+  fquiet f
 
 (* The write of the root fallback raises (a duplicate key): the root shows an
    empty text. *)
@@ -387,9 +382,8 @@ let fallback_write () =
         false ) ;
   quiet p
 
-(* An app with a button "b" and an input "in" whose message function raises:
-   thus a click on "in" in a turn is a re-entrant event that raises (a root
-   catch). *)
+(* An app with a button "b". The test keeps the page in [page], thus user code
+   can stop it. *)
 type pmsg = Go | Got of int
 
 let page_app ~page ~update ?(view = fun _ -> ()) ?fallback () =
@@ -398,44 +392,33 @@ let page_app ~page ~update ?(view = fun _ -> ()) ?fallback () =
     ~update
     ~view:(fun m ->
       view m ;
-      El.div
-        [ button Go (string_of_int m)
-        ; El.input
-            ~at:[At.data "testid" "in"]
-            ~ev:[Ev.check (fun _ -> invalid_arg "a raise")]
-            () ] )
+      El.div [button Go (string_of_int m)] )
     ?fallback ()
   |> fun app ->
   let p = P.start app in
   page := Some p ;
   p
 
-let reraise page =
-  Option.iter
-    (fun p -> try P.click p (By.test_id "in") with Invalid_argument _ -> ())
-    !page
+let stop page = Option.iter P.stop !page
 
-(* The function of Cmd.map stops the page, or makes a root catch: its message
-   does not reach update, and it counts as dropped. *)
-let map_kills kill () =
-  let () =
-    let page = ref None and got = ref 0 in
-    let update m = function
-      | Go ->
-          (m, Cmd.map (fun x -> kill page ; x) (Cmd.task (Async.return (Got 5))))
-      | Got n ->
-          incr got ;
-          (m + n, Cmd.none)
-    in
-    let p = page_app ~page ~update () in
-    click p ;
-    quiet p ;
-    equal int ~msg:"no update after the death" 0 !got ;
-    equal int 1 (stats p).messages ;
-    equal int 1 (stats p).dropped ;
-    is_false (ins p).alive
+(* The function of Cmd.map stops the page: its message does not reach update,
+   and it counts as dropped. *)
+let map_stops () =
+  let page = ref None and got = ref 0 in
+  let update m = function
+    | Go ->
+        (m, Cmd.map (fun x -> stop page ; x) (Cmd.task (Async.return (Got 5))))
+    | Got n ->
+        incr got ;
+        (m + n, Cmd.none)
   in
-  ()
+  let p = page_app ~page ~update () in
+  click p ;
+  quiet p ;
+  equal int ~msg:"no update after the death" 0 !got ;
+  equal int 1 (stats p).messages ;
+  equal int 1 (stats p).dropped ;
+  is_false (ins p).alive
 
 (* A stop in view: the render writes no DOM. *)
 let stop_in_view () =
@@ -443,7 +426,7 @@ let stop_in_view () =
   let p =
     page_app ~page
       ~update:(fun m _ -> (m + 1, Cmd.none))
-      ~view:(fun m -> if m = 1 then Option.iter P.stop !page)
+      ~view:(fun m -> if m = 1 then stop page)
       ()
   in
   click p ;
@@ -458,7 +441,7 @@ let stop_in_fallback () =
   let p =
     page_app ~page
       ~update:(fun _ _ -> raise Boom)
-      ~fallback:(fun _ -> Option.iter P.stop !page ; txt "fallback")
+      ~fallback:(fun _ -> stop page ; txt "fallback")
       ()
   in
   click p ;
@@ -466,30 +449,12 @@ let stop_in_fallback () =
   quiet p ;
   equal string "<div></div>" (P.html p)
 
-(* A root catch in view, then the view raises: the fallback gets the first
-   error. *)
-let first_error () =
-  let page = ref None in
-  let p =
-    page_app ~page
-      ~update:(fun m _ -> (m + 1, Cmd.none))
-      ~view:(fun m -> if m = 1 then (reraise page ; raise Boom))
-      ~fallback:(fun e ->
-        txt (match e with Invalid_argument _ -> "first" | _ -> "other") )
-      ()
-  in
-  click p ;
-  equal string "<div>first</div>" (P.html p) ;
-  equal int 2 (List.length (errors p)) ;
-  quiet p
-
-(* A root catch in update, which then gives a task: the dead root gets no
-   request. *)
+(* A stop in update, which then gives a task: the dead root gets no request. *)
 let no_request () =
   let page = ref None and q = Queue.create () in
   let update m = function
     | Go ->
-        reraise page ;
+        stop page ;
         (m + 1, Cmd.task (Async.map (fun () -> Got 1) (waiting q)))
     | Got _ ->
         (m, Cmd.none)
@@ -499,18 +464,18 @@ let no_request () =
   quiet p ;
   equal int ~msg:"no task for a dead root" 0 (Queue.length q) ;
   equal int 0 (ins p).token_children ;
-  equal int 0 (ins p).requests_left
+  equal int 0 (ins p).requests_left ;
+  no_errors p
 
-(* An end action of the old token of a Cmd.latest key stops the page or makes a
-   root catch, in the middle of a batch: the rest of the batch adds no key and
-   no request. *)
+(* An end action of the old token of a Cmd.latest key stops the page, in the
+   middle of a batch: the rest of the batch adds no key and no request. *)
 type lmsg = First | Second
 
-let end_action_in_batch kill () =
+let end_action_in_batch () =
   let page = ref None in
   let hang =
     Async.make (fun tok ~ok:_ ~error:_ ->
-        Cancel.on_end tok (fun () -> kill page) )
+        Cancel.on_end tok (fun () -> stop page) )
   in
   let never = Async.make (fun _ ~ok:_ ~error:_ -> ()) in
   let update n = function
@@ -524,13 +489,7 @@ let end_action_in_batch kill () =
             ; Cmd.task never ] )
   in
   let view n =
-    El.div
-      [ button ~id:"a" First (string_of_int n)
-      ; button Second "b"
-      ; El.input
-          ~at:[At.data "testid" "in"]
-          ~ev:[Ev.check (fun _ -> invalid_arg "a raise")]
-          () ]
+    El.div [button ~id:"a" First (string_of_int n); button Second "b"]
   in
   let p =
     P.start
@@ -582,19 +541,14 @@ let tests =
       ; test "a model change, then an update that raises: one render"
           dirty_update
       ; test "a function of Cmd.map that raises" in_map
-      ; test "a handler that raises in update: no render after the fallback"
-          reentrant_raise
+      ; test "a fault in a re-entrant event inside update: no render after"
+          fault_in_update
       ; test "the write of the fallback raises: an empty text" fallback_write
-      ; test "a function of Cmd.map that stops the page: no update"
-          (map_kills (fun page -> Option.iter P.stop !page))
-      ; test "a function of Cmd.map with a root catch: no update"
-          (map_kills reraise)
+      ; test "a function of Cmd.map that stops the page: no update" map_stops
       ; test "a stop in view: no DOM write" stop_in_view
       ; test "a stop in the fallback: no DOM write" stop_in_fallback
-      ; test "two errors in view: the fallback gets the first" first_error
-      ; test "a root catch in update: no request" no_request
-      ; test "an end action in a batch stops the page"
-          (end_action_in_batch (fun page -> Option.iter P.stop !page))
-      ; test "an end action in a batch makes a root catch"
-          (end_action_in_batch reraise)
+      ; test "a fault and an error in view: the fallback gets the first"
+          fault_in_view
+      ; test "a stop in update: no request" no_request
+      ; test "an end action in a batch stops the page" end_action_in_batch
       ; test "an end action stops the page at a result" end_action_at_ok ] ]

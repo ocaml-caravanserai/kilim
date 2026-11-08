@@ -149,7 +149,8 @@ let d3 () =
      mount element. *)
   (B.ops a).attach outer
     { Private.Dom.events=
-        Private.Dom.Events ([Ev.click Wrap], fun m -> got := m :: !got)
+        Private.Dom.Events
+          ([Ev.click Wrap], Private.Dom.post_now (fun m -> got := m :: !got))
     ; value= None
     ; checked= None
     ; composing= false } ;

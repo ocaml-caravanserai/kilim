@@ -55,7 +55,11 @@ let () =
       ; View.unsafe_html ~el:El.div (Unsafe_html.of_string "<b>x</b>")
       ; El.svg [El.foreign_object [El.p []]] ]
   in
-  let t = Private.Diff.mount dom ~parent:() ~dispatch:ignore (view [1; 2; 3]) in
+  let t =
+    Private.Diff.mount dom ~parent:()
+      ~post:(Private.Dom.post_now ignore)
+      (view [1; 2; 3])
+  in
   Private.Diff.patch t (view [3; 1; 4]) ;
   ignore (Private.Diff.children (Private.Diff.root t))
 

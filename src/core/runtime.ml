@@ -144,7 +144,12 @@ let clear_timer rt =
 
 (* The root catch (design section 09): the error unmounts the App, and the next
    render shows the fallback. An error after the unmount only goes to the error
-   handler. *)
+   handler, thus a second error does not replace the first one in the fallback.
+   A message function runs when its item leaves the queue, thus a handler cannot
+   make a root catch inside user code. But the function of [event] can raise
+   inside a turn (a fault of the platform in a re-entrant event, for example a
+   payload read that throws). This root catch comes at once, also inside user
+   code or the diff. *)
 let catch rt e =
   Report.error e ;
   let (Root r) = rt.root in
@@ -292,6 +297,9 @@ and process rt (Item {inst; token; key; payload}) =
         () )
   | _ ->
       () ) ;
+  (* [state] alone is not enough: under wasm_of_ocaml, a trap in an end action
+     of [Instance.unmount] leaves the instance with [alive = false] and a state
+     (see [active]). *)
   let stale =
     (not inst.alive)
     || match token with Some t -> Cancel.cancelled t | None -> false
@@ -304,8 +312,9 @@ and process rt (Item {inst; token; key; payload}) =
     | Result (x, f) -> (
       match f x with
       | m ->
-          (* The function of [Cmd.map] can stop the page or make a root catch (a
-             re-entrant event): then the message is dropped. *)
+          (* The message function can stop the page, or send a fault of the
+             platform in a re-entrant event (see [catch]): then the message is
+             dropped. *)
           if inst.alive then begin
             count rt ; update rt inst st m
           end
@@ -327,8 +336,10 @@ and update : type msg. _ -> msg Instance.t -> msg Instance.state -> msg -> unit
  fun rt inst (State s) m ->
   match s.spec.update s.props s.model m with
   | model, cmd -> (
-      (* A root catch or a stop during [update] (a re-entrant event) unmounts
-         the instance: then the model does not change. *)
+      (* A stop during [update], or a root catch from a fault of the platform in
+         a re-entrant event (see [catch]), unmounts the instance: then the model
+         does not change. Without this guard, the dead instance stays dirty, and
+         each frame makes a render. *)
       if (not (rt.env.same model s.model)) && inst.alive then begin
         s.model <- model ;
         Instance.changed inst
@@ -399,8 +410,9 @@ and render rt =
         r.inst.dirty <- false ;
         rt.stats.views <- rt.stats.views + 1 ;
         (* The view runs before the diff writes: an error in the view leaves no
-           half-changed DOM. A stop or a root catch in the view (a re-entrant
-           event) unmounts the root: then no write. *)
+           half-changed DOM. A stop in the view, or a root catch from a fault of
+           the platform in a re-entrant event (see [catch]), unmounts the root:
+           then no write. *)
         ( match s.spec.view s.props s.model with
         | v -> (
             if r.inst.alive then
@@ -547,9 +559,6 @@ and launch : type msg. _ -> msg Instance.t -> Cancel.t -> unit Async.t -> unit =
       ~error:(fun e ->
         push rt (Item {inst; token= Some token; key= None; payload= Error e}) )
 
-and dispatch : type msg. _ -> msg Instance.t -> msg -> unit =
- fun rt inst m -> push rt (Item {inst; token= None; key= None; payload= Msg m})
-
 (* The patch of the retained tree, or the mount at the first render. It can
    raise: each caller has its own error rule. *)
 and write : type msg.
@@ -563,19 +572,26 @@ and write : type msg.
   | Some t ->
       Diff.patch t v ; tree
   | None ->
-      Some (Diff.mount rt.dom ~parent:rt.parent ~dispatch:(dispatch rt inst) v)
+      (* The post of the cells: the message function runs when the item leaves
+         the queue (design section 09). *)
+      let post x f =
+        push rt (Item {inst; token= None; key= None; payload= Result (x, f)})
+      in
+      Some (Diff.mount rt.dom ~parent:rt.parent ~post:{post} v)
 
 (* The view and the diff run only for a live root, thus the catch marks the root
    as failed. *)
 and catch_in_render rt e =
   catch rt e ;
-  (* A root catch can come first, in a re-entrant event of the view: the
-     fallback gets the first error. *)
+  (* A fault of the platform in a re-entrant event can make a root catch first,
+     in the view or in the diff (see [catch]): the fallback gets the first
+     error. *)
   let (Root r) = rt.root in
   write_fallback rt (Option.value r.failed ~default:e)
 
-(* The fallback goes in the place of the view. Its handlers dispatch to the dead
-   root, thus their messages are dropped. *)
+(* The fallback goes in the place of the view. Its handlers post to the dead
+   root, thus their items are dropped, and their message functions do not
+   run. *)
 and write_fallback rt e =
   let (Root r) = rt.root in
   let v =
