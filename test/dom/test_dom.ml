@@ -2102,6 +2102,85 @@ let d43 () =
   B.stop a ;
   Fut.return ()
 
+(* D44: 1,000 starts and stops of an app with nested components. The app has two
+   outer components, and each outer component has two inner components. Each
+   component has a timer, a window listener and a boundary. After each stop, no
+   listener, no timer, no instance and no DOM stays (as D25). *)
+let d44_subs () _ =
+  Sub.batch
+    [ Sub.every (Span.ms 1000) ()
+    ; Kilim_browser.Sub.window "kilim-d44" (fun _ -> ()) ]
+
+let d44_guard child = View.boundary ~fallback:(fun _ -> txt "failed") child
+
+module D44_inner = struct
+  include Component.Defaults
+
+  type props = unit
+
+  type model = int
+
+  type msg = unit
+
+  type out = |
+
+  let id : (props, model, msg, out) Component.id = Component.id ()
+
+  let init () = (0, Cmd.none)
+
+  let update _ () n () = (n + 1, Cmd.none)
+
+  let view () n = d44_guard (El.span [txt (string_of_int n)])
+
+  let subs = d44_subs
+end
+
+module D44_outer = struct
+  include D44_inner
+
+  let id : (props, model, msg, out) Component.id = Component.id ()
+
+  let inner () = Component.v (module D44_inner) ~on:(function _ -> .) ()
+
+  let view () n = d44_guard (El.div [txt (string_of_int n); inner (); inner ()])
+end
+
+let d44_app () =
+  let outer () = Component.v (module D44_outer) ~on:(function _ -> .) () in
+  App.make
+    ~init:(fun () -> ((), Cmd.none))
+    ~update:(fun () () -> ((), Cmd.none))
+    ~view:(fun () -> d44_guard (El.div [outer (); outer ()]))
+    ()
+
+let d44 () =
+  let doc_vis = count ~name:"visibilitychange" document in
+  let root = container () in
+  let clean = ref true in
+  for _ = 1 to 1000 do
+    let a = B.start (el root) (d44_app ()) in
+    let started =
+      count ~name:"kilim-d44" window = 6
+      && B.live_timers () = 6
+      && (R.tree (B.runtime a)).instances = 6
+      && children root = 1
+    in
+    B.stop a ;
+    clean :=
+      !clean && started
+      && count root = 0
+      && count ~name:"kilim-d44" window = 0
+      && count ~name:"visibilitychange" document = doc_vis
+      && B.live_timers () = 0
+      && (R.tree (B.runtime a)).instances = 0
+      && children root = 0
+  done ;
+  check
+    "D44 1,000 starts and stops of nested components with timers, window \
+     listeners and boundaries: each count 0"
+    !clean ;
+  Fut.return ()
+
 let tests =
   [ d2
   ; d3
@@ -2144,7 +2223,8 @@ let tests =
   ; d40
   ; d41
   ; d42
-  ; d43 ]
+  ; d43
+  ; d44 ]
 
 let () =
   ignore (Lazy.force spy) ;

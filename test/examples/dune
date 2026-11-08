@@ -34,7 +34,12 @@
   ../../examples/todo/page.html
   ../../examples/todo/main.bc.js
   ../../examples/todo/main.bc.wasm.js
-  (glob_files ../../examples/todo/main.bc.wasm.assets/*)))
+  (glob_files ../../examples/todo/main.bc.wasm.assets/*)
+  ../../examples/components/index.html
+  ../../examples/components/page.html
+  ../../examples/components/main.bc.js
+  ../../examples/components/main.bc.wasm.js
+  (glob_files ../../examples/components/main.bc.wasm.assets/*)))
 
 (rule
  (alias runtest)
@@ -51,7 +56,8 @@
    --profile
    %{profile}
    ../../examples/counter
-   ../../examples/todo)))
+   ../../examples/todo
+   ../../examples/components)))
 
 (rule
  (alias browsers)
@@ -72,7 +78,8 @@
    --browser
    firefox
    ../../examples/counter
-   ../../examples/todo)))
+   ../../examples/todo
+   ../../examples/components)))
 
 (rule
  (alias browsers)
@@ -93,4 +100,5 @@
    --browser
    webkit
    ../../examples/counter
-   ../../examples/todo)))
+   ../../examples/todo
+   ../../examples/components)))

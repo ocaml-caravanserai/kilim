@@ -5,16 +5,18 @@
 #   make test           Run the tests: native code, js_of_ocaml and
 #                       wasm_of_ocaml (on node, and in Chrome for test/dom,
 #                       test/loader and test/examples).
-#   make size           Build the counter of bench/size and the todo example
-#                       in the release profile, and compare their gzip sizes
-#                       with bench/size/budget (docs/budgets.md).
+#   make size           Build the counter of bench/size, the todo example and
+#                       the components example in the release profile, and
+#                       compare their gzip sizes with bench/size/budget
+#                       (docs/budgets.md).
 #   make budgets        The budget gate of CI (docs/budgets.md): the size
 #                       budget (as make size), the allocation counts
 #                       (bench/alloc), and the exact DOM operation counts
 #                       (test/view and the todo example).
 #   make test-release   Run the tests of the release files in Chrome:
 #                       kilim dist on the release builds of the loader tests
-#                       (test/loader) and of the examples (test/examples).
+#                       (test/loader) and of the examples (test/examples),
+#                       and the weak test (test/weak) on node.
 #   make browsers       Run the tests of test/dom, test/loader and
 #                       test/examples in Firefox and WebKit (Playwright),
 #                       and the tests of the release files of test/loader
@@ -95,8 +97,10 @@ budgets:
 	$(DUNE) exec test/view/test_view.exe -- -f budgets
 	$(DUNE) exec examples/todo/test/test_counts.exe
 
+# test/weak runs in the release profile too: there js_of_ocaml inlines more
+# functions, and an inlined closure can keep a variable alive.
 test-release:
-	$(DUNE) build --force @test/loader/runtest @test/examples/runtest --profile release
+	$(DUNE) build --force @test/loader/runtest @test/examples/runtest @test/weak/runtest --profile release
 
 # flake.nix has the shell `browsers` only on Linux.
 browsers:

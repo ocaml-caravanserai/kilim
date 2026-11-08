@@ -27,9 +27,8 @@ let map f t = bind t (fun x -> return (f x))
 
 (* The callback keeps only [cell]. The end of the step clears it, thus a JS
    callback that never runs does not keep the continuation alive. *)
-let make (start : Cancel.t -> ok:('a -> unit) -> error:(exn -> unit) -> unit) :
-    'a t =
- fun ctx ~ok ~error ->
+let started (start : Cancel.t -> ok:('a -> unit) -> error:(exn -> unit) -> unit)
+    ctx ~ok ~error =
   if not (Cancel.cancelled ctx.cancel) then begin
     let step = Cancel.child ctx.cancel in
     let cell = ref (Some (ok, error)) in
@@ -61,6 +60,18 @@ let make (start : Cancel.t -> ok:('a -> unit) -> error:(exn -> unit) -> unit) :
       else if Option.is_none !cell then Report.error e
       else finish snd e
   end
+
+(* In the release profile, js_of_ocaml can inline a function into its caller,
+   for example [make] into the [init] of a component. If the closures of the
+   step were in the JS function of the caller, they would share its JS context
+   (V8 keeps one shared context for the closures of one JS function). Then the
+   callback of a promise that never settles would keep the variables of the
+   caller (for example the model), also after the cancel clears [cell]. Thus the
+   closures of the step are made in [started], a separate function that
+   js_of_ocaml 6.4.1 does not inline into its caller, because it is too large.
+   This depends on the inlining rules of js_of_ocaml: the weak test in the
+   release profile (test/weak, make test-release) guards it. *)
+let make start : 'a t = fun ctx ~ok ~error -> started start ctx ~ok ~error
 
 (* A branch starts under its own token, through the trampoline. *)
 let branch ctx tok (t : 'a t) ~ok ~error =

@@ -1,14 +1,14 @@
-// The browser test of the examples (examples/counter and examples/todo). It
-// uses only the built-in modules of node, the browser interface
-// test/dom/browser.mjs and examples/serve.mjs.
+// The browser test of the examples (examples/counter, examples/todo and
+// examples/components). It uses only the built-in modules of node, the
+// browser interface test/dom/browser.mjs and examples/serve.mjs.
 //
 //   node run.mjs --kilim PATH --profile dev|release [--browser NAME] DIR...
 //
-// --browser NAME: chrome (the default), firefox or webkit. DIR is the build directory of an
-// example. Its name selects the script of the example. For each example, the
-// runner does two runs: a default browser (the wasm_of_ocaml build) and a
-// browser with no WebAssembly (browser.mjs, noWasm: the js_of_ocaml build).
-// Each run has a new page and a time limit of 30 s.
+// --browser NAME: chrome (the default), firefox or webkit. DIR is the build
+// directory of an example. Its name selects the script of the example. For
+// each example, the runner does two runs: a default browser (the
+// wasm_of_ocaml build) and a browser with no WebAssembly (browser.mjs, noWasm:
+// the js_of_ocaml build). Each run has a new page and a time limit of 30 s.
 //
 // dev: examples/serve.mjs serves DIR at /, with "no-cache". The page is the
 // index.html of the rule of docs/loader.md. release: the runner runs the
@@ -16,11 +16,11 @@
 // directory, and serves it at /static/ with the CSP of docs/loader.md
 // (Trusted Types included).
 //
-// The input is trusted input of DevTools (Playwright translates it): a click is a mouse press and a
-// release at the center of the element, text is Input.insertText after a
-// click on the input, and Enter is a key down with the text "\r" and a key
-// up. After each action, the runner polls the DOM until the expected state
-// comes, with a time limit.
+// The input is trusted input of DevTools (Playwright translates it): a click
+// is a mouse press and a release at the center of the element, text is
+// Input.insertText after a click on the input, and Enter is a key down with
+// the text "\r" and a key up. After each action, the runner polls the DOM
+// until the expected state comes, with a time limit.
 //
 // After the script, the runner waits 200 ms for late errors and warnings.
 // Chrome logs a preload that the page does not use about 3 s after the load,
@@ -171,6 +171,42 @@ const scripts = {
     await ui.insert('x'.repeat(81));
     await ui.until('an input event with 84 characters', 'window.kilimTest.longest === 84');
     await ui.until('the draft "abc" again', `${draft}.value === 'abc'`);
+  },
+  components: async (ui) => {
+    const out = (label, s) => ui.until(`"${label}" ${s}`, `${q.label(label)}?.textContent === '${s}'`);
+    const counter = (label) => `${q.label(`${label} count`)}.parentElement`;
+    const fruits = (labels) => ui.until(`the fruits ${JSON.stringify(labels)}`,
+      `JSON.stringify([...document.querySelectorAll('[aria-label=Fruits] li')].map((l) => l.textContent)) === ` +
+      JSON.stringify(JSON.stringify(labels)));
+    await ui.until('the start', `${q.label('Total')}?.textContent === '0'`, startMs);
+    // 1. The outputs of the counters give the total.
+    await ui.click(q.label('Increment Ones'));
+    await out('Ones count', '1');
+    await ui.click(q.label('Increment Tens'));
+    await out('Tens count', '10');
+    await out('Total', '11');
+    // 2. A new key resets the counters: new nodes.
+    await ui.read(`${q.label('Ones count')}.kilimMark = 1`);
+    await ui.click(q.text('Reset'));
+    await out('Total', '0');
+    await out('Ones count', '0');
+    await ui.until('a new node for the counter', `${q.label('Ones count')}.kilimMark === undefined`);
+    // 3. The counters read the theme.
+    await ui.click(q.text('Dark theme'));
+    await ui.until('the dark theme in the counters',
+      `${counter('Ones')}.className === 'counter dark' && ${counter('Tens')}.className === 'counter dark'`);
+    // 4. The filter box gives the query after the debounce.
+    await ui.type(q.label('Filter'), 'an');
+    await fruits(['Banana', 'Mango', 'Orange']);
+    // 5. The boundary shows the fallback, and the rest of the app works.
+    await ui.click(q.text('Clicks: 0'));
+    await ui.click(q.text('Break'));
+    await ui.until('the fallback', `document.querySelector('[role=alert]')?.textContent === 'The panel failed.Retry'`);
+    await ui.click(q.label('Increment Ones'));
+    await out('Total', '1');
+    await ui.click(q.text('Retry'));
+    await ui.click(q.text('Clicks: 0'));
+    await ui.until('the new panel works', q.text('Clicks: 1'));
   },
 };
 for (const d of dirs)
