@@ -11,6 +11,7 @@ and ('node, 'msg) shape = ('node, 'msg) Tree.shape =
       ; data: ('p, 'm, 'c, 'o) Tree.data
       ; child: ('node, 'c) node }
       -> ('node, 'msg) shape
+  | Boundary of ('node, 'msg) Tree.boundary
 
 and ('node, 'msg) element = ('node, 'msg) Tree.element =
   { ns: Dom.ns
@@ -29,9 +30,10 @@ type ('node, 'msg) ctx = ('node, 'msg) Tree.ctx =
   { ops: 'node Dom.t
   ; post: 'msg Dom.post
   ; ns: Dom.ns
-  ; controlled: ('node * Dom.cell) list ref
+  ; controlled: ('node * Dom.cell * 'node Tree.any_boundary option) list ref
   ; owner: ('node, 'msg) Tree.inst
-  ; env: 'node Tree.env }
+  ; env: 'node Tree.env
+  ; boundary: 'node Tree.any_boundary option }
 
 type ('node, 'msg) t = ('node, 'msg) Tree.mount =
   {ctx: ('node, 'msg) ctx; parent: 'node; root: ('node, 'msg) node}
@@ -49,7 +51,10 @@ type hooks =
   ; walk: 'node 'msg. 'node Tree.env -> ('node, 'msg) node -> unit
   ; walk_children:
       'node 'msg. 'node Tree.env -> ('node, 'msg) Tree.children -> unit
-  ; flush: 'node. 'node Tree.env -> (exn -> unit) -> bool }
+  ; flush:
+      'node.
+      'node Tree.env -> ('node Tree.any_boundary option -> exn -> unit) -> bool
+  }
 
 let no_component () = invalid_arg "kilim: a component node with no Component.v"
 
@@ -62,19 +67,62 @@ let hooks =
     ; walk_children= (fun _ _ -> ())
     ; flush= (fun _ _ -> false) }
 
-(* The DOM node of a retained node. A component node is transparent: its DOM
-   node is the DOM node of the root of the view of its instance. A text and an
-   element keep their DOM node in [dom]. *)
+(* The functions of the boundary nodes (Boundary). View.boundary installs
+   them. *)
+type bounds =
+  { build_boundary:
+      'node 'msg.
+      ('node, 'msg) ctx -> 'node -> 'msg View.boundary -> ('node, 'msg) node
+  ; patch_boundary:
+      'node 'msg.
+         ('node, 'msg) ctx
+      -> 'node
+      -> ('node, 'msg) node
+      -> 'msg View.boundary
+      -> unit
+  ; show:
+      'node 'msg. 'node Tree.env -> ('node, 'msg) Tree.boundary -> exn -> unit
+  ; fail: 'node. 'node Tree.env -> 'node Tree.any_boundary -> exn -> unit
+  ; write:
+      'node.
+         'node Tree.env
+      -> 'node Tree.any_boundary
+      -> 'node Dom.t
+      -> 'node
+      -> Dom.cell
+      -> unit }
+
+let no_boundary () = invalid_arg "kilim: a boundary node with no View.boundary"
+
+let bounds =
+  ref
+    { build_boundary= (fun _ _ _ -> no_boundary ())
+    ; patch_boundary= (fun _ _ _ _ -> no_boundary ())
+    ; show= (fun _ _ _ -> ())
+    ; fail= (fun _ _ _ -> ())
+    ; write= (fun _ _ _ _ _ -> ()) }
+
+(* The DOM node of a retained node. A component node and a boundary node are
+   transparent: the DOM node of a component node is the DOM node of the root of
+   the view of its instance, and the DOM node of a boundary node is the DOM node
+   of its child. A text and an element keep their DOM node in [dom]. *)
 let rec dom : 'node 'msg. ('node, 'msg) node -> 'node =
  fun r ->
-  match r.shape with Comp c -> dom c.child | Text _ | Element _ -> r.dom
+  match r.shape with
+  | Comp c ->
+      dom c.child
+  | Boundary b ->
+      dom b.child
+  | Text _ | Element _ ->
+      r.dom
 
-(* With no child instance, the view of the owner has no component node: no walk.
-   Thus an app with no component keeps the cost of Phase 1. *)
+(* With no child instance and no boundary, the view of the owner has no
+   component node and no boundary node: no walk. Thus an app with no component
+   keeps the cost of Phase 1. *)
 let has_children (ctx : _ ctx) =
-  ( Dlist.length ctx.owner.children
-  > 0 )
-  [@mutate off "a pure shortcut: the walk finds no component node"]
+  ( Dlist.length ctx.owner.children > 0
+  || match ctx.owner.owned with Some l -> Dlist.length l > 0 | None -> false )
+  [@mutate off "a pure shortcut: the walk finds no component or boundary node"]
 
 let gone ctx r = if has_children ctx then !hooks.walk ctx.env r
 
@@ -311,7 +359,7 @@ let control ctx d (cell : Dom.cell) (ve : _ View.element) =
   | None, None ->
       ()
   | Some _, _ | _, Some _ ->
-      ctx.controlled := (d, cell) :: !(ctx.controlled)
+      ctx.controlled := (d, cell, ctx.boundary) :: !(ctx.controlled)
 
 (* The composition flag stops a [value] write only while the element has the
    focus. A composition cannot go on in an element with no focus. A move or a
@@ -344,6 +392,15 @@ let set_props (ops : _ Dom.t) (d, (cell : Dom.cell)) =
 
 let restore ops d cell = set_props ops (d, cell)
 
+(* The properties of an element in a boundary go to [write] of {!bounds}. With
+   no boundary, an exception stops the run and goes to the root catch. *)
+let write ctx (d, cell, b) =
+  match b with
+  | None ->
+      set_props ctx.ops (d, cell)
+  | Some b ->
+      !bounds.write ctx.env b ctx.ops d cell
+
 (* [run ctx f] runs [f ()], then writes the properties of the controlled
    elements, in the order of their end tags in the document: a child before its
    parent. A mount and a patch thus write in the same order, and give the same
@@ -354,7 +411,7 @@ let restore ops d cell = set_props ops (d, cell)
 let run ctx f =
   ctx.controlled := [] ;
   let x = f () in
-  List.iter (set_props ctx.ops) (List.rev !(ctx.controlled)) ;
+  List.iter (write ctx) (List.rev !(ctx.controlled)) ;
   x
 
 (* [has k l] is [true] if the list [l] of pairs has the name [k]. *)
@@ -478,6 +535,8 @@ let rec build :
       }
   | View.Comp c ->
       !hooks.build ctx parent c
+  | View.Boundary b ->
+      !bounds.build_boundary ctx parent b
 
 (* Build each view and append it to [d]. If a DOM operation raises, [on_error]
    gets the nodes that are in [d], before the exception goes on. *)
@@ -524,6 +583,8 @@ and patch_node :
       patch_element ctx r.dom e ve
   | Comp _, View.Comp c ->
       !hooks.patch ctx parent r c
+  | Boundary _, View.Boundary b ->
+      !bounds.patch_boundary ctx parent r b
   | _ ->
       replace ctx parent r v
 
@@ -748,6 +809,7 @@ let env () : _ Tree.env =
   { post= (fun _ -> {Dom.post= (fun _ _ -> ())})
   ; command= (fun _ _ -> ())
   ; viewed= ignore
+  ; caught= ignore
   ; serial= 1
   ; work= Instance.Work.empty
   ; passes= false
@@ -756,7 +818,9 @@ let env () : _ Tree.env =
 
 let mount ops ~parent ~post v =
   let owner = Instance.root (Cancel.root ()) in
-  start {ops; post; ns= Html; controlled= ref []; owner; env= env ()} ~parent v
+  start
+    {ops; post; ns= Html; controlled= ref []; owner; env= env (); boundary= None}
+    ~parent v
 
 let patch t v = run t.ctx (fun () -> patch_node t.ctx t.parent t.root v)
 
@@ -775,6 +839,8 @@ let rec children : 'node 'msg. ('node, 'msg) node -> 'node child list option =
       None
   | Comp c ->
       children c.child
+  | Boundary b ->
+      children b.child
   | Element e -> (
     match e.children with
     | Plain a | Keyed (_, a) ->

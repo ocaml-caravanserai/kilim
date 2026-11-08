@@ -17,7 +17,11 @@ type ('p, 'm, 'msg, 'o) id =
   { tid: ('p * 'm * 'msg * 'o) Type.Id.t
   ; mutable last: ('p, 'm, 'msg, 'o) spec option }
 
-and 'msg t = Text of string | Element of 'msg element | Comp of 'msg comp
+and 'msg t =
+  | Text of string
+  | Element of 'msg element
+  | Comp of 'msg comp
+  | Boundary of 'msg boundary
 
 and 'msg element =
   { name: string
@@ -47,6 +51,8 @@ and 'msg comp =
       ; on: 'o -> 'msg
       ; props: 'p }
       -> 'msg comp
+
+and 'msg boundary = {key: string option; fallback: exn -> 'msg t; child: 'msg t}
 
 let id () = {tid= Type.Id.make (); last= None}
 

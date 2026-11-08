@@ -9,7 +9,11 @@ let refused f =
   raises_match (Exn.invalid_arg ~substring:"kilim") (fun () -> ignore (f ()))
 
 let element (v : string View.t) =
-  match v with V.Element e -> e | V.Text _ | V.Comp _ -> fail "not an element"
+  match v with
+  | V.Element e ->
+      e
+  | V.Text _ | V.Comp _ | V.Boundary _ ->
+      fail "not an element"
 
 let refused_elements =
   [ "script"

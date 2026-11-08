@@ -2042,6 +2042,66 @@ let d42 () =
   check "D42 the stop removes the DOM" (children root = 0) ;
   Fut.return ()
 
+(* D43: a file input with a value in a boundary, at the first render and in a
+   patch. The diff writes [value], and the real DOM throws InvalidStateError:
+   the boundary shows its fallback with the exception, the rest of the app
+   works, and no exception is uncaught. A boundary catch does not call the error
+   handler: no console.error. *)
+type d43 = Pick | Incr
+
+let d43_app file =
+  App.make
+    ~init:(fun () -> ((file, 0), Cmd.none))
+    ~update:(fun (file, n) -> function
+      | Pick -> ((true, n), Cmd.none) | Incr -> ((file, n + 1), Cmd.none) )
+    ~view:(fun (file, n) ->
+      El.div
+        [ button ~id:"pick" Pick "pick"
+        ; button ~id:"inc" Incr (string_of_int n)
+        ; View.boundary
+            ~fallback:(fun e ->
+              El.span
+                ~at:[At.data "testid" "fb"]
+                [ txt
+                    ( match e with
+                    | Jv.Error j ->
+                        Jstr.to_string (Jv.Error.name j)
+                    | _ ->
+                        "other" ) ] )
+            ( if file then El.input ~at:[At.type_ "file"; At.value "x"] ()
+              else txt "none" ) ] )
+    ()
+
+let d43 () =
+  (* The first render. *)
+  let e = console_errors () in
+  let root, a = start (d43_app true) in
+  check "D43 a file input with a value at the first render: the fallback"
+    ( String.equal (text (q root "fb")) "InvalidStateError"
+    && (stats a).caught = 1 && (ins a).alive
+    && console_errors () = e ) ;
+  let* () = click (q root "inc") in
+  check "D43 after the first render, the app works"
+    (String.equal (text (q root "inc")) "1" && console_errors () = e) ;
+  B.stop a ;
+  (* A patch. *)
+  let root, a = start (d43_app false) in
+  let e = console_errors () in
+  let* () = click (q root "pick") in
+  check "D43 a file input with a value: the boundary shows its fallback"
+    ( String.equal (text (q root "fb")) "InvalidStateError"
+    && (stats a).caught = 1
+    && console_errors () = e ) ;
+  let* () = click (q root "inc") in
+  let* () = click (q root "inc") in
+  check "D43 the rest of the app works"
+    ( String.equal (text (q root "inc")) "2"
+    && String.equal (text (q root "fb")) "InvalidStateError"
+    && (ins a).alive
+    && console_errors () = e ) ;
+  B.stop a ;
+  Fut.return ()
+
 let tests =
   [ d2
   ; d3
@@ -2083,7 +2143,8 @@ let tests =
   ; d39
   ; d40
   ; d41
-  ; d42 ]
+  ; d42
+  ; d43 ]
 
 let () =
   ignore (Lazy.force spy) ;

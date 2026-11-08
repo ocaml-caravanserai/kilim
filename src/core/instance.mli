@@ -49,7 +49,11 @@ type 'msg state = 'msg Tree.state =
     - [alive], [token] (made at the first task), [latest], [dirty] (the model
       changed since the last render), [runs] and [autos] (the recorded
       subscription keys), [early_stale] (the model changed since the last
-      subscription pass) and [state] ([None] after the unmount). *)
+      subscription pass) and [state] ([None] after the unmount).
+    - [member]: the node of the instance in the member list of its boundary (see
+      {!boundary}).
+    - [owned]: the live boundaries in the view of the instance. The list comes
+      at the first boundary. *)
 type ('node, 'msg) t = ('node, 'msg) Tree.inst
 
 type 'node any = 'node Tree.any = Any : ('node, 'msg) t -> 'node any
@@ -58,13 +62,14 @@ type 'node env = 'node Tree.env
 
 (** The parts of the instance operations that only components need.
     [Component.v] installs them (see {!Reconcile}): [detach env i] removes [i]
-    from the work queue and from the child list of its parent, clears [parent]
-    and [mount], and unmounts each child. [enqueue env i] puts [i] in the work
-    queue. It also puts [i] in the list of the early call ([stale] of the env)
-    if [early_stale] is [false] (thus one entry for each pass), if the env has
-    subscription passes, and if [i] has subscriptions to compare. {!changed}
-    calls it before it sets [early_stale]. The default does nothing: an app with
-    no component has only the root. *)
+    from the work queue, from the child list of its parent and from the member
+    list of its boundary, clears [parent] and [mount], unlinks each boundary of
+    its view from its lists, and unmounts each child. [enqueue env i] puts [i]
+    in the work queue. It also puts [i] in the list of the early call ([stale]
+    of the env) if [early_stale] is [false] (thus one entry for each pass), if
+    the env has subscription passes, and if [i] has subscriptions to compare.
+    {!changed} calls it before it sets [early_stale]. The default does nothing:
+    an app with no component has only the root. *)
 type ext =
   { detach: 'node 'msg. 'node env -> ('node, 'msg) t -> unit
   ; enqueue: 'node 'msg. 'node env -> ('node, 'msg) t -> unit }
@@ -75,9 +80,14 @@ val root : Cancel.t -> ('node, 'msg) t
 (** [root base] is a live root instance with no state, no token and no key, at
     depth 0. *)
 
-val child : 'node env -> ('node, 'p) t -> ('node, 'msg) t
-(** [child env p] is a new instance under [p], with the next serial of [env]. If
-    [p] is alive, the instance is alive and first in the child list of [p]. If
+val child :
+     'node env
+  -> ('node, 'p) t
+  -> 'node Tree.any_boundary option
+  -> ('node, 'msg) t
+(** [child env p b] is a new instance under [p], with the next serial of [env].
+    If [p] is alive, the instance is alive and first in the child list of [p],
+    and [b] is its boundary: the instance is first in the member list of [b]. If
     not (a component in the root fallback), the instance is dead and in no list:
     its commands do not run and its messages are dropped, but it renders one
     time as a part of the fallback. *)
@@ -87,6 +97,11 @@ val token : ('node, 'msg) t -> Cancel.t
     token yet, the ancestors get their tokens first, from the top: thus the
     token of a child is always under the token of its parent. The token of the
     root is a child of [base]. A dead instance gets a cancelled token. *)
+
+val boundary : ('node, 'msg) t -> 'node Tree.any_boundary option
+(** The nearest boundary above a live instance, from its mount: the boundary of
+    the context of its view. [None] for the root catch, and after the unmount.
+*)
 
 val changed : 'node env -> ('node, 'msg) t -> unit
 (** The model changed: sets [dirty] and [early_stale]. An instance below the
@@ -98,12 +113,13 @@ val clean : 'node env -> ('node, 'msg) t -> unit
 
 val unmount : 'node env -> ('node, 'msg) t -> unit
 (** Clears [alive] and [dirty], calls [detach] of {!ext} (thus leaves the work
-    queue and the child list of its parent, clears [parent] and [mount], and
-    unmounts each child, also for a dead instance), cancels the token (thus each
-    subscription stops), cancels the token of each recorded key (also of a task
-    that ended), empties [latest], [runs] and [autos], and sets [state] to
-    [None]. Thus a dead instance keeps no model, no DOM node and no child. A
-    subscription pass does nothing for an instance with no state, thus
-    [early_stale] does not matter after the unmount. The runtime never makes a
-    dead instance dirty again. Thus after a root catch, the write of the
-    fallback is the last render of the root. A second call does nothing. *)
+    queue and its lists, clears [parent] and [mount], unlinks the boundaries of
+    its view, and unmounts each child, also for a dead instance), cancels the
+    token (thus each subscription stops), cancels the token of each recorded key
+    (also of a task that ended), empties [latest], [runs] and [autos], and sets
+    [state] to [None]. Thus a dead instance keeps no model, no DOM node, no
+    boundary and no child. A subscription pass does nothing for an instance with
+    no state, thus [early_stale] does not matter after the unmount. The runtime
+    never makes a dead instance dirty again. Thus after a root catch, the write
+    of the fallback is the last render of the root. A second call does nothing.
+*)

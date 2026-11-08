@@ -7,8 +7,9 @@
    the mount. *)
 type pos = {depth: int; serial: int}
 
-(* The work queue of a render: the dirty live instances below the root. The
-   render takes the smallest place first, thus it goes from the top. *)
+(* The work queue of a render: the dirty live instances below the root, and the
+   failed boundaries whose fallback is not in the DOM. The render takes the
+   smallest place first, thus it goes from the top. *)
 module Work = Map.Make (struct
   type t = pos
 
@@ -63,6 +64,7 @@ and ('node, 'msg) shape =
                parent keeps the DOM node here until the diff removes the
                component node. *) }
       -> ('node, 'msg) shape
+  | Boundary of ('node, 'msg) boundary
 
 and ('node, 'msg) element =
   { ns: Dom.ns
@@ -94,7 +96,14 @@ and ('node, 'msg) inst =
   ; mutable runs: Cancel.t Subs.t
   ; mutable autos: 'msg auto Subs.t
   ; mutable early_stale: bool
-  ; mutable state: 'msg state option }
+  ; mutable state: 'msg state option
+  ; mutable member: 'node any Dlist.node option
+        (* The node of the instance in the member list of its boundary. The
+           boundary itself is the boundary of the context of [mount]. *)
+  ; mutable owned: 'node any_boundary Dlist.t option
+        (* The live boundaries in the view of the instance. The list comes at
+           the first boundary: an instance with no boundary saves its words. *)
+  }
 
 and ('node, 'msg) mount =
   { ctx: ('node, 'msg) ctx
@@ -103,19 +112,59 @@ and ('node, 'msg) mount =
 
 and 'node any = Any : ('node, 'msg) inst -> 'node any
 
+(* A boundary node (design section 09). Its [owner] is the owner of [ctx], and
+   its outer boundary is the boundary of [ctx]. [ctx] is the context of the diff
+   at its place: the fallback gets it. [inner] is the context of its child: the
+   same, with this boundary. *)
+and ('node, 'msg) boundary =
+  { place: pos (* The depth of the owner, and a serial of the instances. *)
+  ; key: string option
+  ; ctx: ('node, 'msg) ctx
+  ; mutable inner: ('node, 'msg) ctx
+  ; dom_parent: 'node (* A keyed move stays in one parent. *)
+  ; mutable fallback: exn -> 'msg View.t (* The newest. *)
+  ; members: 'node any Dlist.t
+        (* The live instances whose boundary this is, the newest first. *)
+  ; nested: 'node any_boundary Dlist.t
+        (* The live boundaries whose outer boundary this is. *)
+  ; mutable owned_link: 'node any_boundary Dlist.node option
+        (* The node in the owned list of the owner. *)
+  ; mutable nested_link: 'node any_boundary Dlist.node option
+        (* The node in the nested list of the outer boundary. *)
+  ; mutable live: bool
+        (* In the lists: the owner is alive and the node is in its view. *)
+  ; mutable left: bool
+        (* The node left the tree: a removal, a new key, the catch of an outer
+           boundary or the unmount of the owner. A boundary of a dead owner (in
+           the root fallback) is in no list, but it has not left. *)
+  ; mutable failed: exn option
+  ; mutable shown: bool (* After an error: the fallback is in the DOM. *)
+  ; mutable child: ('node, 'msg) node
+        (* The child, or the fallback subtree after an error. *) }
+
+and 'node any_boundary = Bound : ('node, 'msg) boundary -> 'node any_boundary
+
+(* An entry of the work queue: a dirty instance, or a failed boundary whose
+   fallback is not in the DOM. *)
+and 'node work =
+  | Inst : ('node, 'msg) inst -> 'node work
+  | Show : {b: ('node, 'msg) boundary; e: exn} -> 'node work
+
 (* The context of the diff of the view of [owner]. [controlled] holds the
-   elements with a controlled property in the view, in reverse order: the diff
-   writes their properties after all the other operations of the patch. The diff
-   patches and builds the nodes in the order of the document, thus the order of
-   [controlled] is the order of the end tags. One render shares one list:
-   renders never nest. *)
+   elements with a controlled property in the view, with their boundaries, in
+   reverse order: the diff writes their properties after all the other
+   operations of the patch. The diff patches and builds the nodes in the order
+   of the document, thus the order of [controlled] is the order of the end tags.
+   One render shares one list: renders never nest. [boundary] is the nearest
+   boundary above the place. *)
 and ('node, 'msg) ctx =
   { ops: 'node Dom.t
   ; post: 'msg Dom.post
   ; ns: Dom.ns
-  ; controlled: ('node * Dom.cell) list ref
+  ; controlled: ('node * Dom.cell * 'node any_boundary option) list ref
   ; owner: ('node, 'msg) inst
-  ; env: 'node env }
+  ; env: 'node env
+  ; boundary: 'node any_boundary option }
 
 (* The parts of the runtime that a mount of an instance needs. *)
 and 'node env =
@@ -123,8 +172,9 @@ and 'node env =
         (* The post of the cells of the view of an instance. *)
   ; command: 'msg. ('node, 'msg) inst -> 'msg Cmd.t -> unit
   ; viewed: unit -> unit (* Counts a call of a view. *)
-  ; mutable serial: int (* The serial of the next instance. *)
-  ; mutable work: 'node any Work.t
+  ; caught: unit -> unit (* Counts a boundary catch. *)
+  ; mutable serial: int (* The serial of the next instance or boundary. *)
+  ; mutable work: 'node work Work.t
   ; passes: bool
         (* The runtime compares the subscriptions, thus [stale] and [touched]
            record the instances. A diff with no runtime has [false]. *)

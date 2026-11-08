@@ -66,13 +66,23 @@ let gen_text = Gen.map txt (Gen.of_list ["a"; "b"; "c"])
 
 let rec gen_view d =
   if d = 0 then gen_text
-  else Gen.frequency [(1, gen_text); (3, gen_element d); (1, gen_comp d)]
+  else
+    Gen.frequency
+      [(1, gen_text); (3, gen_element d); (1, gen_comp d); (1, gen_boundary d)]
 
 (* A component whose view is its props, with no key or a key: decision 12 of the
    Phase 2 plan review. *)
 and gen_comp d =
   Gen.map
     (fun (key, v) -> wrap ?key v)
+    (Gen.pair (Gen.of_list [None; Some "a"; Some "b"]) (gen_view (d - 1)))
+
+(* A boundary with no key or a key, and a fallback: decision 12 of the Phase 2
+   plan review. With no error, the boundary is transparent. *)
+and gen_boundary d =
+  Gen.map
+    (fun (key, v) ->
+      View.boundary ?key ~fallback:(fun _ -> El.i [txt "fallback"]) v )
     (Gen.pair (Gen.of_list [None; Some "a"; Some "b"]) (gen_view (d - 1)))
 
 and gen_element d =
@@ -226,6 +236,9 @@ let rec identity (a : string View.t) (b : string View.t) (Sh (n, kids)) n' =
         identity ca.props cb.props (Sh (n, kids)) n'
     | _ ->
         () )
+  | V.Boundary ba, V.Boundary bb when ba.key = bb.key ->
+      (* The boundary stays, and its DOM node is the DOM node of its child. *)
+      identity ba.child bb.child (Sh (n, kids)) n'
   | V.Element ea, V.Element eb when String.equal ea.name eb.name -> (
       is_true ~msg:"an element stays" (n == n') ;
       let kids' = F.children n' in
@@ -252,6 +265,27 @@ let rec identity (a : string View.t) (b : string View.t) (Sh (n, kids)) n' =
   | _ ->
       ()
 
+let rec has_boundary (v : string View.t) =
+  match v with
+  | V.Text _ ->
+      false
+  | V.Boundary _ ->
+      true
+  | V.Comp (V.C {spec; props; _}) -> (
+    match Type.Id.provably_equal spec.id.tid Wrap.id.tid with
+    | Some Type.Equal ->
+        has_boundary props
+    | None ->
+        false )
+  | V.Element e -> (
+    match e.children with
+    | V.Plain l ->
+        List.exists has_boundary l
+    | V.Keyed l ->
+        List.exists (fun (_, v) -> has_boundary v) l
+    | V.Inner _ ->
+        false )
+
 let step p a b =
   let sh = capture (node p) in
   patch p b ;
@@ -269,6 +303,8 @@ let rec size (v : string View.t) =
         1 + size props
     | None ->
         1 )
+  | V.Boundary b ->
+      1 + size b.child
   | V.Element e -> (
       1
       +
@@ -383,7 +419,8 @@ let duplicate_law (a, b) =
    attributes and the listeners of a failed patch exact, thus [~again] is for
    the keyed lists only. After the fault, the order of the retained children can
    be different from the DOM, thus the new patch gives the right nodes, but not
-   always in the right order. *)
+   always in the right order. A boundary catches a fault in its child: then the
+   patch gives no exception. *)
 let fault_law ?again (a, b) =
   let p = mount a in
   patch p b ;
@@ -393,7 +430,9 @@ let fault_law ?again (a, b) =
     F.fail_at p.doc k ;
     ( match Diff.patch p.tree b with
     | () ->
-        fail "no fault"
+        if Option.is_none again then
+          is_true ~msg:"a boundary caught the fault" (has_boundary b)
+        else fail "no fault"
     | exception F.Fault ->
         () ) ;
     check_tree ~order:false p ;

@@ -1,6 +1,7 @@
 (* The big loops of the instance tree in each build (design section 14): the
-   leak counts after 1,000 repetitions, and the supported nesting depth of the
-   components (decision 15 of the Phase 2 plan review). *)
+   leak counts after 1,000 repetitions, the supported nesting depth of the
+   components (decision 15 of the Phase 2 plan review), and the lists of the
+   boundaries. *)
 
 open Kilim
 module H = Kilim_testing.Host
@@ -83,6 +84,133 @@ let rows check =
   P.stop p ;
   check "no timer after the stop" (H.live_timers h = 0)
 
+(* A live owner replaces 100 rows, each with its own boundary, 1,000 times, in a
+   boundary that stays: each list has no dead entry, and each list is empty at
+   the end. *)
+let boundary_rows check =
+  let row i = View.boundary ~fallback:(fun _ -> txt "") (timed i) in
+  let _, p =
+    start (fun m ->
+        View.boundary
+          ~fallback:(fun _ -> txt "")
+          (View.keyed El.ul
+             (List.init
+                (if m <= 1_000 then 100 else 0)
+                (fun i -> (Key.int ((m * 100) + i), row i)) ) ) )
+  in
+  let ok = ref true in
+  for _ = 1 to 1_000 do
+    click p ;
+    let t = P.tree p in
+    if t.owned_links <> 101 || t.member_links <> 100 || t.nested_links <> 100
+    then ok := false
+  done ;
+  check "1,000 replacements of 100 boundary rows: no dead entry" !ok ;
+  click p ;
+  let t = P.tree p in
+  check "then each list is empty"
+    (t.owned_links = 1 && t.member_links = 0 && t.nested_links = 0 && empty p)
+
+(* A page of 20 cards, each with its own boundary. *)
+module Cards = struct
+  type props = int
+
+  type model = unit
+
+  type msg = unit
+
+  type out = none
+
+  let id : (props, model, msg, out) C.id = C.id ()
+
+  let init _ = ((), Cmd.none)
+
+  let update _ _ () () = ((), Cmd.none)
+
+  let view n () =
+    El.div
+      (List.init 20 (fun i ->
+           View.boundary ~fallback:(fun _ -> txt "") (timed ((n * 20) + i)) ) )
+
+  let subs _ _ = Sub.none
+
+  let equal_props = Int.equal
+end
+
+let card_pages check =
+  let _, p =
+    start (fun m ->
+        View.boundary
+          ~fallback:(fun _ -> txt "")
+          ( if m <= 1_000 then
+              C.v (module Cards) ~key:(string_of_int m) ~on:never m
+            else txt "" ) )
+  in
+  let ok = ref true in
+  for _ = 1 to 1_000 do
+    click p ;
+    if (P.tree p).nested_links <> 20 then ok := false
+  done ;
+  click p ;
+  check "1,000 pages of 20 cards, each with a boundary: 0 nested entries"
+    (!ok && (P.tree p).nested_links = 0 && empty p)
+
+(* A row whose init raises. *)
+module Failing = struct
+  type props = int
+
+  type model = unit
+
+  type msg = unit
+
+  type out = none
+
+  let id : (props, model, msg, out) C.id = C.id ()
+
+  let init _ = raise Exit
+
+  let update _ _ () () = ((), Cmd.none)
+
+  let view _ () = txt ""
+
+  let subs _ _ = Sub.none
+
+  let equal_props = Int.equal
+end
+
+(* 100,000 rows that each fail in their own boundary: one render, and the cost
+   of each catch is linear in its subtree (no time check). *)
+let failing_rows check =
+  let n = 100_000 in
+  let _, p =
+    start (fun m ->
+        View.keyed El.ul
+          (List.init
+             (if m = 1 then n else 0)
+             (fun i ->
+               ( Key.int i
+               , View.boundary
+                   ~fallback:(fun _ -> El.li [txt "x"])
+                   (C.v (module Failing) ~on:never i) ) ) ) )
+  in
+  let r = (P.stats p).renders in
+  click p ;
+  let ul =
+    List.hd
+      (List.tl
+         (Kilim_testing.Fake_dom.children
+            (List.hd (Kilim_testing.Fake_dom.children (P.root p))) ) )
+  in
+  check "100,000 rows that fail in their own boundary: one render"
+    ( (P.stats p).renders = r + 1
+    && (P.stats p).caught = n
+    && List.length (Kilim_testing.Fake_dom.children ul) = n
+    && (P.tree p).owned_links = n
+    && (P.tree p).member_links = 0
+    && (P.inspect p).alive ) ;
+  click p ;
+  check "then the removal unlinks each boundary" ((P.tree p).owned_links = 0)
+
 (* A chain of components: the view of level [n] has the level [n - 1] in a
    [div], and the last level has a task. The props carry a value: a change at
    the top renders each level. *)
@@ -147,4 +275,11 @@ let siblings check =
 (* The supported depth: under js_of_ocaml on node 24 with the default stack, a
    first patch of a chain of 650 levels overflows the stack, and 600 levels
    work. *)
-let run check = mounts check ; rows check ; siblings check ; nesting check 500
+let run check =
+  mounts check ;
+  rows check ;
+  siblings check ;
+  nesting check 500 ;
+  boundary_rows check ;
+  card_pages check ;
+  failing_rows check

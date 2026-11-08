@@ -48,3 +48,10 @@ let iter f l =
     if not last then go x
   in
   match l.first with Some n -> go n | None -> ()
+
+let rec drain f x l =
+  match l.first with
+  | Some n ->
+      remove n ; f x n.value ; drain f x l
+  | None ->
+      ()

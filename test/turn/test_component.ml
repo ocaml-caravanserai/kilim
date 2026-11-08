@@ -439,6 +439,7 @@ let dead_token () =
     { post= (fun _ -> Private.Dom.post_now ignore)
     ; command= (fun _ _ -> ())
     ; viewed= ignore
+    ; caught= ignore
     ; serial= 1
     ; work= I.Work.empty
     ; passes= true
@@ -446,19 +447,19 @@ let dead_token () =
     ; touched= [] }
   in
   let root : (F.node, unit) I.t = I.root (Private.Cancel.root ()) in
-  let a : (F.node, unit) I.t = I.child env root in
-  let b : (F.node, unit) I.t = I.child env a in
+  let a : (F.node, unit) I.t = I.child env root None in
+  let b : (F.node, unit) I.t = I.child env a None in
   is_false ~msg:"a live child" (Cancel.cancelled (I.token b)) ;
   equal int ~msg:"the ancestors first" 1
     (Private.Cancel.children (I.token root)) ;
-  let c : (F.node, unit) I.t = I.child env a in
+  let c : (F.node, unit) I.t = I.child env a None in
   I.unmount env a ;
   is_false ~msg:"no child stays" (Private.Cancel.children (I.token root) > 0) ;
   is_true ~msg:"a dead child" (Cancel.cancelled (I.token c)) ;
-  let d : (F.node, unit) I.t = I.child env root in
+  let d : (F.node, unit) I.t = I.child env root None in
   I.unmount env d ;
   is_true ~msg:"a dead instance with no token" (Cancel.cancelled (I.token d)) ;
-  let e : (F.node, unit) I.t = I.child env d in
+  let e : (F.node, unit) I.t = I.child env d None in
   is_true ~msg:"a child of a dead instance" (Cancel.cancelled (I.token e))
 
 exception Boom

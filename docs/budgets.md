@@ -11,7 +11,7 @@ pull request.
 | Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size` and the todo example | Done |
 | DOM operations for each action | Yes, each change | `test/view/test_budget.ml`: the four actions, exact counts. `examples/todo/test/test_counts.ml`: three actions of the todo example | Done |
 | Allocations for each action | Yes, each change | `bench/alloc`: the allocated words of the four actions | Done |
-| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances and child links, 100 times), `test/cross` (the same, 1,000 times, in the three builds), and test D25 of `test/dom` (listeners, timers, DOM, in Chrome) | Done |
+| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links and the lists of the boundaries, 100 times), `test/cross` (the same, 1,000 times, in the three builds), and test D25 of `test/dom` (listeners, timers, DOM, in Chrome) | Done |
 | Partial update | Yes, each change | `test/view/test_budget.ml`: three actions on 1,000 keyed component rows, exact counts of the views and of the DOM operations. `bench/alloc`: the allocated words of two actions | Done |
 | Token release | Yes, each change | `test/view/test_budget.ml`: the operations on the token lists when the parent removes 1,000 and 2,000 component rows | Done |
 | Linked modules | Yes, each change | `test/link` (kilim, kilim.browser) | Done |
@@ -46,12 +46,12 @@ Measured with OCaml 5.5.1, js_of_ocaml and wasm_of_ocaml 6.4.1, Brr 0.0.9:
 
 | Program | File | Measured | Budget |
 |---|---|---|---|
-| `counter` | `counter.bc.js` (js_of_ocaml) | 37,400 bytes | 38,500 bytes |
-| `counter` | The main `.wasm` file (wasm_of_ocaml) | 37,118 bytes | 38,000 bytes |
-| `counter` | `counter.bc.wasm.js` (the launcher) | 6,890 bytes | 7,500 bytes |
-| `example-todo` | `main.bc.js` (js_of_ocaml) | 39,211 bytes | 41,000 bytes |
-| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 39,526 bytes | 40,500 bytes |
-| `example-todo` | `main.bc.wasm.js` (the launcher) | 6,885 bytes | 7,500 bytes |
+| `counter` | `counter.bc.js` (js_of_ocaml) | 37,522 bytes | 38,500 bytes |
+| `counter` | The main `.wasm` file (wasm_of_ocaml) | 37,400 bytes | 38,000 bytes |
+| `counter` | `counter.bc.wasm.js` (the launcher) | 6,889 bytes | 7,500 bytes |
+| `example-todo` | `main.bc.js` (js_of_ocaml) | 39,370 bytes | 41,000 bytes |
+| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 39,844 bytes | 40,500 bytes |
+| `example-todo` | `main.bc.wasm.js` (the launcher) | 6,886 bytes | 7,500 bytes |
 
 The instance tree of Phase 2 adds about 0.4 KB (js_of_ocaml) and 0.6 KB
 (wasm_of_ocaml) to the counter, which has no component: before it, the
@@ -78,6 +78,22 @@ can have an output. The budgets do not change. A component with
 click on 1 of 1,000 such component rows allocates 353 words in its turn
 (with the dispatch of the fake DOM), and 389 words if each row has its own
 `subs`.
+
+The boundaries add about 0.1 KB (js_of_ocaml) and 0.3 KB (wasm_of_ocaml) to
+the counter, which has no boundary: before them, the counter was 37,400 bytes
+(js_of_ocaml) and 37,118 bytes (the main `.wasm` file). The cost is the code
+that each app links: the boundary node in the diff, the boundary of each
+controlled property, the routing of an error to a boundary in the runtime,
+the loop of the render, and two fields of the instance record. The code that
+only boundaries need is in `Boundary`: the build and the patch of a boundary
+node, the catch inside and outside the diff, the write of a fallback, and the
+write of a controlled property in a boundary. The instance record gets its
+list of owned boundaries only at its first boundary: a component row with no
+boundary allocates 222 words at its mount, against 219 words before the
+boundaries (on a null DOM, with no runtime). `View.boundary` installs these functions in the diff, thus the dead
+code elimination removes them from an app with no boundary, in the two builds
+(a test string in `Boundary` was not in the release files of the counter and
+of the todo example). The budgets do not change.
 
 The baseline is a minimal Brr program, because Brr links `Fun` and thus
 `Printf` (design section 13): 23,845 bytes (js_of_ocaml), and 17,217 bytes

@@ -1,6 +1,6 @@
 (* The leak tests of the turn (design section 14): the latest table, the task
-   tokens, the subscription keys, the timers and the model of a root that
-   failed. *)
+   tokens, the subscription keys, the timers, the model of a root that failed,
+   the instance links and the lists of the boundaries. *)
 
 open Windtrap
 open Kilim
@@ -223,6 +223,158 @@ let row_links () =
   equal int 0 (H.live_timers h) ;
   no_errors p
 
+(* A live owner replaces 100 boundary rows 10 times, in a boundary that stays:
+   each list has no dead entry. With [own], each row has its own boundary. *)
+let boundary_rows own () =
+  let h = H.create () in
+  let row i =
+    if own then View.boundary ~fallback:(fun _ -> txt "") (timed i) else timed i
+  in
+  let p =
+    P.start ~host:h
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(fun m _ -> (m + 1, Cmd.none))
+         ~view:(fun m ->
+           El.div
+             [ button Save (string_of_int m)
+             ; View.boundary
+                 ~fallback:(fun _ -> txt "")
+                 (View.keyed El.ul
+                    (List.init 100 (fun i -> (Key.int ((m * 100) + i), row i))) )
+             ] )
+         () )
+  in
+  for _ = 1 to 10 do
+    click p ;
+    let t = P.tree p in
+    equal int ~msg:"instances" 100 t.instances ;
+    equal int ~msg:"child links" 100 t.child_links ;
+    equal int ~msg:"owned links" (if own then 101 else 1) t.owned_links ;
+    equal int ~msg:"member links" 100 t.member_links ;
+    equal int ~msg:"nested links" (if own then 100 else 0) t.nested_links
+  done ;
+  P.stop p ;
+  equal int 0 (H.live_timers h) ;
+  no_errors p
+
+(* A page of 20 cards, each with its own boundary, in a boundary that stays. *)
+module Cards = struct
+  type props = int
+
+  type model = unit
+
+  type msg = unit
+
+  type out = |
+
+  let id : (props, model, msg, out) Component.id = Component.id ()
+
+  let init _ = ((), Cmd.none)
+
+  let update _ _ () () = ((), Cmd.none)
+
+  let view n () =
+    El.div
+      (List.init 20 (fun i ->
+           View.boundary ~fallback:(fun _ -> txt "") (timed ((n * 20) + i)) ) )
+
+  let subs _ _ = Sub.none
+
+  let equal_props = Int.equal
+end
+
+(* 10 pages of 20 cards: the unmount of a page unlinks its boundaries from the
+   nested list of the outer boundary. *)
+let card_pages () =
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(fun m _ -> (m + 1, Cmd.none))
+         ~view:(fun m ->
+           El.div
+             [ button Save (string_of_int m)
+             ; View.boundary
+                 ~fallback:(fun _ -> txt "")
+                 ( if m <= 10 then
+                     Component.v
+                       (module Cards)
+                       ~key:(string_of_int m)
+                       ~on:(function _ -> .)
+                       m
+                   else txt "" ) ] )
+         () )
+  in
+  for _ = 1 to 10 do
+    click p ;
+    let t = P.tree p in
+    equal int ~msg:"nested links" 20 t.nested_links ;
+    equal int ~msg:"owned links" 21 t.owned_links ;
+    equal int ~msg:"instances" 21 t.instances
+  done ;
+  click p ;
+  let t = P.tree p in
+  equal int ~msg:"no nested entry" 0 t.nested_links ;
+  equal int ~msg:"one boundary" 1 t.owned_links ;
+  equal int 0 t.member_links ;
+  equal int 0 t.instances ;
+  no_errors p
+
+(* A child with a button. *)
+module Waits = struct
+  type props = unit
+
+  type model = unit
+
+  type msg = unit
+
+  type out = |
+
+  let id : (props, model, msg, out) Component.id = Component.id ()
+
+  let init () = ((), Cmd.none)
+
+  let update _ () () () = ((), Cmd.none)
+
+  let view () () = El.button ~at:[At.data "testid" "w"] ~ev:[Ev.click ()] []
+
+  let subs _ _ = Sub.none
+
+  let equal_props _ _ = true
+end
+
+(* A dead instance that a DOM node keeps (through the post of its cell) does not
+   keep its boundary: the fallback of the boundary is free. *)
+let boundary_free () =
+  let w = Weak.create 1 in
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> (0, Cmd.none))
+         ~update:(fun m _ -> (m + 1, Cmd.none))
+         ~view:(fun m ->
+           El.div
+             [ button Save (string_of_int m)
+             ; ( if m = 0 then (
+                   let b = Bytes.make 64 'x' in
+                   Weak.set w 0 (Some b) ;
+                   View.boundary
+                     ~fallback:(fun _ -> txt (Bytes.to_string b))
+                     (Component.v (module Waits) ~on:(function _ -> .) ()) )
+                 else txt "" ) ] )
+         () )
+  in
+  let node = P.find p (By.test_id "w") in
+  Gc.full_major () ;
+  is_true ~msg:"live before" (Weak.check w 0) ;
+  click p ;
+  Gc.full_major () ;
+  is_false ~msg:"free after the removal" (Weak.check w 0) ;
+  is_true ~msg:"the node stays"
+    (Option.is_none (F.parent (Sys.opaque_identity node))) ;
+  no_errors p
+
 let tests =
   [ group "leaks"
       [ test "1,000 keys with synchronous results leave an empty table" sync_keys
@@ -235,4 +387,11 @@ let tests =
       ; test "100 mounts and unmounts of a child with timers leave nothing"
           child_mounts
       ; test "a live parent replaces 10 rows 10 times: no dead child link"
-          row_links ] ]
+          row_links
+      ; test "a live owner replaces 100 boundary rows 10 times: no dead entry"
+          (boundary_rows true)
+      ; test "a live boundary replaces 100 rows 10 times: no dead member"
+          (boundary_rows false)
+      ; test "10 pages of 20 cards, each with a boundary: 0 nested entries"
+          card_pages
+      ; test "a dead instance does not keep its boundary" boundary_free ] ]

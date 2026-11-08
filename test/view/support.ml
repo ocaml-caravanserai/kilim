@@ -112,6 +112,9 @@ let rec show (v : string View.t) =
           "<Wrap" ^ key ^ ">" ^ show props ^ "</Wrap>"
       | None ->
           "<comp" ^ key ^ ">" )
+  | V.Boundary {key; child; _} ->
+      let key = match key with Some k -> " key=" ^ k | None -> "" in
+      "<boundary" ^ key ^ ">" ^ show child ^ "</boundary>"
   | V.Element e ->
       let attrs = List.map (fun (k, v) -> " " ^ k ^ "=" ^ v) e.attrs in
       let value = match e.value with Some v -> " .value=" ^ v | None -> "" in
