@@ -8,13 +8,13 @@ pull request.
 
 | Budget | Check in CI | Where | State |
 |---|---|---|---|
-| Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size`, the todo, components and search examples | Done |
+| Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size`, the todo, components, search and chat examples | Done |
 | DOM operations for each action | Yes, each change | `test/view/test_budget.ml`: the four actions, exact counts. `examples/todo/test/test_counts.ml`: three actions of the todo example | Done |
 | Allocations for each action | Yes, each change | `bench/alloc`: the allocated words of the four actions | Done |
 | Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), tests D25, D40 and D44 of `test/dom` (listeners, timers, DOM, in Chrome, Firefox and WebKit), HT9 of `test/dom` (20 times, with a request in flight), WS6 of `test/dom` (20 times, with an open socket), and the weak tests (native, and `test/weak` in the js_of_ocaml and wasm_of_ocaml builds) | Done |
 | Partial update | Yes, each change | `test/view/test_budget.ml`: three actions on 1,000 keyed component rows, exact counts of the views and of the DOM operations. `bench/alloc`: the allocated words of two actions | Done |
 | Token release | Yes, each change | `test/view/test_budget.ml`: the operations on the token lists when the parent removes 1,000 and 2,000 component rows | Done |
-| Linked modules | Yes, each change | `test/link` (kilim, kilim.browser, kilim.web, kilim.http, kilim.http.browser, kilim.router, kilim.router.browser, kilim.websocket, kilim.websocket.browser) | Done |
+| Linked modules | Yes, each change | `test/link` (kilim, kilim.browser, kilim.web, kilim.http, kilim.http.browser, kilim.router, kilim.router.browser, kilim.websocket, kilim.websocket.browser, kilim.storage, kilim.storage.browser) | Done |
 | Time of the actions, wasm start-up time | No | Each night on fixed hardware | Waits: no fixed hardware yet |
 
 The leak tests and the link check run in the CI step "Test", with the other
@@ -23,7 +23,7 @@ partial update and the token release checks.
 
 ## Size
 
-`make size` (and `make budgets`) builds four programs in the release
+`make size` (and `make budgets`) builds five programs in the release
 profile and runs `bench/size/size.mjs`:
 
 - `counter`: `bench/size/counter.ml`, one int model, two buttons, one text,
@@ -37,6 +37,8 @@ profile and runs `bench/size/size.mjs`:
   program, the budget cannot find a regression in this code.
 - `example-search`: the search example (`examples/search`), with
   `kilim.http` and `kilim.router`, and their browser parts.
+- `example-chat`: the chat example (`examples/chat`), with `kilim.http`,
+  `kilim.websocket` and `kilim.storage`, and their browser parts.
 
 The script gives the gzip size (level 9, the `zlib` module of node) of each
 file, and compares it with `bench/size/budget`. Each line of the budget file
@@ -71,6 +73,12 @@ The components example adds about 4.0 KB (js_of_ocaml) and 6.1 KB
 components of the example, the instance tree, the boundaries and the
 contexts. Its budget is the measured size plus 5 %, as for the other
 programs.
+
+The chat example adds about 6.3 KB (js_of_ocaml) and 9.5 KB
+(wasm_of_ocaml) to the counter, and its launcher is about 0.6 KB larger: one
+App, `kilim.http` with the JSON parser and the fetch transport, and the
+drivers of `kilim.websocket` and `kilim.storage`. Its budget is the measured
+size plus 5 %, rounded up to 500 bytes.
 
 The search example adds about 9.1 KB (js_of_ocaml) and 13.2 KB
 (wasm_of_ocaml) to the counter: one component, `kilim.http` with the JSON
@@ -193,6 +201,11 @@ thus this name cannot be the check. A short name of the driver, for example
 `wasClean`, is not a good check either: the release build of wasm_of_ocaml
 keeps it in no run of bytes of the launcher or of the main `.wasm` file
 (measured: the control program contained it only in the `.js` file).
+
+The same check for the driver of `kilim.storage.browser`: no build of the
+counter and of the todo, components and search examples contains
+`localStorage`, and each build of the control program contains it (in the
+wasm_of_ocaml build, in the launcher and in the main `.wasm` file).
 
 ## kilim.web
 
