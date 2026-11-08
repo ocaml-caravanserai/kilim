@@ -15,6 +15,16 @@
 #   make test-release   Run the tests of the release files in Chrome:
 #                       kilim dist on the release builds of the loader tests
 #                       (test/loader) and of the examples (test/examples).
+#   make browsers       Run the tests of test/dom, test/loader and
+#                       test/examples in Firefox and WebKit (Playwright),
+#                       and the tests of the release files of test/loader
+#                       and test/examples. Outside the dev
+#                       shell `browsers` of flake.nix, the command runs in
+#                       `nix develop .#browsers` (Linux only). On another
+#                       system, it writes "SKIP: no Playwright", with exit
+#                       status 1 if KILIM_REQUIRE_PLAYWRIGHT is 1. In the
+#                       shell `browsers`, make test also runs the tests of
+#                       the dev profile.
 #   make mutate-loader  Test the hand mutants of the loader text
 #                       (test/loader/mutants.txt) in Chrome, in the dev and
 #                       the release profile.
@@ -47,6 +57,9 @@ SUITE ?= test/core/test_core.exe
 MUTANT ?=
 
 DUNE := $(if $(IN_NIX_SHELL),dune,nix develop -c dune)
+# The shell `browsers` sets KILIM_PLAYWRIGHT.
+BDUNE := $(if $(KILIM_PLAYWRIGHT),dune,nix develop .#browsers -c dune)
+LINUX := $(filter Linux,$(shell uname -s))
 MUTATE := --instrument-with ppx_windtrap.mutate
 
 # The suites of the libraries. test/core is the suite of Async and Cancel.
@@ -59,7 +72,7 @@ SUITES := test/core test/view test/turn test/dist
 report = $(DUNE) exec $(MUTATE) windtrap -- mutants \
   $(if $(1),--since $(1)) $(if $(MIN_SCORE),--min-score $(MIN_SCORE))
 
-.PHONY: help build fmt test size budgets test-release mutate-loader check-windtrap mutate mutate-all mutate-report mutate-arm
+.PHONY: help build fmt test size budgets test-release browsers mutate-loader check-windtrap mutate mutate-all mutate-report mutate-arm
 
 help:
 	@sed -n '1,/^$$/p' Makefile | sed 's/^# \{0,1\}//'
@@ -84,6 +97,16 @@ budgets:
 
 test-release:
 	$(DUNE) build --force @test/loader/runtest @test/examples/runtest --profile release
+
+# flake.nix has the shell `browsers` only on Linux.
+browsers:
+ifeq ($(KILIM_PLAYWRIGHT)$(LINUX),)
+	@echo "SKIP: no Playwright"
+	@test "$(KILIM_REQUIRE_PLAYWRIGHT)" != 1
+else
+	$(BDUNE) build --force @browsers
+	$(BDUNE) build --force @test/loader/browsers @test/examples/browsers --profile release
+endif
 
 mutate-loader:
 	$(DUNE) build --force @test/loader/mutants

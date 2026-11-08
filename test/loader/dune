@@ -1,7 +1,14 @@
-; The loader tests in a real headless Chrome (docs/design.html, "The loader").
-; run.mjs makes the pages with `kilim page` and serves them with the builds of
-; app_a and app_b. With no Chrome, it writes "SKIP: no Chrome", but CI sets
-; KILIM_REQUIRE_CHROME=1 and fails.
+; The loader tests in real headless browsers (docs/design.html, "The loader").
+; run.mjs makes the pages with `kilim page` (dev) or `kilim dist` (release)
+; and serves them with the builds of app_a and app_b. It drives the browser
+; through the interface of test/dom (browser.mjs): Chrome in the alias
+; runtest, Firefox and WebKit (Playwright) in the alias browsers (`make
+; browsers`). The differences of the browsers are in the table `browsers` of
+; run.mjs. With no Chrome or no Playwright, run.mjs writes "SKIP: no Chrome" or
+; "SKIP: no Playwright", but CI sets KILIM_REQUIRE_CHROME=1 and
+; KILIM_REQUIRE_PLAYWRIGHT=1 and fails. Each rule runs the scenarios of the
+; profile of the build: `make test-release` and `make browsers` run the
+; release profile.
 
 (executables
  (names app_a app_b)
@@ -33,40 +40,45 @@
    -o
    index.html)))
 
-(rule
- (alias runtest)
- (enabled_if
-  (<> %{profile} release))
+; The files of each rule: the runner, its browser interface, kilim and the
+; builds of app_a.
+
+(alias
+ (name runner)
  (deps
   run.mjs
+  ../dom/browser.mjs
   ../dom/chrome.mjs
+  ../dom/playwright.mjs
   %{bin:kilim}
-  index.html
   app_a.bc.js
   app_a.bc.wasm.js
-  (glob_files app_a.bc.wasm.assets/*)
+  (glob_files app_a.bc.wasm.assets/*)))
+
+(rule
+ (alias runtest)
+ (deps
+  (alias runner)
+  index.html
   app_b.bc.js
   app_b.bc.wasm.js
   (glob_files app_b.bc.wasm.assets/*)
   (env_var KILIM_CHROME)
   (env_var KILIM_REQUIRE_CHROME))
  (action
-  (run node run.mjs --kilim %{bin:kilim} --profile dev)))
+  (run node run.mjs --kilim %{bin:kilim} --profile %{profile})))
 
-; The inline page in a Chrome with no JIT, thus with no WebAssembly: the
-; js_of_ocaml build starts.
+; The inline page in a browser with no WebAssembly, a scenario of the dev
+; profile: Chrome with no JIT, and Firefox with the preference
+; javascript.options.wasm = false. The js_of_ocaml build starts. WebKit has
+; no such switch.
 
 (rule
  (alias runtest)
  (enabled_if
   (<> %{profile} release))
  (deps
-  run.mjs
-  ../dom/chrome.mjs
-  %{bin:kilim}
-  app_a.bc.js
-  app_a.bc.wasm.js
-  (glob_files app_a.bc.wasm.assets/*)
+  (alias runner)
   (env_var KILIM_CHROME)
   (env_var KILIM_REQUIRE_CHROME))
  (action
@@ -79,73 +91,93 @@
    dev
    --only
    no-wasm-real
-   --
-   --js-flags=--jitless)))
-
-; The release files (`make test-release`): `kilim dist` on the release builds,
-; with content names and immutable files.
+   --no-wasm)))
 
 (rule
- (alias runtest)
- (enabled_if
-  (= %{profile} release))
+ (alias browsers)
  (deps
-  run.mjs
-  ../dom/chrome.mjs
-  %{bin:kilim}
-  app_a.bc.js
-  app_a.bc.wasm.js
-  (glob_files app_a.bc.wasm.assets/*)
+  (alias runner)
+  index.html
   app_b.bc.js
   app_b.bc.wasm.js
   (glob_files app_b.bc.wasm.assets/*)
-  (env_var KILIM_CHROME)
-  (env_var KILIM_REQUIRE_CHROME))
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
  (action
-  (run node run.mjs --kilim %{bin:kilim} --profile release)))
-
-; The hand mutants of the loader text (`make mutate-loader`): each mutant of
-; mutants.txt must fail its scenarios. The rule of each profile tests the
-; mutants of that profile.
+  (run
+   node
+   run.mjs
+   --kilim
+   %{bin:kilim}
+   --profile
+   %{profile}
+   --browser
+   firefox)))
 
 (rule
- (alias mutants)
+ (alias browsers)
+ (deps
+  (alias runner)
+  index.html
+  app_b.bc.js
+  app_b.bc.wasm.js
+  (glob_files app_b.bc.wasm.assets/*)
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+ (action
+  (run
+   node
+   run.mjs
+   --kilim
+   %{bin:kilim}
+   --profile
+   %{profile}
+   --browser
+   webkit)))
+
+(rule
+ (alias browsers)
  (enabled_if
   (<> %{profile} release))
  (deps
-  mutate.mjs
-  mutants.txt
-  run.mjs
-  ../dom/chrome.mjs
-  %{bin:kilim}
-  app_a.bc.js
-  app_a.bc.wasm.js
-  (glob_files app_a.bc.wasm.assets/*)
-  app_b.bc.js
-  app_b.bc.wasm.js
-  (glob_files app_b.bc.wasm.assets/*)
-  (env_var KILIM_CHROME)
-  (env_var KILIM_REQUIRE_CHROME))
+  (alias runner)
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
  (action
-  (run node mutate.mjs --kilim %{bin:kilim} --profile dev)))
+  (run
+   node
+   run.mjs
+   --kilim
+   %{bin:kilim}
+   --profile
+   dev
+   --only
+   no-wasm-real
+   --no-wasm
+   --browser
+   firefox)))
+
+; The hand mutants of the loader text (`make mutate-loader`): each mutant of
+; mutants.txt must fail its scenarios, in Chrome only (the loader text has no
+; branch for a browser). The rule tests the mutants of the profile of the
+; build.
 
 (rule
  (alias mutants)
- (enabled_if
-  (= %{profile} release))
  (deps
+  (alias runner)
   mutate.mjs
   mutants.txt
-  run.mjs
-  ../dom/chrome.mjs
-  %{bin:kilim}
-  app_a.bc.js
-  app_a.bc.wasm.js
-  (glob_files app_a.bc.wasm.assets/*)
   app_b.bc.js
   app_b.bc.wasm.js
   (glob_files app_b.bc.wasm.assets/*)
   (env_var KILIM_CHROME)
   (env_var KILIM_REQUIRE_CHROME))
  (action
-  (run node mutate.mjs --kilim %{bin:kilim} --profile release)))
+  (run node mutate.mjs --kilim %{bin:kilim} --profile %{profile})))

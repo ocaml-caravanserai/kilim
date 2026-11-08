@@ -1,24 +1,39 @@
-; The DOM tests in a real headless Chrome (design section 14), in the
-; js_of_ocaml and wasm_of_ocaml builds. run.mjs drives Chrome over the DevTools
-; pipe, with node only. With no Chrome, it writes "SKIP: no Chrome", but CI
-; sets KILIM_REQUIRE_CHROME=1 and fails.
+; The DOM tests in real headless browsers (design section 14), in the
+; js_of_ocaml and wasm_of_ocaml builds. run.mjs drives the browser through the
+; interface of browser.mjs, with node only: Chrome over the DevTools pipe
+; (chrome.mjs) in the alias runtest, and Firefox and WebKit through Playwright
+; (playwright.mjs) in the alias browsers (`make browsers`). The tools of
+; Playwright come from the dev shell `browsers` of flake.nix. With no Chrome or
+; no Playwright, run.mjs writes "SKIP: no Chrome" or "SKIP: no Playwright", but
+; CI sets KILIM_REQUIRE_CHROME=1 and KILIM_REQUIRE_PLAYWRIGHT=1 and fails. One
+; rule for each browser: dune runs them at the same time, and a failure has the
+; name of its browser.
 
 (executables
  (names smoke test_dom)
  (modes js wasm)
  (libraries kilim kilim.browser brr))
 
-(rule
- (alias runtest)
+; The files of each rule: the runner and the pages.
+
+(alias
+ (name pages)
  (deps
   run.mjs
+  browser.mjs
   chrome.mjs
+  playwright.mjs
   smoke.bc.js
   smoke.bc.wasm.js
   (glob_files smoke.bc.wasm.assets/*.wasm)
   test_dom.bc.js
   test_dom.bc.wasm.js
-  (glob_files test_dom.bc.wasm.assets/*.wasm)
+  (glob_files test_dom.bc.wasm.assets/*.wasm)))
+
+(rule
+ (alias runtest)
+ (deps
+  (alias pages)
   (env_var KILIM_CHROME)
   (env_var KILIM_REQUIRE_CHROME))
  (action
@@ -30,17 +45,65 @@
    test_dom.bc.js
    test_dom.bc.wasm.js)))
 
-; The js_of_ocaml pages in a Chrome with no JIT, thus with no WebAssembly (as
-; Chrome with "JavaScript optimization" off): the apps start and work.
+; The js_of_ocaml pages in a browser with no WebAssembly: Chrome with no JIT
+; (as Chrome with "JavaScript optimization" off), and Firefox with the
+; preference javascript.options.wasm = false. The apps start and work. WebKit
+; has no such switch.
 
 (rule
  (alias runtest)
  (deps
-  run.mjs
-  chrome.mjs
-  smoke.bc.js
-  test_dom.bc.js
+  (alias pages)
   (env_var KILIM_CHROME)
   (env_var KILIM_REQUIRE_CHROME))
  (action
-  (run node run.mjs --js-flags=--jitless smoke.bc.js test_dom.bc.js)))
+  (run node run.mjs --no-wasm smoke.bc.js test_dom.bc.js)))
+
+(rule
+ (alias browsers)
+ (deps
+  (alias pages)
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+ (action
+  (run
+   node
+   run.mjs
+   --browser
+   firefox
+   smoke.bc.js
+   smoke.bc.wasm.js
+   test_dom.bc.js
+   test_dom.bc.wasm.js)))
+
+(rule
+ (alias browsers)
+ (deps
+  (alias pages)
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+ (action
+  (run node run.mjs --browser firefox --no-wasm smoke.bc.js test_dom.bc.js)))
+
+(rule
+ (alias browsers)
+ (deps
+  (alias pages)
+  (env_var KILIM_PLAYWRIGHT)
+  (env_var PLAYWRIGHT_BROWSERS_PATH)
+  (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
+  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+ (action
+  (run
+   node
+   run.mjs
+   --browser
+   webkit
+   smoke.bc.js
+   smoke.bc.wasm.js
+   test_dom.bc.js
+   test_dom.bc.wasm.js)))
