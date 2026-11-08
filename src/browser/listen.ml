@@ -119,6 +119,21 @@ let env st ops =
   ; toggles
   ; post_task= Browser_host.host.post_task }
 
+let number_js = Jstr.v "number"
+
+(* The mouse values of [ev], read when the handler runs. Thus [defaultPrevented]
+   is true if a handler on an element in the target prevented the default. An
+   event that is not a MouseEvent has no [button]: then the button is 0, the
+   main button. *)
+let mouse ev =
+  let b = Jv.get ev "button" in
+  { Dom.button= (if Jstr.equal (Jv.typeof b) number_js then Jv.to_int b else 0)
+  ; alt= truthy (Jv.get ev "altKey")
+  ; ctrl= truthy (Jv.get ev "ctrlKey")
+  ; meta= truthy (Jv.get ev "metaKey")
+  ; shift= truthy (Jv.get ev "shiftKey")
+  ; default_prevented= truthy (Jv.get ev "defaultPrevented") }
+
 (* One JS event: the payload comes from the target, as Event.dispatch reads
    it. *)
 let handle st name target ev =
@@ -133,6 +148,8 @@ let handle st name target ev =
             string_or_empty (Jv.get ev "key")
         | Dom.Bool ->
             truthy (Jv.get target "checked")
+        | Dom.Mouse ->
+            mouse ev
       in
       ignore
         (Event.dispatch env rt

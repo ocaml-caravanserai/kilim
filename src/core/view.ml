@@ -11,6 +11,7 @@ type 'msg handler = 'msg Dom.event =
   ; bubbles: bool
   ; prevent_default: bool
   ; stop: bool
+  ; filter: Dom.filter
   ; decode: 'msg decode }
 
 type 'a context = {cid: 'a Type.Id.t; default: 'a}

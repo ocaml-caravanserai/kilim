@@ -351,6 +351,26 @@ module Ev : sig
 
   val click : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
 
+  val link_click : ?stop:bool -> 'msg -> 'msg t
+  (** [link_click msg] is for a link ([El.a] with [At.href]) that the app
+      follows itself, for example with a router. A plain click prevents the
+      default and gives [msg]. A plain click uses the main button with no Alt,
+      Ctrl, Meta or Shift key. Also, no handler below and no listener of the
+      page prevented its default. For another click, the handler does not
+      prevent the default and gives no message, thus the browser follows the
+      link (for example, in a new tab). The [~stop] of the handler applies to
+      each click: with [~stop], a click handler above (for example, of a card
+      around the link) does not run for a Ctrl click on the link.
+
+      The handler takes each plain click, also on an [a] with [target],
+      [download] or a link to another origin. Thus use it only for the links
+      that the app follows itself. The Enter key on a focused link sends a plain
+      click. Ctrl+Enter sends a click with Ctrl, which the handler skips. A
+      browser sends no [click] for the middle button (it sends [auxclick]): thus
+      the middle button opens the link with no message. [link_click] uses the
+      [click] event. Thus do not put {!click} and [link_click] on one element.
+  *)
+
   val check : ?prevent_default:bool -> ?stop:bool -> (bool -> 'msg) -> 'msg t
   (** [check f] is for a checkbox or a radio button. It uses the [click] event,
       because the browser sends [input] and [change] after the restore of the

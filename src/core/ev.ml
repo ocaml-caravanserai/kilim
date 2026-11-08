@@ -9,6 +9,7 @@ let make event payload prevent_default stop f =
   ; bubbles= Event.bubbles event
   ; prevent_default
   ; stop
+  ; filter= Dom.Any
   ; decode= View.Decode (payload, f) }
 
 let click ?(prevent_default = false) ?(stop = false) m =
@@ -55,3 +56,7 @@ let touchstart ?(prevent_default = false) ?(stop = false) m =
 
 let touchmove ?(prevent_default = false) ?(stop = false) m =
   make "touchmove" Dom.Unit prevent_default stop (fun () -> m)
+
+(* A fixed rule of the listener, as prevent_default: no user code decides. *)
+let link_click ?(stop = false) m =
+  {(make "click" Dom.Unit true stop (fun () -> m)) with filter= Dom.Plain_click}

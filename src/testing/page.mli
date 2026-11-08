@@ -58,7 +58,16 @@ val html : 'out t -> string
 val find : 'out t -> By.t -> Fake_dom.node
 (** @raise Query if no element or more than one element matches. *)
 
-val click : 'out t -> By.t -> unit
+val click :
+     'out t
+  -> ?button:int
+  -> ?alt:bool
+  -> ?ctrl:bool
+  -> ?meta:bool
+  -> ?shift:bool
+  -> ?prevented:bool
+  -> By.t
+  -> unit
 (** A [click] event: a discrete turn. As in a browser, a click on a checkbox
     first toggles its [checked], and a click on a radio button first checks it
     (and unchecks its group). If a handler prevents the default, the click
@@ -66,7 +75,19 @@ val click : 'out t -> By.t -> unit
     after the dispatch: the checkbox toggles back. The radio button that was
     checked before becomes checked again, if it is still in the group of the
     target. If not, the target stays checked, as in Chrome. Then a task restores
-    the target from the view. *)
+    the target from the view.
+
+    [~button] (default 0, the main button) and the modifier keys [~alt],
+    [~ctrl], [~meta] and [~shift] (default [false]) are the values of the event
+    for {!Kilim.Ev.link_click}. [~prevented:true] is a click whose default a
+    listener of the page prevented before the dispatch reached the app. A
+    browser sends [auxclick], not [click], for the middle button: the page sends
+    [click] with each button, thus a test can examine the rule of the link. *)
+
+val prevented : 'out t -> bool
+(** [prevented t] is [true] if the default of the last event of the page is
+    prevented, by a handler or with [~prevented]. For a click on a link, [false]
+    tells that the browser follows the link. *)
 
 val type_ : 'out t -> By.t -> string -> unit
 (** [type_ t q s] types each character of [s]: the live value becomes the live

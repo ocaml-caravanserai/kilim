@@ -292,6 +292,113 @@ let dead_root () =
   equal int 1 (List.length (errors p)) ;
   quiet p
 
+(* Ev.link_click (design section 08): the filter Plain_click. The app has an
+   outer div with Ev.click, the link with Ev.link_click, and an element [in] in
+   the link with the handlers [inner]. *)
+let link_page ?(stop = false) inner =
+  let got = ref [] in
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> ((), Cmd.none))
+         ~update:(fun () m ->
+           got := m :: !got ;
+           ((), Cmd.none) )
+         ~view:(fun () ->
+           El.div
+             ~ev:[Ev.click "out"]
+             [ El.a
+                 ~at:[At.href "/x"; At.data "testid" "a"]
+                 ~ev:[Ev.link_click ~stop "link"]
+                 [El.b ~at:[At.data "testid" "in"] ~ev:inner [txt "x"]] ] )
+         () )
+  in
+  (p, got)
+
+(* [f p] clicks, then the messages and the prevent of the click. *)
+let link ?stop ?(inner = []) ?(id = "a") f =
+  let p, got = link_page ?stop inner in
+  is_false ~msg:"no event yet" (P.prevented p) ;
+  f p (By.test_id id) ;
+  let r = (List.rev !got, P.prevented p) in
+  no_errors p ; r
+
+let result = pair (list string) bool
+
+let plain_click () =
+  equal result (["link"; "out"], true) (link (fun p by -> P.click p by)) ;
+  (* An event with no mouse values (Page.event) is a plain click. *)
+  equal result (["link"; "out"], true) (link (fun p by -> P.event p by "click")) ;
+  (* A click on an element in the link. *)
+  equal result (["link"; "out"], true) (link ~id:"in" (fun p by -> P.click p by)) ;
+  equal result
+    (["in"; "link"; "out"], true)
+    (link ~id:"in" ~inner:[Ev.click "in"] (fun p by -> P.click p by)) ;
+  (* The stop of a plain click ends the walk. *)
+  equal result (["link"], true) (link ~stop:true (fun p by -> P.click p by))
+
+let skipped () =
+  let skip ~msg f =
+    equal result ~msg (["out"], false) (link f) ;
+    (* The stop of a skipped handler applies: the click handler above does not
+       run. *)
+    equal result ~msg ([], false) (link ~stop:true f)
+  in
+  skip ~msg:"alt" (fun p by -> P.click p ~alt:true by) ;
+  skip ~msg:"ctrl" (fun p by -> P.click p ~ctrl:true by) ;
+  skip ~msg:"meta" (fun p by -> P.click p ~meta:true by) ;
+  skip ~msg:"shift" (fun p by -> P.click p ~shift:true by) ;
+  skip ~msg:"button 1" (fun p by -> P.click p ~button:1 by) ;
+  skip ~msg:"button 2" (fun p by -> P.click p ~button:2 by) ;
+  (* A listener of the page prevented the default: the page tells it. *)
+  equal result (["out"], true) (link (fun p by -> P.click p ~prevented:true by)) ;
+  equal result ([], true)
+    (link ~stop:true (fun p by -> P.click p ~prevented:true by)) ;
+  (* A handler below prevents the default. *)
+  equal result
+    (["in"; "out"], true)
+    (link ~id:"in"
+       ~inner:[Ev.click ~prevent_default:true "in"]
+       (fun p by -> P.click p by) )
+
+let link_handler () =
+  let h : unit Ev.t = Ev.link_click () in
+  equal string "click" h.event ;
+  is_true h.bubbles ;
+  is_true h.prevent_default ;
+  is_false h.stop ;
+  is_true (Ev.link_click ~stop:true ()).stop ;
+  is_true (h.filter = Private.Dom.Plain_click) ;
+  is_true ((Ev.click ()).filter = Private.Dom.Any) ;
+  ( match h.decode with
+  | Private.View.Decode (Private.Dom.Unit, f) ->
+      f ()
+  | _ ->
+      fail "the payload of link_click is Unit" ) ;
+  (* One handler for each DOM event name. *)
+  raises_match
+    (function Invalid_argument _ -> true | _ -> false)
+    (fun () -> El.a ~ev:[Ev.click (); Ev.link_click ()] [])
+
+(* Page.click ~prevented on a checkbox: the browser undoes the toggle. *)
+let prevented_toggle () =
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> ((), Cmd.none))
+         ~update:(fun () () -> ((), Cmd.none))
+         ~view:(fun () ->
+           El.input ~at:[At.type_ "checkbox"; At.data "testid" "c"] () )
+         () )
+  in
+  let c = By.test_id "c" in
+  P.click p ~prevented:true c ;
+  is_false (F.checked (P.find p c)) ;
+  is_true (P.prevented p) ;
+  P.click p c ;
+  is_true (F.checked (P.find p c)) ;
+  is_false (P.prevented p)
+
 let tests =
   [ group "event"
       [ test "the discrete events and the events that do not bubble" discrete
@@ -303,4 +410,10 @@ let tests =
       ; test
           "a message function that raises goes to the root catch at the dequeue"
           raise_at_dequeue
-      ; test "the message function of a dead root does not run" dead_root ] ]
+      ; test "the message function of a dead root does not run" dead_root
+      ; test "link_click: a plain click prevents and gives the message"
+          plain_click
+      ; test "link_click: another click gives no message and no prevent" skipped
+      ; test "link_click: the fields of the handler" link_handler
+      ; test "Page.click ~prevented undoes the toggle of a checkbox"
+          prevented_toggle ] ]

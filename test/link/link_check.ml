@@ -154,6 +154,13 @@ let () =
         ""
     | Private.Dom.Bool ->
         false
+    | Private.Dom.Mouse ->
+        { Private.Dom.button= 0
+        ; alt= false
+        ; ctrl= false
+        ; meta= false
+        ; shift= false
+        ; default_prevented= false }
   in
   ignore
     (Private.Event.dispatch env rt

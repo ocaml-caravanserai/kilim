@@ -109,6 +109,7 @@ let in_task () =
     { Private.View.event= "click"
     ; bubbles= true
     ; prevent_default= false
+    ; filter= Private.Dom.Any
     ; stop= false
     ; decode= Private.View.Decode (Private.Dom.Unit, fun () -> raise Boom) }
   in

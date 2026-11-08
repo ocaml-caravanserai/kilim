@@ -51,15 +51,15 @@ Measured with OCaml 5.5.1, js_of_ocaml and wasm_of_ocaml 6.4.1, Brr 0.0.9:
 
 | Program | File | Measured | Budget |
 |---|---|---|---|
-| `counter` | `counter.bc.js` (js_of_ocaml) | 37,608 bytes | 38,500 bytes |
-| `counter` | The main `.wasm` file (wasm_of_ocaml) | 37,518 bytes | 38,000 bytes |
-| `counter` | `counter.bc.wasm.js` (the launcher) | 6,891 bytes | 7,500 bytes |
-| `example-todo` | `main.bc.js` (js_of_ocaml) | 39,435 bytes | 41,000 bytes |
-| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 39,957 bytes | 40,500 bytes |
-| `example-todo` | `main.bc.wasm.js` (the launcher) | 6,886 bytes | 7,500 bytes |
-| `example-components` | `main.bc.js` (js_of_ocaml) | 41,658 bytes | 44,000 bytes |
-| `example-components` | The main `.wasm` file (wasm_of_ocaml) | 43,676 bytes | 46,000 bytes |
-| `example-components` | `main.bc.wasm.js` (the launcher) | 6,886 bytes | 7,500 bytes |
+| `counter` | `counter.bc.js` (js_of_ocaml) | 37,753 bytes | 38,500 bytes |
+| `counter` | The main `.wasm` file (wasm_of_ocaml) | 37,802 bytes | 38,300 bytes |
+| `counter` | `counter.bc.wasm.js` (the launcher) | 6,941 bytes | 7,500 bytes |
+| `example-todo` | `main.bc.js` (js_of_ocaml) | 39,570 bytes | 41,000 bytes |
+| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 40,220 bytes | 40,700 bytes |
+| `example-todo` | `main.bc.wasm.js` (the launcher) | 6,937 bytes | 7,500 bytes |
+| `example-components` | `main.bc.js` (js_of_ocaml) | 41,805 bytes | 44,000 bytes |
+| `example-components` | The main `.wasm` file (wasm_of_ocaml) | 43,918 bytes | 46,000 bytes |
+| `example-components` | `main.bc.wasm.js` (the launcher) | 6,938 bytes | 7,500 bytes |
 
 The components example adds about 4.0 KB (js_of_ocaml) and 6.1 KB
 (wasm_of_ocaml) to the counter. This includes the code of the four
@@ -125,6 +125,21 @@ registrations of each instance and the environment of each context of the
 diff add one word each: the mount of the 1,000 keyed component rows of
 `bench/alloc` (on a null DOM, with no runtime) allocates 239.4 words for
 each row, against 237.4 words before Context. The budgets do not change.
+
+The mouse reads of `Ev.link_click` (Phase 4) add about 0.14 KB
+(js_of_ocaml), 0.28 KB (the main `.wasm` file) and 0.05 KB (the launcher)
+to each app. Before them, the counter was 37,612 bytes (js_of_ocaml), 37,518
+bytes (the main `.wasm` file) and 6,891 bytes (the launcher). The 37,612
+bytes include 4 bytes of `Kilim.Url`: the counter of Phase 3 was 37,608
+bytes. The other code of `Kilim.Url` costs nothing in an app that does not
+use it. The cost of the mouse reads is in the listener of kilim.browser,
+thus each app links it: the read of `button`, `altKey`, `ctrlKey`,
+`metaKey`, `shiftKey` and `defaultPrevented`, and the filter in
+`Event.dispatch`. The dead code elimination cannot remove it, because the
+listener reads the payload of each handler. For this known cost, the budget
+of the main `.wasm` file went up by 300 bytes: from 38,000 to 38,300 bytes
+(the counter, 498 bytes of headroom) and from 40,500 to 40,700 bytes (the
+todo example, 480 bytes of headroom).
 
 The baseline is a minimal Brr program, because Brr links `Fun` and thus
 `Printf` (design section 13): 23,845 bytes (js_of_ocaml), and 17,217 bytes

@@ -2,11 +2,22 @@ type ns = Html | Svg
 
 type prop = Value of string | Checked of bool
 
+type mouse =
+  { button: int
+  ; alt: bool
+  ; ctrl: bool
+  ; meta: bool
+  ; shift: bool
+  ; default_prevented: bool }
+
+type filter = Any | Plain_click
+
 type _ payload =
   | Unit : unit payload
   | String : string payload
   | Key : string payload
   | Bool : bool payload
+  | Mouse : mouse payload
 
 type 'msg decode = Decode : 'a payload * ('a -> 'msg) -> 'msg decode
 
@@ -15,11 +26,16 @@ type 'msg event =
   ; bubbles: bool
   ; prevent_default: bool
   ; stop: bool
+  ; filter: filter
   ; decode: 'msg decode }
 
 type handler =
   | Handler :
-      {payload: 'a payload; prevent_default: bool; stop: bool; fire: 'a -> unit}
+      { payload: 'a payload
+      ; prevent_default: bool
+      ; stop: bool
+      ; filter: filter
+      ; fire: 'a -> unit }
       -> handler
 
 type 'msg post = {post: 'a. 'a -> ('a -> 'msg) -> unit} [@@unboxed]
@@ -41,6 +57,7 @@ let bind post (h : _ event) =
         { payload
         ; prevent_default= h.prevent_default
         ; stop= h.stop
+        ; filter= h.filter
         ; fire= (fun x -> post.post x f) }
 
 let handler cell name =
