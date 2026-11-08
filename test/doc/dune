@@ -1,8 +1,8 @@
 ; The code of the examples in the doc comments of src/core/kilim.mli,
-; src/testing/kilim_testing.mli and src/browser/kilim_browser.mli. Each
-; example is a tagged block, and test/readme/check.mjs makes sure that it is
-; the code of a file here. Thus the examples compile, and test_doc runs the
-; example of Kilim_testing.mount.
+; src/testing/kilim_testing.mli and src/browser/kilim_browser.mli, and of one
+; example of docs/loader.md. Each example is a tagged block, and
+; test/readme/check.mjs makes sure that it is the code of a file here. Thus
+; the examples compile, and test_doc runs the example of Kilim_testing.mount.
 
 (library
  (name doc_examples)
@@ -20,5 +20,5 @@
 
 (library
  (name doc_browser_examples)
- (modules fetch_abort)
+ (modules fetch_abort es_load)
  (libraries kilim kilim.browser kilim.web brr))
