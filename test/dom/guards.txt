@@ -237,3 +237,25 @@ scroll.ml  to_  behavior "smooth" if smooth             "auto": W7 (smooth: not 
                                                         (at once), R7.
 scroll.ml  to_  left and top                            swapped: W7 (the limit of
                                                         the range), R7.
+
+The guards of kilim.http.browser (src/http/browser). HT0 to HT9 are in
+test/dom/test_http.ml, with the /http endpoints and the fetch wrapper of
+run.mjs.
+
+kilim_http_browser.ml  start  the abort only if the     true: HT1 (no abort at the
+                       token is cancelled              normal end), HT3, HT5.
+                                                        false or removed: HT4, HT5,
+                                                        HT6, HT9.
+kilim_http_browser.ml  init   the signal goes to fetch  no signal: HT1, HT4, HT5,
+                                                        HT6, HT9 (the signals that
+                                                        the fetch wrapper of
+                                                        run.mjs records).
+kilim_http_browser.ml  start  the catch of new Headers  removed: HT1 (a header name
+                                                        that is not valid).
+kilim_http_browser.ml  start  a rejected fetch: the     the message only: HT7 (the
+                       name and the message             fact network_error).
+kilim_http_browser.ml  response  a rejected body read   another text: HT3 (a body
+                       gives Network                    that breaks).
+kilim_http_browser.ml  response  the headers of the     removed (an empty list): HT1
+                       response                         (the URL and the headers).
+kilim_http_browser.ml  install  set_transport           removed: HT1 to HT9.

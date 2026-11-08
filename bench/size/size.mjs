@@ -38,8 +38,10 @@ const mainWasm = (dir) =>
 const text = (files) => files.map((f) => readFileSync(f, 'latin1')).join('\n');
 // The names of the bindings that the counter does not use: Trusted_types
 // (Unsafe_html.of_trusted), the JS cell of Async.of_fut and Es_module.import.
-// Then kilim.router.browser (pushState) and Kilim_web.Scroll (scrollTo).
-const unused = ['trustedTypes', 'isHTML', 'kilimFut', 'import(', 'pushState', 'scrollTo'];
+// Then kilim.router.browser (pushState), Kilim_web.Scroll (scrollTo) and the
+// fetch transport of kilim.http.browser (AbortController).
+const unused = ['trustedTypes', 'isHTML', 'kilimFut', 'import(', 'pushState', 'scrollTo',
+  'AbortController'];
 
 let failures = 0;
 const measured = new Set();

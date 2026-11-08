@@ -1,0 +1,9 @@
+; kilim.http.browser: the fetch transport of kilim.http, with Brr_io.Fetch
+; and Brr.Abort. main.ml calls Kilim_http_browser.install (). windtrap runs
+; only native code, thus test/dom/guards.txt lists the guards of this library
+; with their tests.
+
+(library
+ (name kilim_http_browser)
+ (public_name kilim.http.browser)
+ (libraries kilim kilim.http kilim.browser brr))
