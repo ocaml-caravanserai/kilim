@@ -48,6 +48,15 @@ listen.ml   group      empty name: []                   false: D11 (no name).
 listen.ml   group      the same name                    true: D11 (a radio of another
                                                         name).
 listen.ml   group      the same form owner              removed: D11.
+listen.ml   mouse      typeof button is number          true: D45 (an Event with no
+                                                        button). false: D45 (a
+                                                        MouseEvent with the button 1).
+listen.ml   mouse      altKey                           false: D45 (Alt).
+listen.ml   mouse      ctrlKey                          false: D45 (Ctrl).
+listen.ml   mouse      metaKey                          false: D45 (Meta).
+listen.ml   mouse      shiftKey                         false: D45 (Shift).
+listen.ml   mouse      defaultPrevented (the live read) false: D45 (prevented by a
+                                                        capture listener).
 listen.ml   handle     isComposing                      false: D16.
 listen.ml   handle     preventDefault                   removed: D3 (submit).
 listen.ml   handle     stopPropagation                  removed: D3 (stop).

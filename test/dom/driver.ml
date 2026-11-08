@@ -51,7 +51,12 @@ type facts =
   ; removal_blurs: int
         (** The Ev.blur messages when a render removes the focused input.
             Firefox and WebKit send no blur, no focusout and no change on a
-            removal. *) }
+            removal. *)
+  ; meta_key: bool
+        (** A trusted click with the Meta key down has [metaKey] true. *)
+  ; middle_click: bool
+        (** A trusted click of the middle button sends a [click] event to
+            window, after [auxclick]. *) }
 
 let facts =
   match browser with
@@ -60,19 +65,25 @@ let facts =
       ; insert_composes= false
       ; trap= "RuntimeError: illegal cast"
       ; null_traps= false
-      ; removal_blurs= 1 }
+      ; removal_blurs= 1
+      ; meta_key= true
+      ; middle_click= false }
   | Firefox ->
       { ime= false
       ; insert_composes= true
       ; trap= "RuntimeError: bad cast"
       ; null_traps= false
-      ; removal_blurs= 0 }
+      ; removal_blurs= 0
+      ; meta_key= true
+      ; middle_click= false }
   | Webkit ->
       { ime= false
       ; insert_composes= false
       ; trap= "RuntimeError: Illegal argument"
       ; null_traps= true
-      ; removal_blurs= 0 }
+      ; removal_blurs= 0
+      ; meta_key= true
+      ; middle_click= false }
 
 (* A check that does not run in this browser. run.mjs counts these lines. *)
 let skip name reason = log ("SKIP " ^ name ^ ": " ^ reason)
@@ -274,9 +285,24 @@ let mouse kind (x, y) extra =
           ; ("y", Jv.of_float y) |]
          extra ) )
 
-let click n =
+(* The modifier bits of DevTools: Alt 1, Ctrl 2, Meta 4, Shift 8. *)
+let alt = 1
+
+let ctrl = 2
+
+let meta = 4
+
+let shift = 8
+
+(* A click with the modifier keys of [modifiers] down, with the button "left",
+   "middle" or "right". *)
+let click ?(modifiers = 0) ?(button = "left") n =
   let p = center n in
-  let b = [|("button", Jv.of_string "left"); ("clickCount", Jv.of_int 1)|] in
+  let b =
+    [| ("button", Jv.of_string button)
+     ; ("clickCount", Jv.of_int 1)
+     ; ("modifiers", Jv.of_int modifiers) |]
+  in
   drive [mouse "mousePressed" p b; mouse "mouseReleased" p b]
 
 let move_to n = drive [mouse "mouseMoved" (center n) [||]]
@@ -291,17 +317,27 @@ let wheel n =
 let insert_text s =
   drive [("Input.insertText", Jv.obj [|("text", Jv.of_string s)|])]
 
-let key k code =
+(* A key press with the modifier keys of [modifiers] down. With [~text] (for
+   example "\r" for Enter), the press gives a character, as a real key does:
+   then Enter on a focused link follows the link. *)
+let key ?(modifiers = 0) ?text k code =
   let ev kind =
     ( "Input.dispatchKeyEvent"
     , Jv.obj
-        [| ("type", Jv.of_string kind)
-         ; ("key", Jv.of_string k)
-         ; ("code", Jv.of_string k)
-         ; ("windowsVirtualKeyCode", Jv.of_int code)
-         ; ("nativeVirtualKeyCode", Jv.of_int code) |] )
+        (Array.append
+           [| ("type", Jv.of_string kind)
+            ; ("key", Jv.of_string k)
+            ; ("code", Jv.of_string k)
+            ; ("windowsVirtualKeyCode", Jv.of_int code)
+            ; ("nativeVirtualKeyCode", Jv.of_int code)
+            ; ("modifiers", Jv.of_int modifiers) |]
+           ( match text with
+           | Some t when kind = "keyDown" ->
+               [|("text", Jv.of_string t)|]
+           | _ ->
+               [||] ) ) )
   in
-  drive [ev "rawKeyDown"; ev "keyUp"]
+  drive [ev (if text = None then "rawKeyDown" else "keyDown"); ev "keyUp"]
 
 let ime s =
   let n = Jv.of_int (String.length s) in

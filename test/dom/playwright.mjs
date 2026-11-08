@@ -39,21 +39,38 @@ export const load = async () => {
 // preload fault.
 const browserMessage = (m) => m.args().length === 0 || /^\[JavaScript (Error|Warning):/.test(m.text());
 
-// The trusted input of the DevTools commands of the pages.
+// The keys of the modifier bits of DevTools: Alt 1, Control 2, Meta 4,
+// Shift 8.
+const modifierKeys = [[1, 'Alt'], [2, 'Control'], [4, 'Meta'], [8, 'Shift']];
+const keysOf = (bits) => modifierKeys.filter(([bit]) => (bits ?? 0) & bit).map(([, key]) => key);
+
+// The trusted input of the DevTools commands of the pages. A mouse press or a
+// key press with modifier bits puts the keys down before the press, and the
+// release puts them up after the release. Playwright gives the buttons left, middle and right.
 const input = async (page, name, method, p) => {
   const mouse = page.mouse;
   if (method === 'Input.dispatchMouseEvent') {
     await mouse.move(p.x, p.y);
     const options = { button: p.button ?? 'left', clickCount: p.clickCount ?? 1 };
-    if (p.type === 'mousePressed') await mouse.down(options);
-    else if (p.type === 'mouseReleased') await mouse.up(options);
+    if (p.type === 'mousePressed') {
+      for (const key of keysOf(p.modifiers)) await page.keyboard.down(key);
+      await mouse.down(options);
+    } else if (p.type === 'mouseReleased') {
+      await mouse.up(options);
+      for (const key of keysOf(p.modifiers).reverse()) await page.keyboard.up(key);
+    }
     else if (p.type === 'mouseWheel') await mouse.wheel(p.deltaX ?? 0, p.deltaY ?? 0);
     else if (p.type !== 'mouseMoved') throw new Error(`the mouse event ${p.type} is not supported in ${name}`);
   } else if (method === 'Input.dispatchKeyEvent') {
     // The key names of DevTools (Enter, ArrowDown) are the key names of
     // Playwright.
-    if (p.type === 'rawKeyDown' || p.type === 'keyDown') await page.keyboard.down(p.key);
-    else if (p.type === 'keyUp') await page.keyboard.up(p.key);
+    if (p.type === 'rawKeyDown' || p.type === 'keyDown') {
+      for (const key of keysOf(p.modifiers)) await page.keyboard.down(key);
+      await page.keyboard.down(p.key);
+    } else if (p.type === 'keyUp') {
+      await page.keyboard.up(p.key);
+      for (const key of keysOf(p.modifiers).reverse()) await page.keyboard.up(key);
+    }
     else throw new Error(`the key event ${p.type} is not supported in ${name}`);
   } else if (method === 'Input.insertText') await page.keyboard.insertText(p.text);
   else throw new Error(`${method} is not supported in ${name}`);
