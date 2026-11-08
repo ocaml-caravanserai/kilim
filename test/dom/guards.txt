@@ -107,10 +107,11 @@ mount.ml    traps      the wasm_of_ocaml build, and     the two removed: the run
                                                         (the js build has no traps,
                                                         and the wasm build has
                                                         WebAssembly).
-trusted.ml  of_trusted  no trustedTypes: of_string    true: D38 (a JS string is not
-                                                        refused). false: D38 (no
-                                                        trustedTypes, a JS error).
-trusted.ml  of_trusted  isHTML                          true: D38 (a JS string is not
+trusted.ml  of_trusted  not Trusted_types.exists:      true: D38 (a JS string is not
+                       of_string                        refused). false: D38 (no
+                                                        trustedTypes: is_html is
+                                                        false, Invalid_argument).
+trusted.ml  of_trusted  Trusted_types.is_html           true: D38 (a JS string is not
                                                         refused). false: D38 (a
                                                         TrustedHTML is refused).
 browser_host.ml  same  js_of_ocaml: Object.is           ( == ): D17, H shallow_equal
@@ -136,12 +137,17 @@ window.ml   start      passive                          false: D24.
 
 The guards of kilim.web (src/web):
 
-microtask.ml  queue    the queueMicrotask call          removed: W1.
+microtask.ml  queue    the queueMicrotask call          removed: W1, the smoke page
+                                                        (the order of the queues).
 js_object.ml  is       Object.is                        Jv.strict_equal: W2 (0 and
-                                                        -0, NaN).
+                                                        -0, NaN), D17 and H
+                                                        shallow_equal in the js
+                                                        build.
 trusted_types.ml  exists  Jv.is_none of trustedTypes    true: W3 (a null
+                                                        trustedTypes), D38 (no
                                                         trustedTypes). false: W3
-                                                        (exists).
+                                                        (exists), D38 (a JS string
+                                                        is not refused).
 trusted_types.ml  is_html  no trustedTypes: false       removed: W3 (a null
                                                         trustedTypes: a JS
                                                         TypeError).
@@ -149,5 +155,5 @@ trusted_types.ml  is_html  isHTML is a function         removed: W3 (an element 
                                                         the id trustedTypes: a JS
                                                         TypeError).
 trusted_types.ml  is_html  isHTML gives true            true: W3 (a JS string, an
-                                                        object). false: W3 (a
-                                                        TrustedHTML).
+                                                        object), D38. false: W3 (a
+                                                        TrustedHTML), D38.

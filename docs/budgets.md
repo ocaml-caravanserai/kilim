@@ -14,7 +14,7 @@ pull request.
 | Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), tests D25, D40 and D44 of `test/dom` (listeners, timers, DOM, in Chrome, Firefox and WebKit), and the weak tests (native, and `test/weak` in the js_of_ocaml and wasm_of_ocaml builds) | Done |
 | Partial update | Yes, each change | `test/view/test_budget.ml`: three actions on 1,000 keyed component rows, exact counts of the views and of the DOM operations. `bench/alloc`: the allocated words of two actions | Done |
 | Token release | Yes, each change | `test/view/test_budget.ml`: the operations on the token lists when the parent removes 1,000 and 2,000 component rows | Done |
-| Linked modules | Yes, each change | `test/link` (kilim, kilim.browser) | Done |
+| Linked modules | Yes, each change | `test/link` (kilim, kilim.browser, kilim.web) | Done |
 | Time of the actions, wasm start-up time | No | Each night on fixed hardware | Waits: no fixed hardware yet |
 
 The leak tests and the link check run in the CI step "Test", with the other
@@ -51,15 +51,15 @@ Measured with OCaml 5.5.1, js_of_ocaml and wasm_of_ocaml 6.4.1, Brr 0.0.9:
 
 | Program | File | Measured | Budget |
 |---|---|---|---|
-| `counter` | `counter.bc.js` (js_of_ocaml) | 37,612 bytes | 38,500 bytes |
-| `counter` | The main `.wasm` file (wasm_of_ocaml) | 37,477 bytes | 38,000 bytes |
-| `counter` | `counter.bc.wasm.js` (the launcher) | 6,889 bytes | 7,500 bytes |
-| `example-todo` | `main.bc.js` (js_of_ocaml) | 39,437 bytes | 41,000 bytes |
-| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 39,925 bytes | 40,500 bytes |
+| `counter` | `counter.bc.js` (js_of_ocaml) | 37,608 bytes | 38,500 bytes |
+| `counter` | The main `.wasm` file (wasm_of_ocaml) | 37,518 bytes | 38,000 bytes |
+| `counter` | `counter.bc.wasm.js` (the launcher) | 6,891 bytes | 7,500 bytes |
+| `example-todo` | `main.bc.js` (js_of_ocaml) | 39,435 bytes | 41,000 bytes |
+| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 39,957 bytes | 40,500 bytes |
 | `example-todo` | `main.bc.wasm.js` (the launcher) | 6,886 bytes | 7,500 bytes |
-| `example-components` | `main.bc.js` (js_of_ocaml) | 41,648 bytes | 44,000 bytes |
-| `example-components` | The main `.wasm` file (wasm_of_ocaml) | 43,625 bytes | 46,000 bytes |
-| `example-components` | `main.bc.wasm.js` (the launcher) | 6,888 bytes | 7,500 bytes |
+| `example-components` | `main.bc.js` (js_of_ocaml) | 41,658 bytes | 44,000 bytes |
+| `example-components` | The main `.wasm` file (wasm_of_ocaml) | 43,676 bytes | 46,000 bytes |
+| `example-components` | `main.bc.wasm.js` (the launcher) | 6,886 bytes | 7,500 bytes |
 
 The components example adds about 4.0 KB (js_of_ocaml) and 6.1 KB
 (wasm_of_ocaml) to the counter. This includes the code of the four
@@ -137,6 +137,39 @@ The same rule checks the generated code: the release `counter.bc.js` contains
 `.insertBefore(`, `.setAttribute(`, `.__kilim` and `.addEventListener(` (the
 DOM operations are direct calls), and the launcher contains
 `"meth_call_2_insertBefore"` and `"get___kilim"`.
+
+The rule also checks that an app does not pay for a binding of `kilim.web`
+that it does not use. The counter does not use `Unsafe_html.of_trusted`,
+thus its three release files (the `.js` file, the launcher and the main
+`.wasm` file, read as bytes) do not contain `trustedTypes` and `isHTML`. The
+positive control: the same read finds `queueMicrotask` (the binding
+`Kilim_web.Microtask`, which the counter uses) in each of the three files.
+
+## kilim.web
+
+kilim.browser calls `queueMicrotask`, `Object.is` and Trusted Types through
+`kilim.web` (Phase 3). The counter, the todo example and the components
+example change by 4 bytes or less in the `.js` file and in the launcher. The
+main `.wasm` file is 32 to 51 bytes larger: before the change, the counter
+was 37,612 bytes (js_of_ocaml) and 37,477 bytes (the main `.wasm` file).
+wasm_of_ocaml does not inline the call of `Kilim_web.Microtask.queue` into
+the browser host. The release `.js` file of the counter has the same code
+for `Object.is` as before (the same direct call `.is(a,b)`), thus the model
+compare and `Component.shallow_equal` do not get slower or larger under
+js_of_ocaml. The budgets do not change.
+
+The known cost of each binding, measured one time with a program that uses
+only that binding, against the same program with no binding (gzip -9, the
+release profile):
+
+| Binding | `.js` file | Main `.wasm` file | Launcher |
+|---|---|---|---|
+| `Microtask.queue` | 27 bytes | 68 bytes | 43 bytes |
+| `Js_object.is` | 221 bytes | 248 bytes | 42 bytes |
+| `Trusted_types.exists` and `is_html` | 75 bytes | 112 bytes | 69 bytes |
+
+The cost of `Js_object.is` includes `CamlinternalLazy`, which each kilim app
+links already.
 
 ## DOM operations
 

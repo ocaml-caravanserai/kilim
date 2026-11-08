@@ -43,7 +43,7 @@ let run_microtask =
   lazy (Jv.callback ~arity:1 (fun _ -> (Queue.take microtasks) ()))
 
 let queue_microtask f =
-  ignore (Jv.call Jv.global "queueMicrotask" [|Lazy.force run_microtask|]) ;
+  Kilim_web.Microtask.queue (Lazy.force run_microtask) ;
   Queue.push f microtasks
 
 (* The same form on one MessageChannel, made at the first post. A hidden page
@@ -76,8 +76,7 @@ let hidden () =
    field compare of Component.shallow_equal: its compare by tag finds the JS
    arrays [253, 1] and [253, 2] equal, as two NaN floats. The other builds keep
    the default field compare. *)
-let object_is a b =
-  Jv.to_bool (Jv.call (Lazy.force Js.object_) "is" [|Jv.repr a; Jv.repr b|])
+let object_is a b = Kilim_web.Js_object.is (Jv.repr a) (Jv.repr b)
 
 let same =
   match Sys.backend_type with

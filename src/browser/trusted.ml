@@ -6,8 +6,8 @@ type Kilim.Private.Unsafe_html.native += Trusted of Jv.t
 let string_of v = Jv.to_string (Jv.call Jv.global "String" [|v|])
 
 let of_trusted v =
-  let tt = Jv.get Jv.global "trustedTypes" in
-  if Jv.is_none tt then Kilim.Unsafe_html.of_string (string_of v)
-  else if Jv.strict_equal (Jv.call tt "isHTML" [|v|]) Jv.true' then
+  if not (Kilim_web.Trusted_types.exists ()) then
+    Kilim.Unsafe_html.of_string (string_of v)
+  else if Kilim_web.Trusted_types.is_html v then
     Kilim.Private.Unsafe_html.of_native (string_of v) (Trusted v)
   else invalid_arg "Unsafe_html.of_trusted: not a TrustedHTML"

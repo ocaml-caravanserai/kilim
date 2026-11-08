@@ -1,7 +1,8 @@
 // The size budget of kilim (docs/budgets.md). It gives the gzip size (level 9)
 // of each program in the release profile, and compares it with the budget. It
 // also checks the generated code of the counter: the DOM operations are direct
-// calls.
+// calls, and the counter contains no binding of kilim.web that it does not
+// use.
 //
 //   node size.mjs budget NAME JS LAUNCHER ASSETS [NAME JS LAUNCHER ASSETS ...]
 //
@@ -53,6 +54,22 @@ for (let i = 0; i < rest.length; i += 4) {
     };
     has(js, ['.insertBefore(', '.setAttribute(', '.__kilim', '.addEventListener(']);
     has(launcher, ['"meth_call_2_insertBefore"', '"get___kilim"']);
+    // The counter does not use Unsafe_html.of_trusted, thus no file of the
+    // counter contains the names of Kilim_web.Trusted_types: an app does not
+    // pay for a binding that it does not use. The positive control: the same
+    // read finds the name of Kilim_web.Microtask, which the counter uses, in
+    // each file.
+    const main = assets.reduce((a, b) => (gz(a) >= gz(b) ? a : b));
+    for (const file of [js, launcher, main]) {
+      const s = readFileSync(file, 'latin1');
+      const found = (t, want) => {
+        const ok = s.includes(t) === want;
+        console.log(`${ok ? 'ok  ' : 'FAIL'} ${file} ${want ? 'contains' : 'lacks'} ${t}`);
+        if (!ok) failures++;
+      };
+      found('queueMicrotask', true);
+      for (const t of ['trustedTypes', 'isHTML']) found(t, false);
+    }
   }
 }
 for (const key of budget.keys())
