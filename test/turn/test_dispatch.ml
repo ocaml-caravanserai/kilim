@@ -131,6 +131,13 @@ let chained () =
         ""
     | Private.Dom.Bool ->
         false
+    | Private.Dom.Mouse ->
+        { Private.Dom.button= 0
+        ; alt= false
+        ; ctrl= false
+        ; meta= false
+        ; shift= false
+        ; default_prevented= false }
   in
   let send ?(composing = false) name =
     ignore
@@ -621,6 +628,13 @@ let calls () =
         "k"
     | Private.Dom.Bool ->
         false
+    | Private.Dom.Mouse ->
+        { Private.Dom.button= 0
+        ; alt= false
+        ; ctrl= false
+        ; meta= false
+        ; shift= false
+        ; default_prevented= false }
   in
   let ev name =
     { Private.Event.name

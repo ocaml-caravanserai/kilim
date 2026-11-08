@@ -16,6 +16,7 @@ type 'msg handler = 'msg Dom.event =
   ; bubbles: bool  (** [false]: a listener on the element ([Event.bubbles]). *)
   ; prevent_default: bool
   ; stop: bool
+  ; filter: Dom.filter
   ; decode: 'msg decode }
 
 (** A context (design section 10): a typed key and the value of a read with no

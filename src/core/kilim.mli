@@ -351,6 +351,26 @@ module Ev : sig
 
   val click : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
 
+  val link_click : ?stop:bool -> 'msg -> 'msg t
+  (** [link_click msg] is for a link ([El.a] with [At.href]) that the app
+      follows itself, for example with a router. A plain click prevents the
+      default and gives [msg]. A plain click uses the main button with no Alt,
+      Ctrl, Meta or Shift key. Also, no handler below and no listener of the
+      page prevented its default. For another click, the handler does not
+      prevent the default and gives no message, thus the browser follows the
+      link (for example, in a new tab). The [~stop] of the handler applies to
+      each click: with [~stop], a click handler above (for example, of a card
+      around the link) does not run for a Ctrl click on the link.
+
+      The handler takes each plain click, also on an [a] with [target],
+      [download] or a link to another origin. Thus use it only for the links
+      that the app follows itself. The Enter key on a focused link sends a plain
+      click. Ctrl+Enter sends a click with Ctrl, which the handler skips. A
+      browser sends no [click] for the middle button (it sends [auxclick]): thus
+      the middle button opens the link with no message. [link_click] uses the
+      [click] event. Thus do not put {!click} and [link_click] on one element.
+  *)
+
   val check : ?prevent_default:bool -> ?stop:bool -> (bool -> 'msg) -> 'msg t
   (** [check f] is for a checkbox or a radio button. It uses the [click] event,
       because the browser sends [input] and [change] after the restore of the
@@ -1160,4 +1180,82 @@ module Context : sig
       [f] runs in the diff. An error in [f] goes to the nearest {!View.boundary}
       above the read, whose fallback replaces the subtree, or to the root catch
       of {!App.make}. [f] must have no side effects. *)
+end
+
+(** URLs (design sections 09 and 13).
+
+    The functions work on the bytes of OCaml strings, in UTF-8. *)
+module Url : sig
+  val permitted : string -> bool
+  (** [permitted url] is [true] if [url] is relative, or if its scheme is
+      [http], [https], [mailto] or [tel]. This is the URL check of {!At}: for
+      example, [At.href] raises for a URL that is not permitted. The check finds
+      the scheme as the WHATWG URL parser does. *)
+
+  val encode_component : string -> string
+  (** [encode_component s] encodes [s] as [encodeURIComponent] does: each byte
+      that is not an ASCII letter, a digit or one of [- _ . ! ~ * ' ( )] becomes
+      [%XX], with uppercase hex digits. *)
+
+  val decode_component : string -> string
+  (** [decode_component s] decodes each [%XX] of [s] to its byte. It does not
+      raise: a [%] with no two hex digits after it stays. The result is not
+      always valid UTF-8, because the bytes of [%XX] are not examined. For a
+      string from {!encode_component}, it gives the original string. *)
+
+  val query : string -> (string * string) list
+  (** [query s] gives the pairs of the query [s], as [URLSearchParams] does. [s]
+      can start with [?]. The pairs have the order of [s]. A [&] separates the
+      pairs, and the first [=] of a pair separates the name and the value. A
+      pair with no [=] has the value [""]. An empty pair is not in the result. A
+      [+] is a space, and each [%XX] is a byte, as {!decode_component} does.
+      Then each part that is not valid UTF-8 becomes U+FFFD. *)
+
+  val with_query : string -> (string * string) list -> string
+  (** [with_query url pairs] adds [pairs] to the query of [url], before the
+      fragment. Each name and each value is encoded with {!encode_component}. If
+      [url] has no [?], a [?] comes first. If the query of [url] is not empty
+      and does not end with [&], a [&] comes first. With no pair, the result is
+      [url]. For example, [with_query "/s" ["q", "a b"]] is ["/s?q=a%20b"]. *)
+
+  (** A location of the router: the path, the query and the fragment of a URL,
+      decoded. *)
+  type location = Url.location =
+    {path: string list; query: (string * string) list; fragment: string option}
+
+  val parse : string -> location
+  (** [parse s] gives the location of [s], the path, the query and the fragment
+      of a URL (for example ["/users/42?tab=a#top"]). The path has no [/] at the
+      start. Each segment of the path between two [/] is decoded with
+      {!decode_component}. Thus ["/"] and [""] have the path [[]], and ["/a/"]
+      has the path [["a"; ""]]. A first segment ["."] before an empty segment is
+      not in the path: ["/.//a"] has the path [[""; "a"]] (see {!to_string}).
+      The query comes from the text between the first [?] and the first [#], as
+      {!query} gives it. The fragment is the decoded text after the first [#],
+      or [None] with no [#]. The path and the fragment keep bytes that are not
+      valid UTF-8. The query replaces them with U+FFFD.
+
+      A browser removes each ["."] segment, and each [".."] segment with the
+      segment before it, also in the form ["%2E"] (see {!to_string}). Thus the
+      path of [location] in a browser has no such segment. *)
+
+  val to_string : location -> string
+  (** [to_string l] is the URL of [l]: [/], then the segments encoded with
+      {!encode_component} and separated by [/], then the query with
+      {!with_query} if it has a pair, then the encoded fragment after [#].
+
+      If the first segment is empty and more segments follow, the URL starts
+      with ["/./"], as the WHATWG URL serializer does. Without it, the path
+      [[""; "evil.example"; "x"]] gives ["//evil.example/x"], a URL of another
+      host, which {!permitted} accepts. Then [parse (to_string l)] is [l],
+      except for the path [[""]], which gives ["/"], for a first segment ["."]
+      before an empty segment, and for a query with text that is not valid
+      UTF-8.
+
+      A ["."] or [".."] segment does not survive a browser: the browser removes
+      a ["."] segment, and a [".."] segment with the segment before it, also in
+      the form ["%2E"]. For example, the browser changes the URL of
+      [["a"; ".."; "b"]] to ["/b"], another route of the same app. Thus an app
+      that puts user data in a segment of a path must refuse or change ["."] and
+      [".."]. *)
 end

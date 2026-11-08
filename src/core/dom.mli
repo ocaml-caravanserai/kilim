@@ -8,6 +8,24 @@ type ns = Html | Svg  (** The namespace of an element. *)
     attribute. *)
 type prop = Value of string | Checked of bool
 
+(** The button and the modifier keys of a mouse event, and its
+    [defaultPrevented]. The listener reads them when the handler runs. Thus
+    [default_prevented] is true if a handler on an element in the target
+    prevented the default. *)
+type mouse =
+  { button: int  (** 0 the main button, 1 the middle button, 2 the secondary. *)
+  ; alt: bool
+  ; ctrl: bool
+  ; meta: bool
+  ; shift: bool
+  ; default_prevented: bool }
+
+(** A fixed rule of the listener that can skip a handler. [Plain_click] skips a
+    click with a button that is not 0, with a modifier key, or with a default
+    that is prevented. A skipped handler does not prevent the default and gives
+    no message, but its stop applies. *)
+type filter = Any | Plain_click
+
 (** What the listener reads from the event for the handler. *)
 type _ payload =
   | Unit : unit payload  (** Nothing. *)
@@ -15,6 +33,7 @@ type _ payload =
   | Key : string payload  (** The [key] of a keyboard event. *)
   | Bool : bool payload
       (** The [checked] of the target, read before the restore. *)
+  | Mouse : mouse payload  (** For the filter [Plain_click]. *)
 
 (** The payload of an event and the function that makes the message. *)
 type 'msg decode = Decode : 'a payload * ('a -> 'msg) -> 'msg decode
@@ -25,13 +44,19 @@ type 'msg event =
   ; bubbles: bool  (** [false]: a listener on the element ([Event.bubbles]). *)
   ; prevent_default: bool
   ; stop: bool
+  ; filter: filter
   ; decode: 'msg decode }
 
 (** An event handler, bound to the post of an instance. The listener applies the
-    static options synchronously, then calls [fire] with the payload. *)
+    filter and the static options synchronously, then calls [fire] with the
+    payload. *)
 type handler =
   | Handler :
-      {payload: 'a payload; prevent_default: bool; stop: bool; fire: 'a -> unit}
+      { payload: 'a payload
+      ; prevent_default: bool
+      ; stop: bool
+      ; filter: filter
+      ; fire: 'a -> unit }
       -> handler
 
 (** The post of an instance. [post x f] puts the payload [x] and the message

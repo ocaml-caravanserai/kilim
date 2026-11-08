@@ -26,7 +26,12 @@ let cell evs dispatch =
   ; composing= false }
 
 let ev ?(prevent_default = false) ?(stop = false) event payload f =
-  {Dom.event; bubbles= true; prevent_default; stop; decode= Decode (payload, f)}
+  { Dom.event
+  ; bubbles= true
+  ; prevent_default
+  ; stop
+  ; filter= Any
+  ; decode= Decode (payload, f) }
 
 let tree () =
   let t, o, root = setup () in
@@ -175,7 +180,8 @@ let state () =
       [ ev ~prevent_default:true "click" Unit ignore
       ; ev ~stop:true "input" String ignore
       ; ev ~prevent_default:true ~stop:true "keydown" Key ignore
-      ; ev "change" Bool ignore ]
+      ; ev "change" Bool ignore
+      ; {(ev "mouseup" Mouse ignore) with filter= Plain_click} ]
       ignore
   in
   o.attach e c ;
@@ -184,7 +190,8 @@ let state () =
   equal string
     "<div><input class=\"c&quot;&lt;&amp;&gt;\" id=\"b\" .value=\"v&quot;\" \
      .checked @mouseenter @scroll~ !change/checked !click+p !input/value+s \
-     !keydown/key+p+s><svg:circle>\"x&lt;&amp;&gt;&quot;\"</svg:circle><p><b>r</b></p></div>"
+     !keydown/key+p+s \
+     !mouseup/mouse+link><svg:circle>\"x&lt;&amp;&gt;&quot;\"</svg:circle><p><b>r</b></p></div>"
     (F.dump root) ;
   ignore t
 
@@ -575,7 +582,8 @@ let fire () =
       [ ev "click" Unit (fun () -> "click")
       ; ev "input" String Fun.id
       ; ev "keydown" Key (fun s -> "key " ^ s)
-      ; ev "change" Bool string_of_bool ]
+      ; ev "change" Bool string_of_bool
+      ; ev "mouseup" Mouse (fun m -> "button " ^ string_of_int m.button) ]
       (fun m -> got := m :: !got)
   in
   o.attach e c ;
@@ -583,7 +591,17 @@ let fire () =
   F.fire e "input" Dom.String "s" ;
   F.fire e "keydown" Dom.Key "k" ;
   F.fire e "change" Dom.Bool true ;
-  equal (list string) ["true"; "key k"; "s"; "click"] !got ;
+  let m : Dom.mouse =
+    { button= 1
+    ; alt= false
+    ; ctrl= false
+    ; meta= false
+    ; shift= false
+    ; default_prevented= false }
+  in
+  F.fire e "mouseup" Dom.Mouse m ;
+  equal (list string) ["button 1"; "true"; "key k"; "s"; "click"] !got ;
+  misuse (fun () -> F.fire e "click" Dom.Mouse m) ;
   misuse (fun () -> F.fire e "click" Dom.String "x") ;
   misuse (fun () -> F.fire e "input" Dom.Key "x") ;
   misuse (fun () -> F.fire e "keydown" Dom.Bool true) ;

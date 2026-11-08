@@ -5,4 +5,4 @@
 
 (test
  (name test_core)
- (libraries kilim shallow_law windtrap))
+ (libraries kilim shallow_law url_corpus windtrap))

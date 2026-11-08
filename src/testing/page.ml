@@ -13,6 +13,8 @@ type 'out t =
         (** The undo of a prevented click, after the microtasks. *)
   ; tasks: (unit -> unit) Queue.t  (** The tasks of [Event.dispatch]. *)
   ; mutable depth: int  (** The nested calls. *)
+  ; mutable prevented: bool
+        (** The default of the last event of the page is prevented. *)
   ; outputs: 'out list ref  (** The outputs, the newest first. *) }
 
 type none = |
@@ -79,7 +81,16 @@ let make ?host app outputs =
   in
   let rt = Runtime.start (Host.env host) ops ~parent:root app in
   Host.microtasks host ;
-  {host; doc; root; rt; env; undo= []; tasks; depth= 0; outputs}
+  { host
+  ; doc
+  ; root
+  ; rt
+  ; env
+  ; undo= []
+  ; tasks
+  ; depth= 0
+  ; prevented= false
+  ; outputs }
 
 let start ?host app : none t = make ?host app (ref [])
 
@@ -179,10 +190,19 @@ let find t = function
       in
       one "the label" s all
 
+let plain =
+  { Dom.button= 0
+  ; alt= false
+  ; ctrl= false
+  ; meta= false
+  ; shift= false
+  ; default_prevented= false }
+
 (* One event on [target]. The payload comes from the target: its live value, its
-   live checked, or [key]. The result is [true] if a handler prevents the
-   default. *)
-let send t ?(key = "") ?(composing = false) target name =
+   live checked, [key], or [mouse]. [mouse.default_prevented] tells that a
+   listener of the page prevented the default before the dispatch. The result is
+   [true] if the default is prevented. *)
+let send t ?(key = "") ?(composing = false) ?(mouse = plain) target name =
   let read : type a. a Dom.payload -> a = function
     | Dom.Unit ->
         ()
@@ -192,9 +212,18 @@ let send t ?(key = "") ?(composing = false) target name =
         key
     | Dom.Bool ->
         Fake_dom.checked target
+    | Dom.Mouse ->
+        mouse
   in
-  Event.dispatch t.env t.rt
-    {name; target; composing; read; prevent= ignore; stop= ignore}
+  let p =
+    Event.dispatch t.env t.rt
+      {name; target; composing; read; prevent= ignore; stop= ignore}
+    || mouse.default_prevented
+  in
+  t.prevented <- p ;
+  p
+
+let prevented t = t.prevented
 
 let dispatch t by name = top t (fun () -> ignore (send t (find t by) name))
 
@@ -204,7 +233,11 @@ let dispatch t by name = top t (fun () -> ignore (send t (find t by) name))
    dispatch and its microtasks: the checkbox toggles back. The radio button that
    was checked before becomes checked again, if it is still in the group of the
    target. If not, the target stays checked (Chrome). *)
-let click t by =
+let click t ?(button = 0) ?(alt = false) ?(ctrl = false) ?(meta = false)
+    ?(shift = false) ?(prevented = false) by =
+  let mouse =
+    {Dom.button; alt; ctrl; meta; shift; default_prevented= prevented}
+  in
   top t (fun () ->
       let target = find t by in
       let was = Fake_dom.checked target in
@@ -232,7 +265,7 @@ let click t by =
         | Some _ | None ->
             ignore
       in
-      if send t target "click" then t.undo <- undo :: t.undo )
+      if send t ~mouse target "click" then t.undo <- undo :: t.undo )
 
 (* The browser writes the value, then sends the event. *)
 let set_then t by v name =

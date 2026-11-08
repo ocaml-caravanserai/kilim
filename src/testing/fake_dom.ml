@@ -514,6 +514,8 @@ let same : type a b. a Dom.payload -> b Dom.payload -> (a, b) Type.eq option =
       Some Equal
   | Bool, Bool ->
       Some Equal
+  | Mouse, Mouse ->
+      Some Equal
   | _ ->
       None
 
@@ -584,6 +586,8 @@ let payload_name : type a. a Dom.payload -> string = function
       "/key"
   | Bool ->
       "/checked"
+  | Mouse ->
+      "/mouse"
 
 (* The value of a select, and a value that is not the value with no write. *)
 let state n =
@@ -608,7 +612,8 @@ let state n =
           (fun (ev, Dom.Handler h) ->
             " !" ^ ev ^ payload_name h.payload
             ^ (if h.prevent_default then "+p" else "")
-            ^ if h.stop then "+s" else "" )
+            ^ (if h.stop then "+s" else "")
+            ^ match h.filter with Dom.Plain_click -> "+link" | Dom.Any -> "" )
           (Dom.handlers c)
   in
   props ^ String.concat "" listeners

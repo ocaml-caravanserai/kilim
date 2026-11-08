@@ -1,8 +1,9 @@
 (* The tests of kilim.web in real browsers: Chrome, Firefox and WebKit (design
    section 13), in the js_of_ocaml and wasm_of_ocaml builds. One W test for each
-   binding. The D tests of test_dom.ml test the code of kilim.browser that uses
-   the bindings. test/dom/guards.txt lists the guards of kilim.web with the test
-   that fails when a guard changes. *)
+   binding. U1 compares Kilim.Url with the URL functions of the browser. The D
+   tests of test_dom.ml test the code of kilim.browser that uses the bindings.
+   test/dom/guards.txt lists the guards of kilim.web with the test that fails
+   when a guard changes. *)
 
 open Driver
 open Fut.Syntax
@@ -110,11 +111,96 @@ let w3 () =
   check "W3 trustedTypes after the element" (W.Trusted_types.is_html html) ;
   Fut.return ()
 
+(* U1: Kilim.Url against encodeURIComponent, decodeURIComponent, URLSearchParams
+   and URL, on the corpus of test/url_corpus. *)
+let u1 () =
+  let module U = Kilim.Url in
+  let module C = Url_corpus in
+  let call f s = Jv.to_string (Jv.call Jv.global f [|Jv.of_string s|]) in
+  check "U1 encode_component is encodeURIComponent"
+    (List.for_all
+       (fun s ->
+         String.equal (U.encode_component s) (call "encodeURIComponent" s) )
+       C.texts ) ;
+  check "U1 decode_component is decodeURIComponent"
+    (List.for_all
+       (fun (s, d) ->
+         String.equal (U.decode_component s) d
+         && String.equal (call "decodeURIComponent" s) d )
+       C.escapes ) ;
+  let entries s =
+    let p = Jv.new' (Jv.get Jv.global "URLSearchParams") [|Jv.of_string s|] in
+    let pair e =
+      (Jv.to_string (Jv.Jarray.get e 0), Jv.to_string (Jv.Jarray.get e 1))
+    in
+    Array.to_list
+      (Jv.to_array pair (Jv.call (Jv.get Jv.global "Array") "from" [|p|]))
+  in
+  check "U1 query is URLSearchParams"
+    (List.for_all (fun (s, q) -> U.query s = q && entries s = q) C.queries) ;
+  check "U1 with_query: URLSearchParams gives the pairs"
+    (List.for_all
+       (fun (url, q, r) ->
+         let search =
+           match String.index_opt r '?' with
+           | Some i ->
+               String.sub r i (String.length r - i)
+           | None ->
+               ""
+         in
+         let search =
+           match String.index_opt search '#' with
+           | Some i ->
+               String.sub search 0 i
+           | None ->
+               search
+         in
+         String.equal (U.with_query url q) r
+         && (q = [] || List.for_all (fun p -> List.mem p (entries search)) q) )
+       C.with_queries ) ;
+  (* Each URL of to_string, with the page as the base, has the host of the
+     page. *)
+  let href = Jv.get (Jv.get Jv.global "location") "href" in
+  let host = Jv.to_string (Jv.get (Jv.get Jv.global "location") "host") in
+  check "U1 to_string: new URL(to_string l, page).host is the host of the page"
+    (List.for_all
+       (fun (l, _) ->
+         let u =
+           Jv.new' (Jv.get Jv.global "URL")
+             [|Jv.of_string (U.to_string l); href|]
+         in
+         String.equal (Jv.to_string (Jv.get u "host")) host )
+       C.prints ) ;
+  (* The browser keeps a location with no dot segment: the text of its href
+     after the origin parses back to the location. (The hash of URL is "" for an
+     empty fragment, thus the check reads href.) *)
+  let browser_url l =
+    let u =
+      Jv.new' (Jv.get Jv.global "URL") [|Jv.of_string (U.to_string l); href|]
+    in
+    let get k = Jv.to_string (Jv.get u k) in
+    let h = get "href" and o = get "origin" in
+    String.sub h (String.length o) (String.length h - String.length o)
+  in
+  let dot l = List.exists (fun x -> x = "." || x = "..") l.U.path in
+  check "U1 to_string: the URL of the browser parses back to the location"
+    (List.for_all
+       (fun (l, _) -> dot l || l.U.path = [""] || U.parse (browser_url l) = l)
+       C.prints ) ;
+  (* A fact of the three browsers: a ".." segment removes the segment before it,
+     thus the location goes to another route. *)
+  check "U1 to_string: the browser changes the path a/../b to /b"
+    (String.equal
+       (browser_url {U.path= ["a"; ".."; "b"]; query= []; fragment= None})
+       "/b" ) ;
+  Fut.return ()
+
 let () =
   Fut.await
     (let* () = release () in
      let* () = loaded () in
      let* () = w1 () in
      let* () = w2 () in
-     w3 () )
+     let* () = w3 () in
+     u1 () )
     finish

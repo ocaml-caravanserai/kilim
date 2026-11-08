@@ -55,7 +55,8 @@ const limitMs = 60000;
 
 const backend = await open(name);
 
-// The server of the build directory. /page/<prog> is the page of a program.
+// The server of the build directory. /page/<prog> is the page of a program,
+// and also each path under /page/<prog>/.
 // The launcher of wasm_of_ocaml fetches its assets, thus no file: URL.
 const types = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.map': 'application/json' };
 const held = new Map();
@@ -66,7 +67,9 @@ const body =
 const server = http.createServer((req, res) => {
   const path = decodeURIComponent(req.url.split('?')[0]);
   if (path.startsWith('/page/')) {
-    const prog = path.slice('/page/'.length);
+    // /page/<prog>/<deep path> is the page of <prog> too: a reload of a path
+    // of a router works.
+    const prog = path.slice('/page/'.length).split('/')[0];
     const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' };
     const csp = prog.startsWith('test_csp');
     if (csp) headers['content-security-policy'] = cspPolicy;

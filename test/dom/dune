@@ -12,7 +12,7 @@
 (executables
  (names smoke test_dom test_web test_fut test_csp)
  (modes js wasm)
- (libraries kilim kilim.browser kilim.web brr))
+ (libraries kilim kilim.browser kilim.web brr url_corpus))
 
 ; The files of each rule: the runner, the pages and the ES module of the
 ; tests W5, W6 and WC.

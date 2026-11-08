@@ -2181,6 +2181,119 @@ let d44 () =
     !clean ;
   Fut.return ()
 
+(* D45: Ev.link_click with trusted clicks: no key, a click on a span in the
+   link, Enter and Ctrl+Enter on the focused link, Ctrl, Shift, Alt, Meta and
+   the middle button. Then synthetic clicks: el.click(), a MouseEvent with the
+   button 1, an Event with no button, and a click that a capture listener of the
+   page prevents first. A window listener for click and auxclick records each
+   event with its button, its modifier keys and its defaultPrevented, then
+   prevents the default: thus the browser opens no tab and does not follow the
+   link. The synthetic MouseEvent is cancelable: WebKit follows a link for a
+   synthetic click with the button 1 (measured). *)
+let d45 () =
+  let got = ref 0 in
+  let app =
+    App.make
+      ~init:(fun () -> ((), Cmd.none))
+      ~update:(fun () () -> incr got ; ((), Cmd.none))
+      ~view:(fun () ->
+        El.a
+          ~at:[At.href "/d45"; At.data "testid" "l"; box_style]
+          ~ev:[Ev.link_click ()]
+          [El.span ~at:[At.data "testid" "s"] [txt "link"]] )
+      ()
+  in
+  let root, a = start app in
+  let link = q root "l" in
+  let seen = ref [] in
+  let record ev =
+    let flag k s = if Jv.to_bool (Jv.get ev k) then " " ^ s else "" in
+    seen :=
+      ( Jv.to_string (Jv.get ev "type")
+      ^ " "
+      ^ Jv.to_string (Jv.call Jv.global "String" [|Jv.get ev "button"|])
+      ^ flag "altKey" "alt" ^ flag "ctrlKey" "ctrl" ^ flag "metaKey" "meta"
+      ^ flag "shiftKey" "shift"
+      ^ flag "defaultPrevented" "prevented" )
+      :: !seen ;
+    prevent_click ev
+  in
+  let on_click = listen window "click" record in
+  let on_aux = listen window "auxclick" record in
+  let case name f msgs events =
+    got := 0 ;
+    seen := [] ;
+    let* () = f () in
+    let* () = drive [] in
+    check
+      ( "D45 " ^ name ^ ": " ^ string_of_int msgs ^ " message, the events "
+      ^ String.concat ", " events )
+      (!got = msgs && List.rev !seen = events) ;
+    Fut.return ()
+  in
+  let trusted ?modifiers ?button () () = click ?modifiers ?button link in
+  let synthetic code () =
+    dispatch link (js code) ;
+    Fut.return ()
+  in
+  let* () = case "no key" (trusted ()) 1 ["click 0 prevented"] in
+  let* () =
+    case "a span in the link"
+      (fun () -> click (q root "s"))
+      1 ["click 0 prevented"]
+  in
+  let enter ?modifiers () () =
+    focus link ;
+    key ?modifiers ~text:"\r" "Enter" 13
+  in
+  let* () = case "Enter" (enter ()) 1 ["click 0 prevented"] in
+  let* () = case "Ctrl+Enter" (enter ~modifiers:ctrl ()) 0 ["click 0 ctrl"] in
+  let* () = case "Ctrl" (trusted ~modifiers:ctrl ()) 0 ["click 0 ctrl"] in
+  let* () = case "Shift" (trusted ~modifiers:shift ()) 0 ["click 0 shift"] in
+  let* () = case "Alt" (trusted ~modifiers:alt ()) 0 ["click 0 alt"] in
+  let* () =
+    if facts.meta_key then
+      case "Meta" (trusted ~modifiers:meta ()) 0 ["click 0 meta"]
+    else
+      case "Meta (no metaKey)"
+        (trusted ~modifiers:meta ())
+        1 ["click 0 prevented"]
+  in
+  let* () =
+    case "the middle button"
+      (trusted ~button:"middle" ())
+      0
+      ("auxclick 1" :: (if facts.middle_click then ["click 1"] else []))
+  in
+  let* () =
+    case "el.click()"
+      (fun () ->
+        ignore (Jv.call link "click" [||]) ;
+        Fut.return () )
+      1 ["click 0 prevented"]
+  in
+  let* () =
+    case "a MouseEvent with the button 1"
+      (synthetic
+         "new MouseEvent('click', {bubbles: true, cancelable: true, button: 1})" )
+      0 ["click 1"]
+  in
+  let* () =
+    case "an Event with no button"
+      (synthetic "new Event('click', {bubbles: true, cancelable: true})")
+      1
+      ["click undefined prevented"]
+  in
+  let capture = listen ~capture:true document "click" prevent_click in
+  let* () =
+    case "prevented by a capture listener" (trusted ()) 0 ["click 0 prevented"]
+  in
+  unlisten ~capture:true document "click" capture ;
+  unlisten window "click" on_click ;
+  unlisten window "auxclick" on_aux ;
+  B.stop a ;
+  Fut.return ()
+
 let tests =
   [ d2
   ; d3
@@ -2224,7 +2337,8 @@ let tests =
   ; d41
   ; d42
   ; d43
-  ; d44 ]
+  ; d44
+  ; d45 ]
 
 let () =
   ignore (Lazy.force spy) ;

@@ -79,14 +79,29 @@ let set_composing env target b =
 
 let dispatch env rt ev =
   let prevented = ref false in
-  (* The payload read comes during the walk, thus before the restore. *)
+  (* The payload read comes during the walk, thus before the restore. The filter
+     Plain_click skips a click with a button that is not 0 or with a modifier
+     key. It also skips a click whose default a listener or a handler below
+     prevented. A skipped handler does not prevent the default and gives no
+     message, thus the browser does its default action (for example, it opens
+     the link in a new tab). Its stop applies: a click handler above does not
+     run. *)
   let fire (Dom.Handler h) =
-    if h.prevent_default then begin
+    let skip =
+      match h.filter with
+      | Dom.Any ->
+          false
+      | Dom.Plain_click ->
+          let m = ev.read Dom.Mouse in
+          m.button <> 0 || m.alt || m.ctrl || m.meta || m.shift
+          || m.default_prevented || !prevented
+    in
+    if h.prevent_default && not skip then begin
       ev.prevent () ;
       prevented := true
     end ;
     if h.stop then ev.stop () ;
-    h.fire (ev.read h.payload)
+    if not skip then h.fire (ev.read h.payload)
   in
   let walk () = walk ~parent:env.parent ~cell:env.cell ev.target ev.name fire in
   let discrete_turn () =

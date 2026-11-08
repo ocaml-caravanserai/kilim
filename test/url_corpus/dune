@@ -1,0 +1,6 @@
+; The URL corpus of Kilim.Url: test/core/test_url.ml (native, in the mutation
+; gate) and U1 of test/dom/test_web.ml (the browsers) use the same cases.
+
+(library
+ (name url_corpus)
+ (libraries kilim))
