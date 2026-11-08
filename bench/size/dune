@@ -1,12 +1,13 @@
 ; The size budget (docs/budgets.md): the gzip size of the counter of bench/size
 ; and of the todo and components examples in the release profile, in the two
-; builds, and the check of the generated code of the counter. `make size` and
+; builds, and the check of the generated code of the counter, with the
+; control program (control.ml) that uses each binding. `make size` and
 ; `make budgets` run it.
 
-(executable
- (name counter)
+(executables
+ (names counter control)
  (modes js wasm)
- (libraries kilim kilim.browser))
+ (libraries kilim kilim.browser kilim.web))
 
 (rule
  (alias size)
@@ -18,6 +19,9 @@
   counter.bc.js
   counter.bc.wasm.js
   (glob_files counter.bc.wasm.assets/*.wasm)
+  control.bc.js
+  control.bc.wasm.js
+  (glob_files control.bc.wasm.assets/*.wasm)
   ../../examples/todo/main.bc.js
   ../../examples/todo/main.bc.wasm.js
   (glob_files ../../examples/todo/main.bc.wasm.assets/*.wasm)
@@ -29,6 +33,10 @@
    node
    size.mjs
    budget
+   --control
+   control.bc.js
+   control.bc.wasm.js
+   control.bc.wasm.assets
    counter
    counter.bc.js
    counter.bc.wasm.js

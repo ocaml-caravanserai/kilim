@@ -138,12 +138,16 @@ The same rule checks the generated code: the release `counter.bc.js` contains
 DOM operations are direct calls), and the launcher contains
 `"meth_call_2_insertBefore"` and `"get___kilim"`.
 
-The rule also checks that an app does not pay for a binding of `kilim.web`
-that it does not use. The counter does not use `Unsafe_html.of_trusted`,
-thus its three release files (the `.js` file, the launcher and the main
-`.wasm` file, read as bytes) do not contain `trustedTypes` and `isHTML`. The
-positive control: the same read finds `queueMicrotask` (the binding
-`Kilim_web.Microtask`, which the counter uses) in each of the three files.
+The rule also checks that an app does not pay for a binding that it does
+not use. The counter does not use `Unsafe_html.of_trusted`,
+`Async.of_fut` and `Kilim_web.Es_module`. Thus its two release builds (the
+`.js` file, and the launcher with the main `.wasm` file, read as bytes) do
+not contain `trustedTypes`, `isHTML`, `kilimFut` (the property of the JS
+cell of `of_fut`) and `import(`. The positive controls: the same read finds
+each name in the same build of `bench/size/control.ml`, a program that uses
+these bindings and has no budget, and finds `queueMicrotask` (the binding
+`Kilim_web.Microtask`, which the counter uses) in each file of the
+counter.
 
 ## kilim.web
 
