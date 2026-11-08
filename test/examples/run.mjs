@@ -1,5 +1,5 @@
 // The browser test of the examples (examples/counter, examples/todo,
-// examples/components and examples/search). It uses only the built-in modules
+// examples/components, examples/search and examples/chat). It uses only the built-in modules
 // of node, the browser interface test/dom/browser.mjs and examples/serve.mjs.
 //
 //   node run.mjs --kilim PATH --profile dev|release [--browser NAME] DIR...
@@ -35,7 +35,7 @@
 //   - In each load of the page, each URL gets at most one request (the build
 //     uses the preload). The runner counts the requests and the preload
 //     messages from the start of each load to the next load. The requests of
-//     /api/ (the search example) do not count.
+//     /api/ (the search and chat examples) do not count.
 //   - dev: data-kilim-started is "start" (the inline form). release: the
 //     attribute is not set.
 //   - No uncaught exception, no console error, no console warning, no
@@ -244,6 +244,33 @@ const scripts = {
     await ui.until('the start of the deep link', `${q.testId('picked')}?.textContent === 'No city'`, startMs);
     await value('lon');
     await cities(['London']);
+  },
+  chat: async (ui) => {
+    const status = (s) => ui.until(`the status "${s}"`, `${q.testId('status')}?.textContent === ${JSON.stringify(s)}`);
+    const has = (s) => ui.until(`the message "${s}"`,
+      `[...document.querySelectorAll('[aria-label=Messages] li')].some((l) => l.textContent === ${JSON.stringify(s)})`);
+    const nick = q.label('Nickname');
+    await status('Connected');
+    await ui.until('the start', `${nick}?.value === ''`, startMs);
+    // 1. The nickname goes to localStorage.
+    await ui.type(nick, 'ann');
+    await ui.until('the nickname in localStorage', "localStorage.getItem('nick') === 'ann'");
+    // 2. A message comes back from the room.
+    await ui.type(q.label('Message'), 'hello');
+    await ui.click(q.text('Send'));
+    await has('ann: hello');
+    await ui.until('an empty draft', `${q.label('Message')}.value === ''`);
+    // 3. The server closes each socket: the app connects again after 1 s.
+    await ui.read("fetch('/chat/drop'), 0");
+    await status('Disconnected: a new try in 1 s');
+    await status('Connected');
+    await has('ann: hello');
+    // 4. A load of the page restores the nickname. The new page starts with
+    // no message: only /api/history can give the message.
+    await ui.load('/');
+    await ui.until('the restore of the nickname', `${nick}?.value === 'ann'`, startMs);
+    await status('Connected');
+    await has('ann: hello');
   },
 };
 for (const d of dirs)

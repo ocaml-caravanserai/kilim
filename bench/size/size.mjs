@@ -43,19 +43,22 @@ const text = (files) => files.map((f) => readFileSync(f, 'latin1')).join('\n');
 // kilim.websocket.browser (the text of its warning for a binary frame: the
 // release build of wasm_of_ocaml keeps a short name such as wasClean in no run
 // of bytes). Not "WebSocket": Brr_io reads globalThis.WebSocket when it
-// starts, thus each app with Brr_io has the name.
+// starts, thus each app with Brr_io has the name. Then the driver of
+// kilim.storage.browser (localStorage).
 const unused = ['trustedTypes', 'isHTML', 'kilimFut', 'import(', 'pushState', 'scrollTo',
-  'AbortController', 'a binary frame'];
+  'AbortController', 'a binary frame', 'localStorage'];
 
 // The names that an example must contain (a positive control) and must not
 // contain: the search example uses kilim.http.browser and
 // kilim.router.browser, and not localStorage. It contains "WebSocket": Brr_io
-// (for the fetch) reads globalThis.WebSocket when it starts. No example uses
-// kilim.websocket.browser, thus each one lacks the text of its driver.
+// (for the fetch) reads globalThis.WebSocket when it starts. Only the chat
+// example uses kilim.websocket.browser and kilim.storage.browser, and it does
+// not use kilim.router.browser.
 const programChecks = {
-  'example-todo': { has: [], lacks: ['a binary frame'] },
-  'example-components': { has: [], lacks: ['a binary frame'] },
+  'example-todo': { has: [], lacks: ['a binary frame', 'localStorage'] },
+  'example-components': { has: [], lacks: ['a binary frame', 'localStorage'] },
   'example-search': { has: ['AbortController', 'pushState', 'WebSocket'], lacks: ['localStorage', 'a binary frame'] },
+  'example-chat': { has: ['AbortController', 'a binary frame', 'localStorage'], lacks: ['pushState'] },
 };
 
 let failures = 0;

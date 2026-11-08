@@ -18,6 +18,9 @@ let get = Kilim.Async.map (fun _ -> 3) (Kilim_http.get "/x")
 (* The driver of kilim.websocket.browser: the text of its warning. *)
 let socket = Kilim_websocket.connect "/ws" (fun _ -> 4)
 
+(* The driver of kilim.storage.browser. *)
+let stored = Kilim.Async.map (fun _ -> 6) (Kilim_storage.get Local "k")
+
 let app =
   Kilim.App.make
     ~init:(fun () ->
@@ -26,7 +29,8 @@ let app =
           [ Kilim.Cmd.task (Kilim.Async.map (fun _ -> 1) task)
           ; Kilim.Cmd.task
               (Kilim.Async.map (fun () -> 2) (Kilim_router.push router ()))
-          ; Kilim.Cmd.task get ] ) )
+          ; Kilim.Cmd.task get
+          ; Kilim.Cmd.task stored ] ) )
     ~update:(fun _ m -> (m, Kilim.Cmd.none))
     ~subs:(fun _ -> socket)
     ~view:(fun _ ->
@@ -38,4 +42,5 @@ let () =
   Kilim_router_browser.install () ;
   Kilim_http_browser.install () ;
   Kilim_websocket_browser.install () ;
+  Kilim_storage_browser.install () ;
   Kilim_browser.run ~mount:"app" app

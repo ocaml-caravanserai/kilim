@@ -1,0 +1,6 @@
+; The native test of the chat example, with Websocket_mock, Http_mock and
+; Storage_mock of kilim.testing on the virtual clock.
+
+(test
+ (name test_chat)
+ (libraries chat kilim kilim.testing windtrap))
