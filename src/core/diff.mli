@@ -143,6 +143,30 @@ val bounds : bounds ref
     [write] do nothing: an app with no boundary has no instance and no element
     with a boundary. *)
 
+(** The functions of the providers and the reads (design section 10).
+    [build_provider] and [patch_provider] are as [build] and [patch] of
+    {!hooks}. [read ctx r] registers the owner of [ctx] with the nearest
+    provider of the context of [r] in the providers of [ctx], and gives the view
+    of [r] for the value of that provider, or for the default value. The diff
+    puts that view in the place of [r]. *)
+type contexts =
+  { build_provider:
+      'node 'msg.
+      ('node, 'msg) ctx -> 'node -> 'msg View.provide -> ('node, 'msg) node
+  ; patch_provider:
+      'node 'msg.
+         ('node, 'msg) ctx
+      -> 'node
+      -> ('node, 'msg) node
+      -> 'msg View.provide
+      -> unit
+  ; read: 'node 'msg. ('node, 'msg) ctx -> 'msg View.read -> 'msg View.t }
+
+val contexts : contexts ref
+(** The functions of the providers and the reads. [Context.provide] and
+    [Context.read] install them: thus an app with no context does not link them.
+    The defaults raise [Invalid_argument]. *)
+
 val start : ('node, 'msg) ctx -> parent:'node -> 'msg View.t -> ('node, 'msg) t
 (** [start ctx ~parent view] builds the DOM of [view] with [ctx] and appends it
     to [parent]. The owner of [ctx] is the instance of [view]. *)
@@ -159,7 +183,9 @@ val mount :
     payload and the message function. *)
 
 val patch : ('node, 'msg) t -> 'msg View.t -> unit
-(** [patch t view] changes the DOM and the retained tree of [t] to [view]. *)
+(** [patch t view] removes the registrations of the owner of [t] (see
+    {!Instance.forget}), then changes the DOM and the retained tree of [t] to
+    [view]. *)
 
 val build : ('node, 'msg) ctx -> 'node -> 'msg View.t -> ('node, 'msg) node
 (** [build ctx parent view] builds the DOM of [view], for a child of the DOM
@@ -195,8 +221,8 @@ val dom : ('node, 'msg) node -> 'node
 (** The DOM node of a retained node. A component node is transparent: its DOM
     node is the DOM node of the root of the view of its instance, also after a
     render of the instance alone that replaced that root. A boundary node is
-    transparent: its DOM node is the DOM node of its child or of its fallback.
-*)
+    transparent: its DOM node is the DOM node of its child or of its fallback. A
+    provider node is transparent: its DOM node is the DOM node of its child. *)
 
 val probes : Key.t array -> Key.t array -> int option
 (** [probes nk ok] makes the plan of a keyed patch from the old keys [ok] to the
@@ -212,6 +238,7 @@ type 'node child = Child : ('node, 'msg) node -> 'node child
 
 val children : ('node, 'msg) node -> 'node child list option
 (** The retained children of an element, or [None] for a text node and for an
-    element with {!View.unsafe_html} content. A component node and a boundary
-    node are transparent: the result is the children of the root of the view of
-    the instance, or of the child of the boundary. *)
+    element with {!View.unsafe_html} content. A component node, a boundary node
+    and a provider node are transparent: the result is the children of the root
+    of the view of the instance, or of the child of the boundary or of the
+    provider. *)

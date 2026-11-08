@@ -1,5 +1,4 @@
-(** The virtual DOM tree (design section 08). The values are immutable. A later
-    version adds nodes for providers. *)
+(** The virtual DOM tree (design section 08). The values are immutable. *)
 
 (** An attribute or a controlled property. *)
 type at =
@@ -19,6 +18,10 @@ type 'msg handler = 'msg Dom.event =
   ; stop: bool
   ; decode: 'msg decode }
 
+(** A context (design section 10): a typed key and the value of a read with no
+    provider above it. *)
+type 'a context = {cid: 'a Type.Id.t; default: 'a}
+
 (** The identity of a component: a witness of its four types (design section
     09). [last] is the spec of the last call of [Component.v]: a cache with one
     entry. *)
@@ -31,6 +34,8 @@ and 'msg t =
   | Element of 'msg element
   | Comp of 'msg comp
   | Boundary of 'msg boundary
+  | Provide of 'msg provide
+  | Read of 'msg read
 
 and 'msg element =
   { name: string
@@ -74,6 +79,17 @@ and 'msg comp =
     fallback and the one child. The node has no DOM node of its own: its DOM
     node is the DOM node of its child, or of its fallback after an error. *)
 and 'msg boundary = {key: string option; fallback: exn -> 'msg t; child: 'msg t}
+
+(** A provider node (design section 10): the context, the value and the one
+    child. The node has no DOM node of its own: its DOM node is the DOM node of
+    its child. *)
+and 'msg provide =
+  | P : {context: 'a context; value: 'a; child: 'msg t} -> 'msg provide
+
+(** A read (design section 10). It is not a node: the diff calls [f] with the
+    value of the nearest provider of [context], and puts the result in its
+    place. *)
+and 'msg read = R : {context: 'a context; f: 'a -> 'msg t} -> 'msg read
 
 val id : unit -> ('p, 'm, 'msg, 'o) id
 (** A new identity, with an empty cache. *)

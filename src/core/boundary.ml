@@ -130,7 +130,7 @@ let patch : type msg.
       | Some e ->
           if b.shown then Diff.patch_node b.ctx parent b.child (v.fallback e)
           else show ctx.env b e )
-  | Boundary _ | Text _ | Element _ | Comp _ ->
+  | Boundary _ | Text _ | Element _ | Comp _ | Provider _ ->
       Diff.replace ctx parent r (View.Boundary v)
 
 (* The write of the controlled properties of an element in a boundary, after the

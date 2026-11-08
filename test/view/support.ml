@@ -100,6 +100,19 @@ end
 
 let wrap ?key v = Component.v (module Wrap) ?key ~on:Fun.id v
 
+(* Two contexts of strings, for the property tests. *)
+let ca : string V.context = Private.Context.create ~default:"d" ()
+
+let cb : string V.context = Private.Context.create ~default:"d" ()
+
+let name : type a. a V.context -> string =
+ fun c ->
+  match Type.Id.provably_equal c.cid ca.cid with
+  | Some Type.Equal ->
+      "a"
+  | None ->
+      "b"
+
 (* A printer of views for the counterexamples. *)
 let rec show (v : string View.t) =
   match v with
@@ -115,6 +128,10 @@ let rec show (v : string View.t) =
   | V.Boundary {key; child; _} ->
       let key = match key with Some k -> " key=" ^ k | None -> "" in
       "<boundary" ^ key ^ ">" ^ show child ^ "</boundary>"
+  | V.Provide (V.P {context; child; _}) ->
+      "<provide " ^ name context ^ ">" ^ show child ^ "</provide>"
+  | V.Read (V.R {context; _}) ->
+      "<read " ^ name context ^ ">"
   | V.Element e ->
       let attrs = List.map (fun (k, v) -> " " ^ k ^ "=" ^ v) e.attrs in
       let value = match e.value with Some v -> " .value=" ^ v | None -> "" in

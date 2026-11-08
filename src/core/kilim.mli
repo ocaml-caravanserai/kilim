@@ -47,6 +47,7 @@ module Private : sig
   module Diff = Diff
   module Reconcile = Reconcile
   module Boundary = Boundary
+  module Context = Context
   module Cmd = Cmd
   module Sub = Sub
   module App = App

@@ -68,7 +68,12 @@ let rec gen_view d =
   if d = 0 then gen_text
   else
     Gen.frequency
-      [(1, gen_text); (3, gen_element d); (1, gen_comp d); (1, gen_boundary d)]
+      [ (1, gen_text)
+      ; (3, gen_element d)
+      ; (1, gen_comp d)
+      ; (1, gen_boundary d)
+      ; (1, gen_provide d)
+      ; (1, gen_read d) ]
 
 (* A component whose view is its props, with no key or a key: decision 12 of the
    Phase 2 plan review. *)
@@ -84,6 +89,30 @@ and gen_boundary d =
     (fun (key, v) ->
       View.boundary ?key ~fallback:(fun _ -> El.i [txt "fallback"]) v )
     (Gen.pair (Gen.of_list [None; Some "a"; Some "b"]) (gen_view (d - 1)))
+
+(* A provider of one of two contexts, and a read: decision 12 of the Phase 2
+   plan review. A read can give a text of its value, an element with its value
+   in an attribute, or another view for one value. *)
+and gen_provide d =
+  Gen.map
+    (fun (c, v, child) -> Private.Context.provide c v child)
+    (Gen.triple
+       (Gen.of_list [ca; cb])
+       (Gen.of_list ["x"; "y"])
+       (gen_view (d - 1)) )
+
+and gen_read d =
+  Gen.map
+    (fun (c, kind, sub) ->
+      Private.Context.read c (fun v ->
+          match kind with
+          | 0 ->
+              txt v
+          | 1 ->
+              El.span ~at:[At.title v] [sub]
+          | _ ->
+              if String.equal v "x" then sub else El.b [txt v] ) )
+    (Gen.triple (Gen.of_list [ca; cb]) (Gen.int_range 0 2) (gen_view (d - 1)))
 
 and gen_element d =
   let open Gen in
@@ -220,10 +249,37 @@ let index k l =
   in
   go 0 l
 
+(* The values of the providers on the path, the nearest first. *)
+type bind = B : 'a V.context * 'a -> bind
+
+let rec value : type a. bind list -> a V.context -> a =
+ fun env c ->
+  match env with
+  | [] ->
+      c.default
+  | B (c', v) :: rest -> (
+    match Type.Id.provably_equal c.cid c'.cid with
+    | Some Type.Equal ->
+        v
+    | None ->
+        value rest c )
+
+(* The view of a read for the providers on its path. *)
+let eval env (V.R {context; f} : string V.read) = f (value env context)
+
+let bind (V.P {context; value; _} : string V.provide) env =
+  B (context, value) :: env
+
 (* A text node, or an element with the same name, at the same place or with the
-   same key, keeps its DOM node. *)
-let rec identity (a : string View.t) (b : string View.t) (Sh (n, kids)) n' =
+   same key, keeps its DOM node. A provider with the same context stays, and a
+   read is the view of its value. *)
+let rec identity ea eb (a : string View.t) (b : string View.t) (Sh (n, kids)) n'
+    =
   match (a, b) with
+  | V.Read r, _ ->
+      identity ea eb (eval ea r) b (Sh (n, kids)) n'
+  | _, V.Read r ->
+      identity ea eb a (eval eb r) (Sh (n, kids)) n'
   | V.Text _, V.Text _ ->
       is_true ~msg:"a text node stays" (n == n')
   | V.Comp (V.C ca), V.Comp (V.C cb) -> (
@@ -233,28 +289,35 @@ let rec identity (a : string View.t) (b : string View.t) (Sh (n, kids)) n' =
     with
     | Some Type.Equal, Some Type.Equal when ca.key = cb.key ->
         (* The instance stays, and its view is the props. *)
-        identity ca.props cb.props (Sh (n, kids)) n'
+        identity ea eb ca.props cb.props (Sh (n, kids)) n'
     | _ ->
         () )
   | V.Boundary ba, V.Boundary bb when ba.key = bb.key ->
       (* The boundary stays, and its DOM node is the DOM node of its child. *)
-      identity ba.child bb.child (Sh (n, kids)) n'
-  | V.Element ea, V.Element eb when String.equal ea.name eb.name -> (
+      identity ea eb ba.child bb.child (Sh (n, kids)) n'
+  | V.Provide (V.P pa as a), V.Provide (V.P pb as b) -> (
+    match Type.Id.provably_equal pa.context.cid pb.context.cid with
+    | Some Type.Equal ->
+        identity (bind a ea) (bind b eb) pa.child pb.child (Sh (n, kids)) n'
+    | None ->
+        () )
+  | V.Element ea', V.Element eb' when String.equal ea'.name eb'.name -> (
       is_true ~msg:"an element stays" (n == n') ;
       let kids' = F.children n' in
-      match (ea.children, eb.children) with
+      match (ea'.children, eb'.children) with
       | V.Plain la, V.Plain lb ->
           List.iteri
             (fun i vb ->
               if i < List.length la then
-                identity (List.nth la i) vb (List.nth kids i) (List.nth kids' i) )
+                identity ea eb (List.nth la i) vb (List.nth kids i)
+                  (List.nth kids' i) )
             lb
       | V.Keyed la, V.Keyed lb ->
           List.iteri
             (fun j (k, vb) ->
               match index k la with
               | Some i ->
-                  identity
+                  identity ea eb
                     (snd (List.nth la i))
                     vb (List.nth kids i) (List.nth kids' j)
               | None ->
@@ -265,24 +328,28 @@ let rec identity (a : string View.t) (b : string View.t) (Sh (n, kids)) n' =
   | _ ->
       ()
 
-let rec has_boundary (v : string View.t) =
+let rec has_boundary env (v : string View.t) =
   match v with
   | V.Text _ ->
       false
   | V.Boundary _ ->
       true
+  | V.Provide (V.P {child; _} as p) ->
+      has_boundary (bind p env) child
+  | V.Read r ->
+      has_boundary env (eval env r)
   | V.Comp (V.C {spec; props; _}) -> (
     match Type.Id.provably_equal spec.id.tid Wrap.id.tid with
     | Some Type.Equal ->
-        has_boundary props
+        has_boundary env props
     | None ->
         false )
   | V.Element e -> (
     match e.children with
     | V.Plain l ->
-        List.exists has_boundary l
+        List.exists (has_boundary env) l
     | V.Keyed l ->
-        List.exists (fun (_, v) -> has_boundary v) l
+        List.exists (fun (_, v) -> has_boundary env v) l
     | V.Inner _ ->
         false )
 
@@ -291,7 +358,7 @@ let step p a b =
   patch p b ;
   equal string ~msg:"a patch gives the DOM of a fresh mount" (fresh b) (dump p) ;
   check_tree p ;
-  identity a b sh (node p)
+  identity [] [] a b sh (node p)
 
 let rec size (v : string View.t) =
   match v with
@@ -305,6 +372,10 @@ let rec size (v : string View.t) =
         1 )
   | V.Boundary b ->
       1 + size b.child
+  | V.Provide (V.P {child; _}) ->
+      1 + size child
+  | V.Read r ->
+      1 + size (eval [] r)
   | V.Element e -> (
       1
       +
@@ -431,7 +502,7 @@ let fault_law ?again (a, b) =
     ( match Diff.patch p.tree b with
     | () ->
         if Option.is_none again then
-          is_true ~msg:"a boundary caught the fault" (has_boundary b)
+          is_true ~msg:"a boundary caught the fault" (has_boundary [] b)
         else fail "no fault"
     | exception F.Fault ->
         () ) ;

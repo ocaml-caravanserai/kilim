@@ -13,6 +13,8 @@ type 'msg handler = 'msg Dom.event =
   ; stop: bool
   ; decode: 'msg decode }
 
+type 'a context = {cid: 'a Type.Id.t; default: 'a}
+
 type ('p, 'm, 'msg, 'o) id =
   { tid: ('p * 'm * 'msg * 'o) Type.Id.t
   ; mutable last: ('p, 'm, 'msg, 'o) spec option }
@@ -22,6 +24,8 @@ and 'msg t =
   | Element of 'msg element
   | Comp of 'msg comp
   | Boundary of 'msg boundary
+  | Provide of 'msg provide
+  | Read of 'msg read
 
 and 'msg element =
   { name: string
@@ -53,6 +57,11 @@ and 'msg comp =
       -> 'msg comp
 
 and 'msg boundary = {key: string option; fallback: exn -> 'msg t; child: 'msg t}
+
+and 'msg provide =
+  | P : {context: 'a context; value: 'a; child: 'msg t} -> 'msg provide
+
+and 'msg read = R : {context: 'a context; f: 'a -> 'msg t} -> 'msg read
 
 let id () = {tid= Type.Id.make (); last= None}
 

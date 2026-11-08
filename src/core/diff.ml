@@ -12,6 +12,11 @@ and ('node, 'msg) shape = ('node, 'msg) Tree.shape =
       ; child: ('node, 'c) node }
       -> ('node, 'msg) shape
   | Boundary of ('node, 'msg) Tree.boundary
+  | Provider :
+      { p: ('node, 'a) Tree.provider
+      ; inner: ('node, 'msg) Tree.ctx
+      ; child: ('node, 'msg) node }
+      -> ('node, 'msg) shape
 
 and ('node, 'msg) element = ('node, 'msg) Tree.element =
   { ns: Dom.ns
@@ -33,7 +38,8 @@ type ('node, 'msg) ctx = ('node, 'msg) Tree.ctx =
   ; controlled: ('node * Dom.cell * 'node Tree.any_boundary option) list ref
   ; owner: ('node, 'msg) Tree.inst
   ; env: 'node Tree.env
-  ; boundary: 'node Tree.any_boundary option }
+  ; boundary: 'node Tree.any_boundary option
+  ; providers: 'node Tree.any_provider list }
 
 type ('node, 'msg) t = ('node, 'msg) Tree.mount =
   {ctx: ('node, 'msg) ctx; parent: 'node; root: ('node, 'msg) node}
@@ -102,10 +108,34 @@ let bounds =
     ; fail= (fun _ _ _ -> ())
     ; write= (fun _ _ _ _ _ -> ()) }
 
-(* The DOM node of a retained node. A component node and a boundary node are
-   transparent: the DOM node of a component node is the DOM node of the root of
-   the view of its instance, and the DOM node of a boundary node is the DOM node
-   of its child. A text and an element keep their DOM node in [dom]. *)
+(* The functions of the providers and the reads (Context). Context.provide and
+   Context.read install them. *)
+type contexts =
+  { build_provider:
+      'node 'msg.
+      ('node, 'msg) ctx -> 'node -> 'msg View.provide -> ('node, 'msg) node
+  ; patch_provider:
+      'node 'msg.
+         ('node, 'msg) ctx
+      -> 'node
+      -> ('node, 'msg) node
+      -> 'msg View.provide
+      -> unit
+  ; read: 'node 'msg. ('node, 'msg) ctx -> 'msg View.read -> 'msg View.t }
+
+let no_context () = invalid_arg "kilim: a context node with no Context"
+
+let contexts =
+  ref
+    { build_provider= (fun _ _ _ -> no_context ())
+    ; patch_provider= (fun _ _ _ _ -> no_context ())
+    ; read= (fun _ _ -> no_context ()) }
+
+(* The DOM node of a retained node. A component node, a boundary node and a
+   provider node are transparent: the DOM node of a component node is the DOM
+   node of the root of the view of its instance, and the DOM node of a boundary
+   node or of a provider node is the DOM node of its child. A text and an
+   element keep their DOM node in [dom]. *)
 let rec dom : 'node 'msg. ('node, 'msg) node -> 'node =
  fun r ->
   match r.shape with
@@ -113,6 +143,8 @@ let rec dom : 'node 'msg. ('node, 'msg) node -> 'node =
       dom c.child
   | Boundary b ->
       dom b.child
+  | Provider {child; _} ->
+      dom child
   | Text _ | Element _ ->
       r.dom
 
@@ -537,6 +569,10 @@ let rec build :
       !hooks.build ctx parent c
   | View.Boundary b ->
       !bounds.build_boundary ctx parent b
+  | View.Provide p ->
+      !contexts.build_provider ctx parent p
+  | View.Read rd ->
+      build ctx parent (!contexts.read ctx rd)
 
 (* Build each view and append it to [d]. If a DOM operation raises, [on_error]
    gets the nodes that are in [d], before the exception goes on. *)
@@ -573,6 +609,9 @@ and patch_node :
     ('node, 'msg) ctx -> 'node -> ('node, 'msg) node -> 'msg View.t -> unit =
  fun ctx parent r v ->
   match (r.shape, v) with
+  | _, View.Read rd ->
+      (* A read is not a node: its view goes in its place. *)
+      patch_node ctx parent r (!contexts.read ctx rd)
   | Text s, View.Text s' ->
       if not (String.equal s s') then begin
         ctx.ops.set_text r.dom s' ;
@@ -585,6 +624,8 @@ and patch_node :
       !hooks.patch ctx parent r c
   | Boundary _, View.Boundary b ->
       !bounds.patch_boundary ctx parent r b
+  | Provider _, View.Provide p ->
+      !contexts.patch_provider ctx parent r p
   | _ ->
       replace ctx parent r v
 
@@ -819,10 +860,21 @@ let env () : _ Tree.env =
 let mount ops ~parent ~post v =
   let owner = Instance.root (Cancel.root ()) in
   start
-    {ops; post; ns= Html; controlled= ref []; owner; env= env (); boundary= None}
+    { ops
+    ; post
+    ; ns= Html
+    ; controlled= ref []
+    ; owner
+    ; env= env ()
+    ; boundary= None
+    ; providers= [] }
     ~parent v
 
-let patch t v = run t.ctx (fun () -> patch_node t.ctx t.parent t.root v)
+(* A render of an instance first removes its registrations: its reads register
+   again in the diff. *)
+let patch t v =
+  Instance.forget t.ctx.owner ;
+  run t.ctx (fun () -> patch_node t.ctx t.parent t.root v)
 
 let render i = !hooks.render i
 
@@ -841,6 +893,8 @@ let rec children : 'node 'msg. ('node, 'msg) node -> 'node child list option =
       children c.child
   | Boundary b ->
       children b.child
+  | Provider {child; _} ->
+      children child
   | Element e -> (
     match e.children with
     | Plain a | Keyed (_, a) ->
