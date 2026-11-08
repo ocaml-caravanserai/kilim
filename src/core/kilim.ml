@@ -121,3 +121,13 @@ module Component = struct
 end
 
 module type COMPONENT = Component.S
+
+module Context = struct
+  type 'a t = 'a Private.View.context
+
+  let create = Context.create
+
+  let provide = Context.provide
+
+  let read = Context.read
+end

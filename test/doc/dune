@@ -5,7 +5,7 @@
 
 (library
  (name doc_examples)
- (modules counter guarded light parent)
+ (modules counter guarded light parent themed)
  (wrapped false)
  (libraries kilim))
 
