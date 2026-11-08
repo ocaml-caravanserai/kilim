@@ -27,9 +27,6 @@ module Private = struct
   module Event = Event
   module Runtime = Runtime
   module Shallow = Shallow
-  module Component = Component
-
-  module type COMPONENT = Component.S
 end
 
 module Cancel = Cancel
@@ -106,5 +103,17 @@ module App = struct
 end
 
 module Component = struct
+  type ('p, 'm, 'msg, 'o) id = ('p, 'm, 'msg, 'o) Component.id
+
+  let id = Component.id
+
   let shallow_equal = Shallow.equal
+
+  module type S = Component.S
+
+  module Defaults = Component.Defaults
+
+  let v = Component.v
 end
+
+module type COMPONENT = Component.S

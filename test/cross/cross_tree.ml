@@ -5,7 +5,7 @@
 open Kilim
 module H = Kilim_testing.Host
 module P = Kilim_testing.Page
-module C = Private.Component
+module C = Component
 
 type none = |
 

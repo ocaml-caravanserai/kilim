@@ -1,0 +1,7 @@
+; The code of the examples in the doc comments of src/core/kilim.mli. Each
+; example is a tagged block, and test/readme/check.mjs makes sure that it is
+; the code of a file here. Thus the examples compile.
+
+(library
+ (name doc_examples)
+ (libraries kilim))

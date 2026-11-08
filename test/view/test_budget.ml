@@ -37,8 +37,7 @@ module Row = struct
 
   type out = |
 
-  let id : (props, model, msg, out) Private.Component.id =
-    Private.Component.id ()
+  let id : (props, model, msg, out) Component.id = Component.id ()
 
   let task = ref false
 
@@ -63,8 +62,7 @@ module Row = struct
 end
 
 let row_view marked i =
-  ( Key.int i
-  , Private.Component.v (module Row) ~on:(function _ -> .) (i, i = marked) )
+  (Key.int i, Component.v (module Row) ~on:(function _ -> .) (i, i = marked))
 
 let control id msg = El.button ~at:[At.data "testid" id] ~ev:[Ev.click msg] []
 

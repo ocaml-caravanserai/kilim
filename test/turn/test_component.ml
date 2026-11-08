@@ -5,7 +5,7 @@
 open Windtrap
 open Kilim
 open Support
-module C = Private.Component
+module C = Component
 module V = Private.View
 module I = Private.Instance
 

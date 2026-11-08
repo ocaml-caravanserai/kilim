@@ -6,7 +6,7 @@
 open Windtrap
 open Kilim
 open Support
-module C = Private.Component
+module C = Component
 
 type none = |
 
@@ -359,6 +359,123 @@ let one_entry () =
   equal int 0 (P.tree p).stale ;
   no_errors p
 
+(* Many with Component.Defaults.subs: no subscription pass, thus no entry for
+   the early call. *)
+module Quiet_many = struct
+  include Many
+
+  let id : (props, model, msg, out) C.id = C.id ()
+
+  let subs = Component.Defaults.subs
+end
+
+let no_entry () =
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> ((), Cmd.none))
+         ~update:(fun () () -> ((), Cmd.none))
+         ~view:(fun () -> C.v (module Quiet_many) ~on:never ())
+         () )
+  in
+  Many.page := Some p ;
+  Many.seen := [] ;
+  P.click p (By.test_id "go") ;
+  equal (list int) ~msg:"no entry" [0; 0; 0; 0; 0; 0] (List.rev !Many.seen) ;
+  equal string "6" (F.text (P.find p (By.test_id "go"))) ;
+  no_errors p
+
+(* A module that shares the id of Room, with no subscription. *)
+module Silent = struct
+  include Room
+
+  let subs = Component.Defaults.subs
+end
+
+(* Room and Silent share one id: the instance stays. Its new spec has no [subs],
+   but the instance has a key: the pass of the render stops it. *)
+let shared_id () =
+  let p =
+    parent
+      ~next:(fun _ -> ["b"])
+      ~view:
+        (List.map (fun n ->
+             if String.equal n "b" then C.v (module Silent) ~on:never n
+             else room n ) )
+      ["a"]
+  in
+  bump p ;
+  equal (list string) ["view b"; "stop a"] (take ()) ;
+  equal int ~msg:"the instance stays" 1 (P.tree p).instances ;
+  equal int ~msg:"the token of the instance" 1 (P.tree p).tokens ;
+  no_errors p
+
+(* A lamp: a keyup on it toggles its model, which starts [false]. Its key runs
+   while the model is [true]. Dark shares its id and has no subscription. *)
+module Lamp = struct
+  type props = string
+
+  type model = bool
+
+  type msg = Toggle
+
+  type out = none
+
+  let id : (props, model, msg, out) C.id = C.id ()
+
+  let init _ = (false, Cmd.none)
+
+  let update _ _ m Toggle = (not m, Cmd.none)
+
+  let view name _ =
+    say ("view " ^ name) ;
+    El.span ~at:[At.data "testid" name] ~ev:[Ev.keyup (fun _ -> Toggle)] []
+
+  let subs name m =
+    say ("subs " ^ name) ;
+    if m then Sub.run ~key:name (fun _ -> hold name) else Sub.none
+
+  let equal_props = Component.shallow_equal
+end
+
+module Dark = struct
+  include Lamp
+
+  let subs = Component.Defaults.subs
+end
+
+(* A keyup toggles Dark, and the parent swaps it to Lamp at the same place, with
+   equal props. Dark has no pass. The render renders the dirty child with the
+   spec of Lamp: its pass starts the key. *)
+let swap () =
+  ignore (take ()) ;
+  let p =
+    P.start
+      (App.make
+         ~init:(fun () -> (false, Cmd.none))
+         ~update:(fun _ () -> (true, Cmd.none))
+         ~view:(fun lamp ->
+           El.div
+             ~ev:[Ev.keyup (fun _ -> ())]
+             [ ( if lamp then C.v (module Lamp) ~on:never "a"
+                 else C.v (module Dark) ~on:never "a" ) ] )
+         () )
+  in
+  ignore (take ()) ;
+  keyup p "a" ;
+  equal (list string) ~msg:"the keyup" [] (take ()) ;
+  P.advance p (Span.ms 20) ;
+  equal (list string) ~msg:"the render"
+    ["view a"; "subs a"; "start a"]
+    (take ()) ;
+  keyup p "a" ;
+  equal (list string) ~msg:"the next keyup" ["subs a"; "stop a"] (take ()) ;
+  P.advance p (Span.ms 20) ;
+  equal (list string) ~msg:"the next render" ["view a"; "subs a"] (take ()) ;
+  equal int ~msg:"the token of the instance" 1 (P.tree p).tokens ;
+  no_errors p ;
+  quiet p
+
 let tests =
   [ group "component subscriptions"
       [ test "the subscriptions of a new child start at the end of the render"
@@ -378,5 +495,9 @@ let tests =
           error_early
       ; test "a key of a child that stays gets the newest message" newest
       ; test "clicks in a child leave no entry for the early call" clicks
+      ; test "a shared id with no subs stops the keys of the old spec" shared_id
+      ; test "a swap to a shared id with subs, with equal props" swap
+      ; test "Defaults.subs: model changes give no entry for the early call"
+          no_entry
       ; test "many model changes of a child in one turn give one entry"
           one_entry ] ]

@@ -150,8 +150,7 @@ module Timed = struct
 
   type out = |
 
-  let id : (props, model, msg, out) Private.Component.id =
-    Private.Component.id ()
+  let id : (props, model, msg, out) Component.id = Component.id ()
 
   let init n = (n, Cmd.task (Async.sleep (Span.s 1)))
 
@@ -164,7 +163,7 @@ module Timed = struct
   let equal_props = Int.equal
 end
 
-let timed n = Private.Component.v (module Timed) ~on:(function _ -> .) n
+let timed n = Component.v (module Timed) ~on:(function _ -> .) n
 
 let toggle_app =
   App.make

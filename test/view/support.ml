@@ -85,8 +85,7 @@ module Wrap = struct
 
   type out = string
 
-  let id : (props, model, msg, out) Private.Component.id =
-    Private.Component.id ()
+  let id : (props, model, msg, out) Component.id = Component.id ()
 
   let init _ = ((), Cmd.none)
 
@@ -99,7 +98,7 @@ module Wrap = struct
   let equal_props = ( == )
 end
 
-let wrap ?key v = Private.Component.v (module Wrap) ?key ~on:Fun.id v
+let wrap ?key v = Component.v (module Wrap) ?key ~on:Fun.id v
 
 (* A printer of views for the counterexamples. *)
 let rec show (v : string View.t) =

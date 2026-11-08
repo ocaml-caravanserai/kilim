@@ -5,14 +5,16 @@
 open Windtrap
 open Kilim
 open Support
-module C = Private.Component
+module C = Component
 
 exception Boom
 
-(* A counter with an output. A click on its button adds 1 and gives the new
-   count. A click on its second button gives two outputs around a task: the task
-   result adds 1 later in the turn. *)
+(* A counter with an output and the defaults. A click on its button adds 1 and
+   gives the new count. A click on its second button gives two outputs around a
+   task: the task result adds 1 later in the turn. *)
 module Count = struct
+  include Component.Defaults
+
   type props = string
 
   type model = int
@@ -39,10 +41,6 @@ module Count = struct
     El.span
       [ button ~id:label Incr (string_of_int n)
       ; button ~id:(label ^ "2") Twice "t" ]
-
-  let subs _ _ = Sub.none
-
-  let equal_props = Component.shallow_equal
 end
 
 type rmsg = Got of int * int | Bump | Outer | Raise
@@ -118,7 +116,9 @@ let order () =
    render, and the newest ~on maps its output. *)
 let newest () =
   let p, take = app () in
+  let v = (stats p).views in
   P.click p (By.test_id "p") ;
+  equal int ~msg:"Defaults.equal_props skips the child" (v + 1) (stats p).views ;
   ignore (take ()) ;
   let v = (stats p).views in
   P.click p (By.test_id "c") ;

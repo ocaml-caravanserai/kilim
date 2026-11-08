@@ -81,8 +81,7 @@ module Row = struct
 
   type out = |
 
-  let id : (props, model, msg, out) Private.Component.id =
-    Private.Component.id ()
+  let id : (props, model, msg, out) Component.id = Component.id ()
 
   let init _ = (0, Cmd.none)
 
@@ -91,7 +90,7 @@ module Row = struct
   let view i m =
     El.li ~ev:[Ev.click ()] [txt (string_of_int i ^ " " ^ string_of_int m)]
 
-  let subs _ _ = Sub.none
+  let subs = Component.Defaults.subs
 
   let equal_props = Int.equal
 end
@@ -101,8 +100,8 @@ let component_rows header =
     [ El.h1 [txt header]
     ; View.keyed El.ul
         (List.init 1000 (fun i ->
-             ( Key.int i
-             , Private.Component.v (module Row) ~on:(function _ -> .) i ) ) ) ]
+             (Key.int i, Component.v (module Row) ~on:(function _ -> .) i) ) )
+    ]
 
 let mount_rows () =
   Diff.mount null ~parent:()
