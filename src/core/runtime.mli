@@ -141,6 +141,20 @@ val inspect : 'node t -> inspect
 (** The flags and counts of the runtime and of the root instance, for the tests.
 *)
 
+(** The counts of the instance tree, for the leak tests. *)
+type tree =
+  { instances: int  (** The live instances below the root. *)
+  ; tokens: int
+        (** The live tokens below the token of the root, at all levels: the
+            tokens of the instances and of their tasks. *)
+  ; child_links: int
+        (** The entries of the child lists, from the root. A dead instance
+            leaves the list of its parent: thus [child_links] is [instances]
+            with no leak. *)
+  ; queued: int  (** The instances in the work queue of the render. *) }
+
+val tree : 'node t -> tree
+
 val abort : exn -> unit
 (** [abort e] gives [e] to the error handler one time, then ends each turn that
     did not end, as the catch of a turn does. If work stays in a queue, it asks

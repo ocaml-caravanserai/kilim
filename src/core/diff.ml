@@ -1,34 +1,85 @@
-type 'node node = {mutable dom: 'node; mutable shape: 'node shape}
+type ('node, 'msg) node = ('node, 'msg) Tree.node =
+  {mutable dom: 'node; mutable shape: ('node, 'msg) shape}
 
-and 'node shape = Text of string | Element of 'node element
+and ('node, 'msg) shape = ('node, 'msg) Tree.shape =
+  | Text of string
+  | Element of ('node, 'msg) element
+  | Comp :
+      { key: string option
+      ; on: ('o -> 'msg) ref
+      ; inst: ('node, 'c) Tree.inst
+      ; data: ('p, 'm, 'c, 'o) Tree.data
+      ; child: ('node, 'c) node }
+      -> ('node, 'msg) shape
 
-and 'node element =
+and ('node, 'msg) element = ('node, 'msg) Tree.element =
   { ns: Dom.ns
   ; name: string
   ; cell: Dom.cell
   ; mutable attrs: (string * string) list
   ; mutable listened: (string * bool) list
-        (* the events with a listener on the element, and passive *)
-  ; mutable children: 'node children }
+  ; mutable children: ('node, 'msg) children }
 
-and 'node children =
-  | Plain of 'node node array
-  | Keyed of Key.t array * 'node node array
+and ('node, 'msg) children = ('node, 'msg) Tree.children =
+  | Plain of ('node, 'msg) node array
+  | Keyed of Key.t array * ('node, 'msg) node array
   | Inner of Unsafe_html.t
 
-(* The context of the diff. Later versions add the owner instance, the boundary
-   and the providers. [controlled] holds the elements with a controlled property
-   in the view, in reverse order: the diff writes their properties after all the
-   other operations of the patch. The diff patches and builds the nodes in the
-   order of the document, thus the order of [controlled] is the order of the end
-   tags. *)
-type ('node, 'msg) ctx =
+type ('node, 'msg) ctx = ('node, 'msg) Tree.ctx =
   { ops: 'node Dom.t
   ; post: 'msg Dom.post
   ; ns: Dom.ns
-  ; controlled: ('node * Dom.cell) list ref }
+  ; controlled: ('node * Dom.cell) list ref
+  ; owner: ('node, 'msg) Tree.inst
+  ; env: 'node Tree.env }
 
-type ('node, 'msg) t = {ctx: ('node, 'msg) ctx; parent: 'node; root: 'node node}
+type ('node, 'msg) t = ('node, 'msg) Tree.mount =
+  {ctx: ('node, 'msg) ctx; parent: 'node; root: ('node, 'msg) node}
+
+(* The functions of the component nodes (Reconcile). Component.v installs them:
+   thus an app with no component does not link Reconcile. *)
+type hooks =
+  { build:
+      'node 'msg.
+      ('node, 'msg) ctx -> 'node -> 'msg View.comp -> ('node, 'msg) node
+  ; patch:
+      'node 'msg.
+      ('node, 'msg) ctx -> 'node -> ('node, 'msg) node -> 'msg View.comp -> unit
+  ; render: 'node 'msg. ('node, 'msg) Tree.inst -> unit
+  ; walk: 'node 'msg. 'node Tree.env -> ('node, 'msg) node -> unit
+  ; walk_children:
+      'node 'msg. 'node Tree.env -> ('node, 'msg) Tree.children -> unit
+  ; flush: 'node. 'node Tree.env -> (exn -> unit) -> bool }
+
+let no_component () = invalid_arg "kilim: a component node with no Component.v"
+
+let hooks =
+  ref
+    { build= (fun _ _ _ -> no_component ())
+    ; patch= (fun _ _ _ _ -> no_component ())
+    ; render= (fun _ -> no_component ())
+    ; walk= (fun _ _ -> ())
+    ; walk_children= (fun _ _ -> ())
+    ; flush= (fun _ _ -> false) }
+
+(* The DOM node of a retained node. A component node is transparent: its DOM
+   node is the DOM node of the root of the view of its instance. A text and an
+   element keep their DOM node in [dom]. *)
+let rec dom : 'node 'msg. ('node, 'msg) node -> 'node =
+ fun r ->
+  match r.shape with Comp c -> dom c.child | Text _ | Element _ -> r.dom
+
+(* With no child instance, the view of the owner has no component node: no walk.
+   Thus an app with no component keeps the cost of Phase 1. *)
+let has_children (ctx : _ ctx) =
+  ( Dlist.length ctx.owner.children
+  > 0 )
+  [@mutate off "a pure shortcut: the walk finds no component node"]
+
+let gone ctx r = if has_children ctx then !hooks.walk ctx.env r
+
+let gone_children ctx c =
+  if has_children ctx then !hooks.walk_children ctx.env c
 
 (* One empty array for all: under js_of_ocaml, each [[||]] is a new array. *)
 let empty = [||]
@@ -355,25 +406,30 @@ let patch_listeners (ops : _ Dom.t) d old nw =
           ops.listen d ev ~passive )
     nw
 
-(* Remove all children, if there are some. *)
-let clear (ops : _ Dom.t) d e none =
-  ( match e.children with
+(* Remove all children, if there are some. The DOM operation comes first, then
+   the walk: a DOM fault leaves each retained node in the DOM. *)
+let clear ctx d e none =
+  let old = e.children in
+  ( match old with
   | Plain [||] | Keyed (_, [||]) ->
       ()
   | Plain _ | Keyed _ | Inner _ ->
-      ops.clear d ) ;
-  e.children <- none
+      ctx.ops.Dom.clear d ) ;
+  e.children <- none ;
+  gone_children ctx old
 
 (* Remove the plain children of [a] from index [n]. [n] is 0, or less than the
    length of [a]. *)
-let shrink (ops : _ Dom.t) d e a n =
-  if n = 0 then clear ops d e (Plain empty)
+let shrink ctx d e a n =
+  if n = 0 then clear ctx d e (Plain empty)
   else begin
     let m = Array.length a in
     let i = ref n in
     ( try
         while !i < m do
-          ops.remove d a.(!i).dom ; incr i
+          ctx.ops.Dom.remove d (dom a.(!i)) ;
+          gone ctx a.(!i) ;
+          incr i
         done
       with exn ->
         e.children <-
@@ -382,8 +438,10 @@ let shrink (ops : _ Dom.t) d e a n =
     e.children <- Plain (Array.sub a 0 n)
   end
 
-let rec build : 'node 'msg. ('node, 'msg) ctx -> 'msg View.t -> 'node node =
- fun ctx v ->
+let rec build :
+    'node 'msg. ('node, 'msg) ctx -> 'node -> 'msg View.t -> ('node, 'msg) node
+    =
+ fun ctx parent v ->
   match v with
   | View.Text s ->
       {dom= ctx.ops.create_text s; shape= Text s}
@@ -418,6 +476,8 @@ let rec build : 'node 'msg. ('node, 'msg) ctx -> 'msg View.t -> 'node node =
       ; shape=
           Element {ns; name= ve.name; cell; attrs= ve.attrs; listened; children}
       }
+  | View.Comp c ->
+      !hooks.build ctx parent c
 
 (* Build each view and append it to [d]. If a DOM operation raises, [on_error]
    gets the nodes that are in [d], before the exception goes on. *)
@@ -426,20 +486,20 @@ and append :
        ('node, 'msg) ctx
     -> 'node
     -> 'msg View.t array
-    -> on_error:('node node array -> unit)
-    -> 'node node array =
+    -> on_error:(('node, 'msg) node array -> unit)
+    -> ('node, 'msg) node array =
  fun ctx d nv ~on_error ->
   let n = Array.length nv in
   if n = 0 then empty
   else begin
-    let first = build ctx nv.(0) in
-    ctx.ops.insert_before d first.dom None ;
+    let first = build ctx d nv.(0) in
+    ctx.ops.insert_before d (dom first) None ;
     let a = Array.make n first in
     let i = ref 1 in
     ( try
         while !i < n do
-          let c = build ctx nv.(!i) in
-          ctx.ops.insert_before d c.dom None ;
+          let c = build ctx d nv.(!i) in
+          ctx.ops.insert_before d (dom c) None ;
           a.(!i) <- c ;
           incr i
         done
@@ -450,8 +510,8 @@ and append :
   end
 
 and patch_node :
-    'node 'msg. ('node, 'msg) ctx -> 'node -> 'node node -> 'msg View.t -> unit
-    =
+    'node 'msg.
+    ('node, 'msg) ctx -> 'node -> ('node, 'msg) node -> 'msg View.t -> unit =
  fun ctx parent r v ->
   match (r.shape, v) with
   | Text s, View.Text s' ->
@@ -462,15 +522,31 @@ and patch_node :
   | Element e, View.Element ve
     when String.equal e.name ve.name && e.ns = ns_of ctx ve.name ->
       patch_element ctx r.dom e ve
+  | Comp _, View.Comp c ->
+      !hooks.patch ctx parent r c
   | _ ->
-      let fresh = build ctx v in
-      ctx.ops.replace parent fresh.dom r.dom ;
-      r.dom <- fresh.dom ;
-      r.shape <- fresh.shape
+      replace ctx parent r v
+
+(* Build [v] in the place of [r]. The DOM operation comes first, then the walk
+   of the old subtree. *)
+and replace :
+    'node 'msg.
+    ('node, 'msg) ctx -> 'node -> ('node, 'msg) node -> 'msg View.t -> unit =
+ fun ctx parent r v ->
+  let fresh = build ctx parent v in
+  ctx.ops.replace parent (dom fresh) (dom r) ;
+  let old = {dom= r.dom; shape= r.shape} in
+  r.dom <- fresh.dom ;
+  r.shape <- fresh.shape ;
+  gone ctx old
 
 and patch_element :
     'node 'msg.
-    ('node, 'msg) ctx -> 'node -> 'node element -> 'msg View.element -> unit =
+       ('node, 'msg) ctx
+    -> 'node
+    -> ('node, 'msg) element
+    -> 'msg View.element
+    -> unit =
  fun ctx d e ve ->
   let ok =
     match e.children with Keyed (ok, _) -> ok | Plain _ | Inner _ -> empty
@@ -498,7 +574,8 @@ and patch_element :
 
 and patch_children :
     'node 'msg.
-    ('node, 'msg) ctx -> 'node -> 'node element -> 'msg prepared -> unit =
+    ('node, 'msg) ctx -> 'node -> ('node, 'msg) element -> 'msg prepared -> unit
+    =
  fun ctx d e kids ->
   let cctx = child_ctx ctx e.name e.ns in
   match (e.children, kids) with
@@ -512,23 +589,27 @@ and patch_children :
         ctx.ops.set_inner_html d h' ;
         e.children <- Inner h'
       end
-  | (Plain _ | Keyed _), Pinner h ->
+  | ((Plain _ | Keyed _) as old), Pinner h ->
       ctx.ops.set_inner_html d h ;
-      e.children <- Inner h
+      e.children <- Inner h ;
+      gone_children cctx old
   | (Keyed _ | Inner _), Pplain l ->
-      clear ctx.ops d e (Plain empty) ;
+      clear cctx d e (Plain empty) ;
       e.children <-
         Plain
           (append cctx d (Array.of_list l) ~on_error:(fun a ->
                e.children <- Plain a ) )
   | (Plain _ | Inner _), Pkeyed pl ->
-      clear ctx.ops d e (Keyed (empty, empty)) ;
+      clear cctx d e (Keyed (empty, empty)) ;
       e.children <- Keyed (pl.nk, append_keyed cctx d e pl)
 
 and append_keyed :
     'node 'msg.
-    ('node, 'msg) ctx -> 'node -> 'node element -> 'msg plan -> 'node node array
-    =
+       ('node, 'msg) ctx
+    -> 'node
+    -> ('node, 'msg) element
+    -> 'msg plan
+    -> ('node, 'msg) node array =
  fun ctx d e pl ->
   append ctx d pl.nv ~on_error:(fun a ->
       e.children <- Keyed (Array.sub pl.nk 0 (Array.length a), a) )
@@ -540,8 +621,8 @@ and patch_plain :
     'node 'msg.
        ('node, 'msg) ctx
     -> 'node
-    -> 'node element
-    -> 'node node array
+    -> ('node, 'msg) element
+    -> ('node, 'msg) node array
     -> int
     -> 'msg View.t list
     -> unit =
@@ -554,7 +635,7 @@ and patch_plain :
       if
         ( i < Array.length a )
         [@mutate off "for i = m, no node goes, and the array is a copy"]
-      then shrink ctx.ops d e a i
+      then shrink ctx d e a i
   | l ->
       let extra =
         append ctx d (Array.of_list l) ~on_error:(fun b ->
@@ -566,14 +647,14 @@ and patch_keyed :
     'node 'msg.
        ('node, 'msg) ctx
     -> 'node
-    -> 'node element
+    -> ('node, 'msg) element
     -> Key.t array
-    -> 'node node array
+    -> ('node, 'msg) node array
     -> 'msg plan
     -> unit =
  fun ctx d e ok on pl ->
   let m = Array.length on and n = Array.length pl.nk in
-  if n = 0 then clear ctx.ops d e (Keyed (empty, empty))
+  if n = 0 then clear ctx d e (Keyed (empty, empty))
   else if m = 0 then e.children <- Keyed (pl.nk, append_keyed ctx d e pl)
   else begin
     let {nk; nv; p; s; src; matched; reads= _} = pl in
@@ -615,7 +696,7 @@ and patch_keyed :
          end, in the order of the document: see [run]. *)
       for j = p to p + k - 1 do
         let i = src.(j - p) in
-        if i < 0 then nn.(j) <- build ctx nv.(j)
+        if i < 0 then nn.(j) <- build ctx d nv.(j)
         else begin
           nn.(j) <- on.(i) ;
           patch_node ctx d on.(i) nv.(j)
@@ -627,8 +708,8 @@ and patch_keyed :
       (* Then the inserts and the moves, from the end: the node after [j] is
          always in its new place. *)
       let place j =
-        let before = if j + 1 < n then Some nn.(j + 1).dom else None in
-        ctx.ops.insert_before d nn.(j).dom before
+        let before = if j + 1 < n then Some (dom nn.(j + 1)) else None in
+        ctx.ops.insert_before d (dom nn.(j)) before
       in
       for j = p + k - 1 downto p do
         if src.(j - p) < 0 then begin
@@ -639,8 +720,9 @@ and patch_keyed :
       done ;
       for i = p to p + km - 1 do
         if not matched.(i - p) then begin
-          ctx.ops.remove d on.(i).dom ;
-          removed.(i - p) <- true
+          ctx.ops.remove d (dom on.(i)) ;
+          removed.(i - p) <- true ;
+          gone ctx on.(i)
         end
       done
     with
@@ -651,29 +733,48 @@ and patch_keyed :
         raise exn
   end
 
-let mount ops ~parent ~post v =
-  let ctx = {ops; post; ns= Html; controlled= ref []} in
+let start ctx ~parent v =
   let root =
     run ctx (fun () ->
-        let root = build ctx v in
-        ops.Dom.insert_before parent root.dom None ;
+        let root = build ctx parent v in
+        ctx.ops.Dom.insert_before parent (dom root) None ;
         root )
   in
   {ctx; parent; root}
 
+(* The env of a diff with no runtime: the messages of a child go nowhere, and
+   its commands start no task. *)
+let env () : _ Tree.env =
+  { post= (fun _ -> {Dom.post= (fun _ _ -> ())})
+  ; command= (fun _ _ -> ())
+  ; viewed= ignore
+  ; serial= 1
+  ; work= Instance.Work.empty }
+
+let mount ops ~parent ~post v =
+  let owner = Instance.root (Cancel.root ()) in
+  start {ops; post; ns= Html; controlled= ref []; owner; env= env ()} ~parent v
+
 let patch t v = run t.ctx (fun () -> patch_node t.ctx t.parent t.root v)
+
+let render i = !hooks.render i
 
 let root t = t.root
 
-let dom r = r.dom
+type 'node child = Child : ('node, 'msg) node -> 'node child
 
-let children r =
+(* The retained children of the element of a node. A component node is
+   transparent. *)
+let rec children : 'node 'msg. ('node, 'msg) node -> 'node child list option =
+ fun r ->
   match r.shape with
   | Text _ ->
       None
+  | Comp c ->
+      children c.child
   | Element e -> (
     match e.children with
     | Plain a | Keyed (_, a) ->
-        Some (Array.to_list a)
+        Some (Array.to_list (Array.map (fun c -> Child c) a))
     | Inner _ ->
         None )

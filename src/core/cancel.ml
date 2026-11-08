@@ -16,6 +16,12 @@ let make parent cancelled =
   ; next= None
   ; parent }
 
+(* The operations on the lists of children: a link and an unlink. For the token
+   release budget. *)
+let ops = ref 0
+
+let list_ops () = !ops
+
 let root () = make None false
 
 let cancelled t = t.cancelled
@@ -31,6 +37,7 @@ let unlink c =
   | None ->
       ()
   | Some p -> (
+      incr ops ;
       ( match c.prev with
       | Some q ->
           q.next <- c.next
@@ -45,6 +52,7 @@ let unlink c =
 let child p =
   if p.cancelled then make None true
   else begin
+    incr ops ;
     let c = make (Some p) false in
     c.next <- p.first ;
     (match p.first with Some f -> f.prev <- Some c | None -> ()) ;
@@ -55,6 +63,18 @@ let child p =
 let children t =
   let rec count n = function None -> n | Some c -> count (n + 1) c.next in
   count 0 t.first
+
+(* An explicit stack: a deep tree of tokens does not overflow the stack. *)
+let descendants t =
+  let rec count n = function
+    | [] ->
+        n
+    | None :: rest ->
+        count n rest
+    | Some c :: rest ->
+        count (n + 1) (c.first :: c.next :: rest)
+  in
+  count 0 [t.first]
 
 (* The token detaches from its parent, is marked as ended, and runs its end
    actions. A second release, or a release after a cancel, finds no parent and

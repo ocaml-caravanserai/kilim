@@ -58,13 +58,7 @@ let swapped =
 
 let changed = List.mapi (fun i r -> if i = 500 then row 500 "x" else r) rows1000
 
-let actions =
-  [ ("create", [], rows1000)
-  ; ("change", rows1000, changed)
-  ; ("swap", rows1000, swapped)
-  ; ("remove", rows1000, []) ]
-
-let measure (before, after) =
+let measure (before, after) () =
   let tree =
     Diff.mount null ~parent:()
       ~post:(Private.Dom.post_now ignore)
@@ -75,6 +69,106 @@ let measure (before, after) =
   Diff.patch tree view ;
   let w1 = words () in
   int_of_float (w1 -. w0)
+
+(* The partial update budget: 1,000 keyed component rows. The props of a row are
+   its index, and its model is a count. *)
+module Row = struct
+  type props = int
+
+  type model = int
+
+  type msg = unit
+
+  type out = |
+
+  let id : (props, model, msg, out) Private.Component.id =
+    Private.Component.id ()
+
+  let init _ = (0, Cmd.none)
+
+  let update _ _ m () = (m + 1, Cmd.none)
+
+  let view i m =
+    El.li ~ev:[Ev.click ()] [txt (string_of_int i ^ " " ^ string_of_int m)]
+
+  let subs _ _ = Sub.none
+
+  let equal_props = Int.equal
+end
+
+let component_rows header =
+  El.div
+    [ El.h1 [txt header]
+    ; View.keyed El.ul
+        (List.init 1000 (fun i ->
+             ( Key.int i
+             , Private.Component.v (module Row) ~on:(function _ -> .) i ) ) ) ]
+
+let mount_rows () =
+  Diff.mount null ~parent:()
+    ~post:(Private.Dom.post_now ignore)
+    (component_rows "0")
+
+(* One row changes its model: the render of its instance alone, with its view.
+   The model changes before the first read of the counters. *)
+let row_model () =
+  let tree = mount_rows () in
+  let row =
+    match Diff.children (Diff.root tree) with
+    | Some [_; Diff.Child ul] -> (
+      match Diff.children ul with
+      | Some l ->
+          List.nth l 500
+      | None ->
+          failwith "no rows" )
+    | _ ->
+        failwith "no list"
+  in
+  let (Diff.Child r) = row in
+  match r.shape with
+  | Private.Tree.Comp c -> (
+    match Type.Id.provably_equal c.data.spec.id.tid Row.id.tid with
+    | Some Type.Equal ->
+        let env = (Option.get c.inst.mount).ctx.env in
+        c.data.model <- 1 ;
+        Private.Instance.changed env c.inst ;
+        Private.Instance.clean env c.inst ;
+        let w0 = words () in
+        Diff.render c.inst ;
+        let w1 = words () in
+        int_of_float (w1 -. w0)
+    | None ->
+        failwith "another component" )
+  | _ ->
+      failwith "not a component"
+
+(* The parent changes a text outside the rows: each row skips its view. The test
+   makes the new view of the parent before the first read. *)
+let header () =
+  let tree = mount_rows () in
+  let view = component_rows "1" in
+  let w0 = words () in
+  Diff.patch tree view ;
+  let w1 = words () in
+  int_of_float (w1 -. w0)
+
+(* The parent removes its 1,000 rows: the unmount of each instance. *)
+let remove_rows () =
+  let tree = mount_rows () in
+  let view = El.div [El.h1 [txt "0"]; View.keyed El.ul []] in
+  let w0 = words () in
+  Diff.patch tree view ;
+  let w1 = words () in
+  int_of_float (w1 -. w0)
+
+let actions =
+  [ ("create", measure ([], rows1000))
+  ; ("change", measure (rows1000, changed))
+  ; ("swap", measure (rows1000, swapped))
+  ; ("remove", measure (rows1000, []))
+  ; ("row-model", row_model)
+  ; ("header", header)
+  ; ("remove-rows", remove_rows) ]
 
 (* The ceiling of a count: plus 5 %, plus 10 words, rounded up to a multiple of
    10. *)
@@ -108,8 +202,8 @@ let () =
       ^ Sys.ocaml_version
       ^ ": write this version and the new ceilings of this run" ) ) ;
   List.iter
-    (fun (name, before, after) ->
-      let n = measure (before, after) in
+    (fun (name, f) ->
+      let n = f () in
       match List.assoc_opt name ceilings with
       | None ->
           incr failures ;
@@ -123,7 +217,7 @@ let () =
     actions ;
   List.iter
     (fun (name, _) ->
-      if not (List.exists (fun (a, _, _) -> a = name) actions) then (
+      if not (List.exists (fun (a, _) -> a = name) actions) then (
         incr failures ;
         Printf.printf "FAIL %s: a ceiling with no action\n" name ) )
     ceilings ;

@@ -10,6 +10,15 @@ type 'msg t =
       (** [Map (scope, f, c)]: the messages of [c] go through [f]. [scope] adds
           a level to the keys of [Latest] in [c]. *)
 
+(** The context of the [update] of a component (design section 09). ['msg] is
+    the message type of the component. [emit] puts an output in the queue, as a
+    message of the parent. *)
+type ('msg, 'out) ctx = {emit: 'out -> unit}
+
+val no_ctx : ('msg, 'out) ctx
+(** A context whose [emit] does nothing. The App and, in this version, each
+    component get it: the outputs come later. *)
+
 (** A task of a command, with the path of its key and its message function. *)
 type 'msg request =
   | Request :

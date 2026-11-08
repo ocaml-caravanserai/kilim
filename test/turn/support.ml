@@ -119,3 +119,5 @@ let fquiet f =
   quiet_with f.h
     ~inspect:(fun () -> R.inspect f.rt)
     ~stats:(fun () -> R.stats f.rt)
+
+let same_nodes a b = List.length a = List.length b && List.for_all2 ( == ) a b

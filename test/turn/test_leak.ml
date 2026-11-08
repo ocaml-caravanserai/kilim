@@ -140,6 +140,89 @@ let model_free () =
   is_false ~msg:"free after the catch" (Weak.check w 0) ;
   equal int 1 (List.length (errors p))
 
+(* A child with a timer of 1 s. *)
+module Timed = struct
+  type props = int
+
+  type model = int
+
+  type msg = unit
+
+  type out = |
+
+  let id : (props, model, msg, out) Private.Component.id =
+    Private.Component.id ()
+
+  let init n = (n, Cmd.task (Async.sleep (Span.s 1)))
+
+  let update _ _ m () = (m + 1, Cmd.none)
+
+  let view _ m = El.span [txt (string_of_int m)]
+
+  let subs _ _ = Sub.none
+
+  let equal_props = Int.equal
+end
+
+let timed n = Private.Component.v (module Timed) ~on:(function _ -> .) n
+
+let toggle_app =
+  App.make
+    ~init:(fun () -> (0, Cmd.none))
+    ~update:(fun m _ -> (m + 1, Cmd.none))
+    ~view:(fun m ->
+      El.div
+        [ button Save (string_of_int m)
+        ; (if m mod 2 = 0 then timed m else txt "") ] )
+    ()
+
+(* 100 mounts and unmounts of a child with a timer. *)
+let child_mounts () =
+  let h = H.create () in
+  let p = P.start ~host:h toggle_app in
+  for _ = 1 to 200 do
+    click p
+  done ;
+  let t = P.tree p in
+  equal int ~msg:"the last mount" 1 t.instances ;
+  equal int ~msg:"its timer" 1 (H.live_timers h) ;
+  click p ;
+  let t = P.tree p in
+  equal int ~msg:"timers" 0 (H.live_timers h) ;
+  equal int ~msg:"tokens" 0 t.tokens ;
+  equal int ~msg:"instances" 0 t.instances ;
+  equal int ~msg:"child links" 0 t.child_links ;
+  equal int ~msg:"queued" 0 t.queued ;
+  no_errors p
+
+(* A live parent replaces 10 rows with new keys 10 times. *)
+let rows_app =
+  App.make
+    ~init:(fun () -> (0, Cmd.none))
+    ~update:(fun m _ -> (m + 1, Cmd.none))
+    ~view:(fun m ->
+      El.div
+        [ button Save (string_of_int m)
+        ; View.keyed El.ul
+            (List.init 10 (fun i -> (Key.int ((m * 10) + i), timed i))) ] )
+    ()
+
+let row_links () =
+  let h = H.create () in
+  let p = P.start ~host:h rows_app in
+  for _ = 1 to 10 do
+    click p ;
+    let t = P.tree p in
+    equal int ~msg:"instances" 10 t.instances ;
+    equal int ~msg:"no dead child link" 10 t.child_links ;
+    equal int ~msg:"tokens: an instance, a task and a step for each row" 30
+      t.tokens
+  done ;
+  equal int 10 (H.live_timers h) ;
+  P.stop p ;
+  equal int 0 (H.live_timers h) ;
+  no_errors p
+
 let tests =
   [ group "leaks"
       [ test "1,000 keys with synchronous results leave an empty table" sync_keys
@@ -148,4 +231,8 @@ let tests =
       ; test "1,000 changes of a Sub.run key leave one key" sub_keys
       ; test "1,000 starts, clicks and stops with Sub.every leave no timer"
           every_starts
-      ; test "the model of a root that failed is free" model_free ] ]
+      ; test "the model of a root that failed is free" model_free
+      ; test "100 mounts and unmounts of a child with a timer leave nothing"
+          child_mounts
+      ; test "a live parent replaces 10 rows 10 times: no dead child link"
+          row_links ] ]

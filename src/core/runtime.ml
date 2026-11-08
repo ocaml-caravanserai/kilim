@@ -48,26 +48,26 @@ type 'msg payload =
   | Result : 'a * ('a -> 'msg) -> 'msg payload
   | Error of exn
 
-type item =
+type 'node item =
   | Item :
-      { inst: 'msg Instance.t
+      { inst: ('node, 'msg) Instance.t
       ; token: Cancel.t option  (** The task token, [None] for the DOM. *)
       ; key: string list option  (** The key of [Cmd.latest]. *)
       ; payload: 'msg payload }
-      -> item
+      -> 'node item
 
-type request =
+type 'node request =
   | Req :
-      { inst: 'msg Instance.t
+      { inst: ('node, 'msg) Instance.t
       ; token: Cancel.t
       ; key: string list option
       ; task: 'a Async.t
       ; to_msg: 'a -> 'msg }
-      -> request
+      -> 'node request
 
 type 'node root =
   | Root :
-      { inst: 'msg Instance.t
+      { inst: ('node, 'msg) Instance.t
       ; fallback: (exn -> 'msg View.t) option
       ; mutable tree: ('node, 'msg) Diff.t option
       ; mutable failed: exn option
@@ -80,11 +80,14 @@ type 'node t =
   ; parent: 'node
   ; mutable wrapped: Host.t  (** The host of the tasks. *)
   ; run: Run_queue.t
-  ; messages: item Queue.t
-  ; requests: request Queue.t
+  ; messages: 'node item Queue.t
+  ; requests: 'node request Queue.t
   ; restores: (unit -> unit) Queue.t
         (** The restores of the discrete events, for the next render. *)
   ; root: 'node root
+  ; tree: 'node Instance.env
+        (** The parts of the runtime that a mount of a component needs, and the
+            work queue of the render. *)
   ; stats: stats
   ; mutable in_turn: bool
   ; mutable turn_requested: bool
@@ -134,6 +137,7 @@ let wants rt =
   let (Root r) = rt.root in
   (not rt.stopped)
   && ( rt.pending || r.inst.dirty
+     || (not (Instance.Work.is_empty rt.tree.work))
      || (Option.is_some r.failed && not r.shown)
      || not (Queue.is_empty rt.restores) )
 
@@ -154,7 +158,7 @@ let catch rt e =
   Report.error e ;
   let (Root r) = rt.root in
   if r.inst.alive then begin
-    Instance.unmount r.inst ;
+    Instance.unmount rt.tree r.inst ;
     r.failed <- Some e ;
     r.shown <- false
   end
@@ -331,10 +335,10 @@ and count rt =
   rt.stats.messages <- rt.stats.messages + 1
 
 (* A call of [update]. [Cmd.none] makes no request. *)
-and update : type msg. _ -> msg Instance.t -> msg Instance.state -> msg -> unit
-    =
+and update : type msg.
+    _ -> (_, msg) Instance.t -> msg Instance.state -> msg -> unit =
  fun rt inst (State s) m ->
-  match s.spec.update s.props s.model m with
+  match s.spec.update Cmd.no_ctx s.props s.model m with
   | model, cmd -> (
       (* A stop during [update], or a root catch from a fault of the platform in
          a re-entrant event (see [catch]), unmounts the instance: then the model
@@ -342,7 +346,7 @@ and update : type msg. _ -> msg Instance.t -> msg Instance.state -> msg -> unit
          each frame makes a render. *)
       if (not (rt.env.same model s.model)) && inst.alive then begin
         s.model <- model ;
-        Instance.changed inst
+        Instance.changed rt.tree inst
       end ;
       match cmd with
       | (Cmd.None [@mutate off "a shortcut: the requests of Cmd.None are []"])
@@ -357,7 +361,7 @@ and update : type msg. _ -> msg Instance.t -> msg Instance.state -> msg -> unit
    the first task). A key of [Cmd.latest] cancels the old token of the key, also
    if its task has not started. An instance that a root catch or a stop
    unmounted in its [update] gets no request. *)
-and command : type msg. _ -> msg Instance.t -> msg Cmd.t -> unit =
+and command : type msg. _ -> (_, msg) Instance.t -> msg Cmd.t -> unit =
  fun rt inst cmd ->
   List.iter
     (fun (Cmd.Request {key; task; to_msg}) ->
@@ -428,6 +432,7 @@ and render rt =
     | None, _ ->
         false
   in
+  let wrote = !Diff.hooks.flush rt.tree (catch_in_render rt) || wrote in
   if wrote then rt.stats.renders <- rt.stats.renders + 1 ;
   restore rt
 
@@ -454,7 +459,7 @@ and early rt =
 (* The subscription pass of a live instance. [subs] and the end actions of the
    removed keys are user code: they can stop the page or make a root catch, thus
    each leaf examines [alive] again. The new keys start only if [start]. *)
-and subs_pass : type msg. _ -> msg Instance.t -> start:bool -> unit =
+and subs_pass : type msg. _ -> (_, msg) Instance.t -> start:bool -> unit =
  fun rt inst ~start ->
   match inst.state with
   | Some (State {spec= {subs= Some f; _}; props; model}) ->
@@ -491,7 +496,8 @@ and subs_pass : type msg. _ -> msg Instance.t -> start:bool -> unit =
 
 (* A key that stays gets the newest message function. A new key starts if
    [start]. *)
-and keep : type msg. _ -> msg Instance.t -> start:bool -> msg Sub.leaf -> unit =
+and keep : type msg.
+    _ -> (_, msg) Instance.t -> start:bool -> msg Sub.leaf -> unit =
  fun rt inst ~start leaf ->
   match leaf with
   | Sub.Run_leaf (k, f) ->
@@ -514,8 +520,11 @@ and keep : type msg. _ -> msg Instance.t -> start:bool -> msg Sub.leaf -> unit =
 (* The key goes into the set first, then the task starts. A [send] after the
    cancel of the key pushes nothing. *)
 and start_run : type msg.
-    _ -> msg Instance.t -> Sub.Key.t -> ((msg -> unit) -> unit Async.t) -> unit
-    =
+       _
+    -> (_, msg) Instance.t
+    -> Sub.Key.t
+    -> ((msg -> unit) -> unit Async.t)
+    -> unit =
  fun rt inst k f ->
   let token = Cancel.child (Instance.token inst) in
   inst.runs <- Instance.Subs.add k token inst.runs ;
@@ -528,7 +537,7 @@ and start_run : type msg.
 (* A payload takes the newest message function when it leaves the queue. *)
 and start_auto : type msg p.
        _
-    -> msg Instance.t
+    -> (_, msg) Instance.t
     -> Sub.Key.t
     -> p Sub.kind
     -> ((p -> unit) -> unit Async.t)
@@ -551,7 +560,8 @@ and start_auto : type msg p.
    not start, because [Async.return] gives its result also then. The end of a
    task releases its token, and its key stays. An error unmounts the instance
    when it leaves the queue, and the unmount cancels the token. *)
-and launch : type msg. _ -> msg Instance.t -> Cancel.t -> unit Async.t -> unit =
+and launch : type msg.
+    _ -> (_, msg) Instance.t -> Cancel.t -> unit Async.t -> unit =
  fun rt inst token task ->
   if not (Cancel.cancelled token) then
     Async.start ~host:rt.wrapped ~run:rt.run token task
@@ -563,7 +573,7 @@ and launch : type msg. _ -> msg Instance.t -> Cancel.t -> unit Async.t -> unit =
    raise: each caller has its own error rule. *)
 and write : type msg.
        _
-    -> msg Instance.t
+    -> (_, msg) Instance.t
     -> (_, msg) Diff.t option
     -> msg View.t
     -> (_, msg) Diff.t option =
@@ -572,12 +582,31 @@ and write : type msg.
   | Some t ->
       Diff.patch t v ; tree
   | None ->
-      (* The post of the cells: the message function runs when the item leaves
-         the queue (design section 09). *)
-      let post x f =
-        push rt (Item {inst; token= None; key= None; payload= Result (x, f)})
+      let ctx =
+        { Tree.ops= rt.dom
+        ; post= post rt inst
+        ; ns= Html
+        ; controlled= ref []
+        ; owner= inst
+        ; env= rt.tree }
       in
-      Some (Diff.mount rt.dom ~parent:rt.parent ~post:{post} v)
+      let t = Diff.start ctx ~parent:rt.parent v in
+      (* The user code of a component can stop the page during the mount: then
+         the stop found no DOM to remove. *)
+      if rt.stopped then begin
+        rt.dom.remove rt.parent (Diff.dom (Diff.root t)) ;
+        None
+      end
+      else Some t
+
+(* The post of the cells of the view of an instance: the message function runs
+   when the item leaves the queue (design section 09). *)
+and post : type msg. _ -> (_, msg) Instance.t -> msg Dom.post =
+ fun rt inst ->
+  { post=
+      (fun x f ->
+        push rt (Item {inst; token= None; key= None; payload= Result (x, f)}) )
+  }
 
 (* The view and the diff run only for a live root, thus the catch marks the root
    as failed. *)
@@ -698,7 +727,7 @@ let make env dom parent root =
   let run =
     Run_queue.create ~schedule:(fun () -> Option.iter request_turn !self)
   in
-  let rt =
+  let rec rt =
     { env
     ; dom
     ; parent
@@ -708,6 +737,12 @@ let make env dom parent root =
     ; requests= Queue.create ()
     ; restores= Queue.create ()
     ; root
+    ; tree=
+        { post= (fun i -> post rt i)
+        ; command= (fun i cmd -> command rt i cmd)
+        ; viewed= (fun () -> rt.stats.views <- rt.stats.views + 1)
+        ; serial= 1
+        ; work= Instance.Work.empty }
     ; stats=
         { turns= 0
         ; clocks= 0
@@ -756,7 +791,7 @@ let make env dom parent root =
   rt
 
 let create env dom ~parent (App.App {init; update; view; subs; fallback}) =
-  let inst = Instance.make (Cancel.root ()) in
+  let inst = Instance.root (Cancel.root ()) in
   let rt =
     make env dom parent
       (Root {inst; fallback; tree= None; failed= None; shown= false})
@@ -769,12 +804,15 @@ let create env dom ~parent (App.App {init; update; view; subs; fallback}) =
             (* init cannot reach the runtime, thus the instance is alive
                here. *)
             let spec =
-              { Instance.update= (fun () m msg -> update m msg)
+              { View.id= View.id ()
+              ; init
+              ; update= (fun _ () m msg -> update m msg)
               ; view= (fun () m -> view m)
-              ; subs= Option.map (fun f () m -> f m) subs }
+              ; subs= Option.map (fun f () m -> f m) subs
+              ; equal_props= (fun () () -> true) }
             in
             inst.state <- Some (State {spec; props= (); model}) ;
-            Instance.changed inst ;
+            Instance.changed rt.tree inst ;
             command rt inst cmd
         | exception e ->
             catch rt e ) ;
@@ -817,7 +855,7 @@ let stop rt =
   if not rt.stopped then begin
     rt.stopped <- true ;
     let (Root r) = rt.root in
-    Instance.unmount r.inst ;
+    Instance.unmount rt.tree r.inst ;
     ( match r.tree with
     | Some tree -> (
         r.tree <- None ;
@@ -835,6 +873,30 @@ let stop rt =
   end
 
 let stats rt = {rt.stats with turns= rt.stats.turns}
+
+type tree = {instances: int; tokens: int; child_links: int; queued: int}
+
+(* The walk follows the child lists from the root. A dead instance unlinks from
+   the list of its parent: thus a dead entry in a list is a leak, and
+   [instances] does not count it. *)
+let tree rt =
+  let (Root r) = rt.root in
+  let instances = ref 0 and links = ref 0 in
+  let rec walk : 'msg. (_, 'msg) Instance.t -> unit =
+   fun i ->
+    links := !links + Dlist.length i.children ;
+    Dlist.iter
+      (fun (Instance.Any c) ->
+        if c.alive then incr instances ;
+        walk c )
+      i.children
+  in
+  walk r.inst ;
+  { instances= !instances
+  ; tokens=
+      (match r.inst.token with Some t -> Cancel.descendants t | None -> 0)
+  ; child_links= !links
+  ; queued= Instance.Work.cardinal rt.tree.work }
 
 let inspect rt =
   let (Root r) = rt.root in

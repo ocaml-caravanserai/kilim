@@ -315,6 +315,8 @@ let stats t = Runtime.stats t.rt
 
 let inspect t = Runtime.inspect t.rt
 
+let tree t = Runtime.tree t.rt
+
 let stop t = top t (fun () -> Runtime.stop t.rt)
 
 let expect_no_tasks t =

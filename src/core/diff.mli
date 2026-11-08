@@ -37,16 +37,61 @@
       order of the end tags of the elements in the document. Thus two checked
       radio buttons in one group give the same result.
 
+    - A component node has no DOM node of its own. A component node with the
+      same id and the same [?key] at the same place keeps its instance. If not,
+      the diff builds the new node, puts it in the place of the old node, then
+      unmounts the old instance. When the diff removes or replaces a subtree, it
+      first does the DOM operation, then unmounts each instance of the subtree
+      (the removal walk). If the owner of the view has no child instance, the
+      view has no component node, and the diff does no walk.
+
     If a DOM operation raises, the diff stops and gives the exception. Each node
     of the retained tree then is a child of the DOM node of its retained parent,
     and each DOM child of a retained element is in the retained tree. The order
     of the children can be different from the DOM. *)
 
-(** A node of the retained tree. *)
-type 'node node
+(** A node of the retained tree of the view of an instance. ['msg] is the
+    message type of that instance. A component node has no DOM node of its own
+    (see {!dom}). *)
+type ('node, 'msg) node = ('node, 'msg) Tree.node
 
-(** The retained tree of one root. *)
-type ('node, 'msg) t
+type ('node, 'msg) ctx = ('node, 'msg) Tree.ctx
+
+(** The retained tree of one root: the context of the diff, the DOM parent and
+    the root node. The view of a child instance has the same record. *)
+type ('node, 'msg) t = ('node, 'msg) Tree.mount =
+  {ctx: ('node, 'msg) ctx; parent: 'node; root: ('node, 'msg) node}
+
+(** The functions of the component nodes. [build ctx parent c] builds the node
+    of [c] as a child of the DOM node [parent]. [patch ctx parent r c] patches
+    the component node [r] to [c]. [render i] renders the live instance [i]
+    alone. [walk env r] and [walk_children env c] unmount each instance of a
+    removed subtree (the removal walk). [flush env catch] renders each instance
+    of the work queue alone, from the top, gives each error to [catch], and
+    tells if it rendered one. *)
+type hooks =
+  { build:
+      'node 'msg.
+      ('node, 'msg) ctx -> 'node -> 'msg View.comp -> ('node, 'msg) node
+  ; patch:
+      'node 'msg.
+      ('node, 'msg) ctx -> 'node -> ('node, 'msg) node -> 'msg View.comp -> unit
+  ; render: 'node 'msg. ('node, 'msg) Tree.inst -> unit
+  ; walk: 'node 'msg. 'node Tree.env -> ('node, 'msg) node -> unit
+  ; walk_children:
+      'node 'msg. 'node Tree.env -> ('node, 'msg) Tree.children -> unit
+  ; flush: 'node. 'node Tree.env -> (exn -> unit) -> bool }
+
+val hooks : hooks ref
+(** The functions of the component nodes. [Component.v] installs them: thus an
+    app with no component does not link them. The default [build], [patch] and
+    [render] raise [Invalid_argument]. The default [walk], [walk_children] and
+    [flush] do nothing: an app with no component has no instance below its root.
+*)
+
+val start : ('node, 'msg) ctx -> parent:'node -> 'msg View.t -> ('node, 'msg) t
+(** [start ctx ~parent view] builds the DOM of [view] with [ctx] and appends it
+    to [parent]. The owner of [ctx] is the instance of [view]. *)
 
 val mount :
      'node Dom.t
@@ -54,12 +99,35 @@ val mount :
   -> post:'msg Dom.post
   -> 'msg View.t
   -> ('node, 'msg) t
-(** [mount dom ~parent ~post view] builds the DOM of [view] and appends it to
-    [parent]. The handlers of the cells call [post] with the payload and the
-    message function. *)
+(** [mount dom ~parent ~post view] is {!start} with no runtime: a new owner
+    instance, and an env where the messages of a component go nowhere and its
+    commands start no task. The handlers of the cells call [post] with the
+    payload and the message function. *)
 
 val patch : ('node, 'msg) t -> 'msg View.t -> unit
 (** [patch t view] changes the DOM and the retained tree of [t] to [view]. *)
+
+val build : ('node, 'msg) ctx -> 'node -> 'msg View.t -> ('node, 'msg) node
+(** [build ctx parent view] builds the DOM of [view], for a child of the DOM
+    node [parent]. The caller inserts it. *)
+
+val patch_node :
+  ('node, 'msg) ctx -> 'node -> ('node, 'msg) node -> 'msg View.t -> unit
+(** [patch_node ctx parent r view] changes [r], a child of the DOM node
+    [parent], to [view]. *)
+
+val replace :
+  ('node, 'msg) ctx -> 'node -> ('node, 'msg) node -> 'msg View.t -> unit
+(** [replace ctx parent r view] builds [view], puts its DOM node in the place of
+    the DOM node of [r], changes [r] in place, and then unmounts each instance
+    of the old subtree. *)
+
+val run : ('node, 'msg) ctx -> (unit -> 'a) -> 'a
+(** [run ctx f] runs [f ()], then writes the controlled properties of the
+    elements that [f] built or patched, in the order of their end tags. *)
+
+val render : ('node, 'msg) Tree.inst -> unit
+(** [render i] is [!hooks.render i]. *)
 
 val restore : 'node Dom.t -> 'node -> Dom.cell -> unit
 (** [restore dom node cell] writes each view value of [cell] that is different
@@ -67,10 +135,12 @@ val restore : 'node Dom.t -> 'node -> Dom.cell -> unit
     the platform calls it for the target of the event (design section 11): thus
     a rejected input does not stay. *)
 
-val root : ('node, 'msg) t -> 'node node
+val root : ('node, 'msg) t -> ('node, 'msg) node
 
-val dom : 'node node -> 'node
-(** The DOM node of a retained node. *)
+val dom : ('node, 'msg) node -> 'node
+(** The DOM node of a retained node. A component node is transparent: its DOM
+    node is the DOM node of the root of the view of its instance, also after a
+    render of the instance alone that replaced that root. *)
 
 val probes : Key.t array -> Key.t array -> int option
 (** [probes nk ok] makes the plan of a keyed patch from the old keys [ok] to the
@@ -81,6 +151,10 @@ val probes : Key.t array -> Key.t array -> int option
 
     @raise Invalid_argument for a duplicate key in [nk]. *)
 
-val children : 'node node -> 'node node list option
+(** A retained node, with its message type hidden. *)
+type 'node child = Child : ('node, 'msg) node -> 'node child
+
+val children : ('node, 'msg) node -> 'node child list option
 (** The retained children of an element, or [None] for a text node and for an
-    element with {!View.unsafe_html} content. *)
+    element with {!View.unsafe_html} content. A component node is transparent:
+    the result is the children of the root of the view of its instance. *)

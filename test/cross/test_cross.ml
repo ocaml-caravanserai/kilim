@@ -235,4 +235,5 @@ let () =
   keyed_diffs () ;
   hashes () ;
   Cross_turn.run check ;
+  Cross_tree.run check ;
   if !failures > 0 then exit 1
