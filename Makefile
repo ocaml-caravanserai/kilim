@@ -5,9 +5,10 @@
 #   make test           Run the tests: native code, js_of_ocaml and
 #                       wasm_of_ocaml (on node, and in Chrome for test/dom,
 #                       test/loader and test/examples).
-#   make size           Build the counter of bench/size and the todo example
-#                       in the release profile, and compare their gzip sizes
-#                       with bench/size/budget (docs/budgets.md).
+#   make size           Build the counter of bench/size, the todo example and
+#                       the components example in the release profile, and
+#                       compare their gzip sizes with bench/size/budget
+#                       (docs/budgets.md).
 #   make budgets        The budget gate of CI (docs/budgets.md): the size
 #                       budget (as make size), the allocation counts
 #                       (bench/alloc), and the exact DOM operation counts

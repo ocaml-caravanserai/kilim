@@ -8,7 +8,7 @@ pull request.
 
 | Budget | Check in CI | Where | State |
 |---|---|---|---|
-| Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size` and the todo example | Done |
+| Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size`, the todo example and the components example | Done |
 | DOM operations for each action | Yes, each change | `test/view/test_budget.ml`: the four actions, exact counts. `examples/todo/test/test_counts.ml`: three actions of the todo example | Done |
 | Allocations for each action | Yes, each change | `bench/alloc`: the allocated words of the four actions | Done |
 | Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), and test D25 of `test/dom` (listeners, timers, DOM, in Chrome) | Done |
@@ -23,13 +23,18 @@ partial update and the token release checks.
 
 ## Size
 
-`make size` (and `make budgets`) builds two programs in the release profile
-and runs `bench/size/size.mjs`:
+`make size` (and `make budgets`) builds three programs in the release
+profile and runs `bench/size/size.mjs`:
 
 - `counter`: `bench/size/counter.ml`, one int model, two buttons, one text,
   and `Kilim_browser.run`. This program is the fixed reference of the size
   budget. The open reference sizes compare with it.
 - `example-todo`: the todo example (`examples/todo`), a real app.
+- `example-components`: the components example (`examples/components`).
+  It is the only program of the budget that links the code of the
+  components, the boundaries and the contexts. The dead code elimination
+  removes this code from the counter and the todo example. Without this
+  program, the budget cannot find a regression in this code.
 
 The script gives the gzip size (level 9, the `zlib` module of node) of each
 file, and compares it with `bench/size/budget`. Each line of the budget file
@@ -46,12 +51,21 @@ Measured with OCaml 5.5.1, js_of_ocaml and wasm_of_ocaml 6.4.1, Brr 0.0.9:
 
 | Program | File | Measured | Budget |
 |---|---|---|---|
-| `counter` | `counter.bc.js` (js_of_ocaml) | 37,522 bytes | 38,500 bytes |
-| `counter` | The main `.wasm` file (wasm_of_ocaml) | 37,400 bytes | 38,000 bytes |
+| `counter` | `counter.bc.js` (js_of_ocaml) | 37,612 bytes | 38,500 bytes |
+| `counter` | The main `.wasm` file (wasm_of_ocaml) | 37,477 bytes | 38,000 bytes |
 | `counter` | `counter.bc.wasm.js` (the launcher) | 6,889 bytes | 7,500 bytes |
-| `example-todo` | `main.bc.js` (js_of_ocaml) | 39,370 bytes | 41,000 bytes |
-| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 39,844 bytes | 40,500 bytes |
+| `example-todo` | `main.bc.js` (js_of_ocaml) | 39,437 bytes | 41,000 bytes |
+| `example-todo` | The main `.wasm` file (wasm_of_ocaml) | 39,925 bytes | 40,500 bytes |
 | `example-todo` | `main.bc.wasm.js` (the launcher) | 6,886 bytes | 7,500 bytes |
+| `example-components` | `main.bc.js` (js_of_ocaml) | 41,648 bytes | 44,000 bytes |
+| `example-components` | The main `.wasm` file (wasm_of_ocaml) | 43,625 bytes | 46,000 bytes |
+| `example-components` | `main.bc.wasm.js` (the launcher) | 6,888 bytes | 7,500 bytes |
+
+The components example adds about 4.0 KB (js_of_ocaml) and 6.1 KB
+(wasm_of_ocaml) to the counter. This includes the code of the four
+components of the example, the instance tree, the boundaries and the
+contexts. Its budget is the measured size plus 5 %, as for the other
+programs.
 
 The instance tree of Phase 2 adds about 0.4 KB (js_of_ocaml) and 0.6 KB
 (wasm_of_ocaml) to the counter, which has no component: before it, the

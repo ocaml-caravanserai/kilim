@@ -4,3 +4,6 @@ counter launcher 7500
 example-todo js 41000
 example-todo wasm 40500
 example-todo launcher 7500
+example-components js 44000
+example-components wasm 46000
+example-components launcher 7500
