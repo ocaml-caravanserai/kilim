@@ -1,4 +1,4 @@
-(** The URL check of design section 13. *)
+(** The URL check of design section 13, and the functions of Kilim.Url. *)
 
 val permitted : string -> bool
 (** [permitted url] is [true] if [url] is relative, or if its scheme is [http],
@@ -16,3 +16,20 @@ val attribute_ok : string -> string -> bool
     [data] and [background] (one URL), [srcset] (the URLs that the WHATWG srcset
     parser finds) and [ping] (a list of URLs that ASCII whitespace separates).
 *)
+
+(** {1 Kilim.Url} The text of each function is in kilim.mli. *)
+
+val encode_component : string -> string
+
+val decode_component : string -> string
+
+val query : string -> (string * string) list
+
+val with_query : string -> (string * string) list -> string
+
+type location =
+  {path: string list; query: (string * string) list; fragment: string option}
+
+val parse : string -> location
+
+val to_string : location -> string
