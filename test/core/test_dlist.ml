@@ -60,6 +60,21 @@ let iter_remove () =
   equal (list int) [4; 3; 2; 1] (List.rev !seen) ;
   equal int 0 (D.length l)
 
+(* Each call removes the next node too: drain gets each value one time. A value
+   that [f] pushes is drained too. *)
+let drain () =
+  let l, n = four () in
+  let seen = ref [] in
+  D.drain
+    (fun k x ->
+      seen := x :: !seen ;
+      if x = 4 then D.remove n.(2) ;
+      if x = 2 then ignore (D.push l (k + x)) )
+    10 l ;
+  equal (list int) [4; 2; 12; 1] (List.rev !seen) ;
+  equal int 0 (D.length l) ;
+  D.drain (fun () _ -> fail "an empty list") () l
+
 (* A random sequence of push and remove against a list model. *)
 type op = Push | Remove of int
 
@@ -101,5 +116,6 @@ let tests =
       ; test "remove unlinks the first, a middle and the last node" remove_each
       ; test "a second remove does nothing" remove_twice
       ; test "iter permits the remove of the current node" iter_remove
+      ; test "drain removes each node, also the nodes that f removes" drain
       ; prop "a random sequence of push and remove agrees with a list model" ops
           model_law ] ]
