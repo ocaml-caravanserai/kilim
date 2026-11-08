@@ -1,6 +1,6 @@
 The guards of kilim.browser, kilim.web, kilim.router.browser,
-kilim.http.browser and kilim.websocket.browser and their tests (design
-section 14)
+kilim.http.browser, kilim.websocket.browser and kilim.storage.browser and
+their tests (design section 14)
 
 windtrap runs only native code, thus it makes no mutant of src/browser,
 src/web and src/router/browser. Each line gives one guard (file, function,
@@ -301,3 +301,28 @@ kilim_websocket_browser.ml  connect  release: close     removed: WS3, WS6 (the
                                                         weak_websocket (the
                                                         count of the closes).
 kilim_websocket_browser.ml  install  set_driver         removed: each WS test.
+
+The guards of kilim.storage.browser (src/storage/browser). ST1 to ST3 are in
+test/dom/test_storage.ml. Run `dune test --force test/dom`. The native suite
+test/storage (in the mutation gate) tests kilim.storage and Storage_mock.
+
+kilim_storage_browser.ml  area  Session gives           localStorage: ST1 (the
+                          sessionStorage                areas are not separate).
+kilim_storage_browser.ml  error  SecurityError gives    removed: ST2 (Other
+                          Unavailable                   "SecurityError").
+kilim_storage_browser.ml  error  QuotaExceededError     removed: ST3.
+kilim_storage_browser.ml  error  NS_ERROR_DOM_QUOTA_    removed: ST3.
+                          REACHED
+kilim_storage_browser.ml  error  Other with the name    another text: ST3.
+kilim_storage_browser.ml  call  the catch of the       removed: ST2 (an
+                          getter                        exception).
+kilim_storage_browser.ml  call  the catch of the call   removed: ST3 (an
+                                                        exception).
+kilim_storage_browser.ml  call  null or undefined gives removed: ST2 (Other
+                          Unavailable                   "TypeError").
+kilim_storage_browser.ml  get  typeof is string         true: ST3 (a getItem that
+                                                        gives a number). false:
+                                                        ST1 (no value).
+kilim_storage_browser.ml  set  setItem                  removed: ST1.
+kilim_storage_browser.ml  remove  removeItem            removed: ST1.
+kilim_storage_browser.ml  install  set_driver           removed: each ST test.

@@ -1,0 +1,11 @@
+; kilim.storage.browser: the driver of kilim.storage on the Web Storage API of
+; the browser, with Brr_io.Storage. main.ml calls
+; Kilim_storage_browser.install (). It uses none of Printf, Format, Scanf,
+; Str, Hashtbl, Random, Fun or Printexc (test/link). windtrap runs only native
+; code, thus test/dom/guards.txt lists the guards of this library with their
+; tests.
+
+(library
+ (name kilim_storage_browser)
+ (public_name kilim.storage.browser)
+ (libraries kilim kilim.storage brr))

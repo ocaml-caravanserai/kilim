@@ -18,7 +18,8 @@
   test_csp
   test_router
   test_http
-  test_websocket)
+  test_websocket
+  test_storage)
  (modes js wasm)
  (libraries
   kilim
@@ -30,13 +31,16 @@
   kilim.http.browser
   kilim.websocket
   kilim.websocket.browser
+  kilim.storage
+  kilim.storage.browser
   brr
   url_corpus))
 
 ; The files of each rule: the runner, the pages and the ES module of the
 ; tests W5, W6 and WC. test_http (HT0 to HT9) uses the /http endpoints of
-; run.mjs, and test_websocket (WS0 to WS6) the /ws endpoints of run.mjs with
-; the server of examples/ws.mjs.
+; run.mjs, test_websocket (WS0 to WS6) the /ws endpoints of run.mjs with the
+; server of examples/ws.mjs, and test_storage (ST1 to ST3) a shim of the
+; storage errors.
 
 (alias
  (name pages)
@@ -70,7 +74,10 @@
   (glob_files test_http.bc.wasm.assets/*.wasm)
   test_websocket.bc.js
   test_websocket.bc.wasm.js
-  (glob_files test_websocket.bc.wasm.assets/*.wasm)))
+  (glob_files test_websocket.bc.wasm.assets/*.wasm)
+  test_storage.bc.js
+  test_storage.bc.wasm.js
+  (glob_files test_storage.bc.wasm.assets/*.wasm)))
 
 ; The dev profile. Chrome in the alias runtest, Firefox and WebKit in the alias
 ; browsers. --no-wasm: the js_of_ocaml pages in a browser with no WebAssembly:
@@ -101,6 +108,8 @@
    test_http.bc.wasm.js
    test_websocket.bc.js
    test_websocket.bc.wasm.js
+   test_storage.bc.js
+   test_storage.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
@@ -123,6 +132,7 @@
    test_fut.bc.js
    test_http.bc.js
    test_websocket.bc.js
+   test_storage.bc.js
    test_csp.bc.js
    test_router.bc.js)))
 
@@ -152,6 +162,8 @@
    test_http.bc.wasm.js
    test_websocket.bc.js
    test_websocket.bc.wasm.js
+   test_storage.bc.js
+   test_storage.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
@@ -178,6 +190,7 @@
    test_fut.bc.js
    test_http.bc.js
    test_websocket.bc.js
+   test_storage.bc.js
    test_csp.bc.js
    test_router.bc.js)))
 
@@ -207,6 +220,8 @@
    test_http.bc.wasm.js
    test_websocket.bc.js
    test_websocket.bc.wasm.js
+   test_storage.bc.js
+   test_storage.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
@@ -216,7 +231,8 @@
 ; depend on the dead code elimination and on the JS expressions of the release
 ; build. Chrome runs W1 to W6 and WC, Firefox and WebKit run W4 to W6 and WC.
 ; The three browsers run the router page (R1 to R8 and W7), the http page
-; (HT0 to HT9) and the websocket page (WS0 to WS6).
+; (HT0 to HT9), the websocket page (WS0 to WS6) and the storage page (ST1 to
+; ST3).
 
 (rule
  (alias release)
@@ -238,6 +254,8 @@
    test_http.bc.wasm.js
    test_websocket.bc.js
    test_websocket.bc.wasm.js
+   test_storage.bc.js
+   test_storage.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
@@ -265,6 +283,8 @@
    test_http.bc.wasm.js
    test_websocket.bc.js
    test_websocket.bc.wasm.js
+   test_storage.bc.js
+   test_storage.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
@@ -292,6 +312,8 @@
    test_http.bc.wasm.js
    test_websocket.bc.js
    test_websocket.bc.wasm.js
+   test_storage.bc.js
+   test_storage.bc.wasm.js
    test_csp.bc.js
    test_csp.bc.wasm.js
    test_router.bc.js
