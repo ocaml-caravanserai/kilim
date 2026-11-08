@@ -1,5 +1,6 @@
-The guards of kilim.browser, kilim.web and kilim.router.browser and their
-tests (design section 14)
+The guards of kilim.browser, kilim.web, kilim.router.browser,
+kilim.http.browser and kilim.websocket.browser and their tests (design
+section 14)
 
 windtrap runs only native code, thus it makes no mutant of src/browser,
 src/web and src/router/browser. Each line gives one guard (file, function,
@@ -259,3 +260,44 @@ kilim_http_browser.ml  response  a rejected body read   another text: HT3 (a bod
 kilim_http_browser.ml  response  the headers of the     removed (an empty list): HT1
                        response                         (the URL and the headers).
 kilim_http_browser.ml  install  set_transport           removed: HT1 to HT9.
+
+The guards of kilim.websocket.browser (src/websocket/browser). WS0 to WS6 are
+in test/dom/test_websocket.ml, with the /ws endpoints of run.mjs (the server of
+examples/ws.mjs), weak_websocket in test/weak. Run `dune test --force test/dom
+test/weak`. The native suite test/websocket (in the mutation gate) tests
+kilim.websocket and Websocket_mock, also Kilim_websocket.Private.ws_scheme
+(http to ws, https to wss), which the driver uses.
+
+kilim_websocket_browser.ml  resolve  location.href as   removed: WS1 (a relative
+                            the base                    URL throws: Failed).
+kilim_websocket_browser.ml  create  the constructor     Brr_io.Websocket.create:
+                            at each call                WS1 (the spy of the page
+                                                        sees no socket),
+                                                        weak_websocket (the
+                                                        native client of node).
+kilim_websocket_browser.ml  connect  the catch of       removed: WS4 (an
+                            Jv.Error                    exception).
+kilim_websocket_browser.ml  connect  Failed and Closed  at once: no test, the
+                            in a later task             messages are the same.
+kilim_websocket_browser.ml  connect  the open listener  removed: WS1 (no Opened).
+kilim_websocket_browser.ml  connect  typeof is string   true: WS1 (a message for
+                                                        the binary frame, or a
+                                                        trap). false: WS1 (no
+                                                        text message).
+kilim_websocket_browser.ml  connect  the close listener reason "": WS2. clean
+                            gives code, reason, clean   false: WS1. code 0: WS1,
+                                                        WS2, WS4.
+kilim_websocket_browser.ml  connect  the error listener removed: WS4 (no Failed
+                                                        for a refused upgrade).
+kilim_websocket_browser.ml  connect  send only if OPEN  true: WS1 (a send after
+                                                        the close gives ok).
+kilim_websocket_browser.ml  connect  close: code 1000   no code: WS1 (Closed
+                                                        1005).
+kilim_websocket_browser.ml  connect  release:           removed: WS1, WS3, WS6
+                            Ev.unlisten                 (a listener stays),
+                                                        weak_websocket (slot 0).
+kilim_websocket_browser.ml  connect  release: close     removed: WS3, WS6 (the
+                                                        socket stays open),
+                                                        weak_websocket (the
+                                                        count of the closes).
+kilim_websocket_browser.ml  install  set_driver         removed: each WS test.

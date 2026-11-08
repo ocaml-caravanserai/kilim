@@ -1,0 +1,11 @@
+; kilim.websocket.browser: the driver of kilim.websocket on the WebSocket API
+; of the browser, with Brr_io.Websocket. main.ml calls
+; Kilim_websocket_browser.install (). It uses none of Printf, Format, Scanf,
+; Str, Hashtbl, Random, Fun or Printexc (test/link). windtrap runs only native
+; code, thus test/dom/guards.txt lists the guards of this library with their
+; tests.
+
+(library
+ (name kilim_websocket_browser)
+ (public_name kilim.websocket.browser)
+ (libraries kilim kilim.websocket brr))

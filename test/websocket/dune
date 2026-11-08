@@ -1,0 +1,8 @@
+; The tests of kilim.websocket and Websocket_mock (design sections 08 and 14),
+; native only: windtrap runs here, and `make mutate` tests the mutants of
+; src/websocket and src/testing with this suite. test/dom/test_websocket.ml
+; runs the browser driver in Chrome, Firefox and WebKit.
+
+(test
+ (name test_websocket)
+ (libraries kilim kilim.websocket kilim.testing windtrap))

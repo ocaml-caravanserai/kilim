@@ -11,10 +11,10 @@ pull request.
 | Bundle size (gzip), for each build | Yes, each change | `bench/size`: the counter of `bench/size`, the todo, components and search examples | Done |
 | DOM operations for each action | Yes, each change | `test/view/test_budget.ml`: the four actions, exact counts. `examples/todo/test/test_counts.ml`: three actions of the todo example | Done |
 | Allocations for each action | Yes, each change | `bench/alloc`: the allocated words of the four actions | Done |
-| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), tests D25, D40 and D44 of `test/dom` (listeners, timers, DOM, in Chrome, Firefox and WebKit), HT9 of `test/dom` (20 times, with a request in flight), and the weak tests (native, and `test/weak` in the js_of_ocaml and wasm_of_ocaml builds) | Done |
+| Leaks after 1,000 mounts | Yes, each change | `test/turn/test_leak.ml` (tokens, timers, keys, instances, child links, the lists of the boundaries and the reader registrations, 100 times), `test/cross` (the same, 1,000 times, in the three builds), tests D25, D40 and D44 of `test/dom` (listeners, timers, DOM, in Chrome, Firefox and WebKit), HT9 of `test/dom` (20 times, with a request in flight), WS6 of `test/dom` (20 times, with an open socket), and the weak tests (native, and `test/weak` in the js_of_ocaml and wasm_of_ocaml builds) | Done |
 | Partial update | Yes, each change | `test/view/test_budget.ml`: three actions on 1,000 keyed component rows, exact counts of the views and of the DOM operations. `bench/alloc`: the allocated words of two actions | Done |
 | Token release | Yes, each change | `test/view/test_budget.ml`: the operations on the token lists when the parent removes 1,000 and 2,000 component rows | Done |
-| Linked modules | Yes, each change | `test/link` (kilim, kilim.browser, kilim.web, kilim.http, kilim.http.browser) | Done |
+| Linked modules | Yes, each change | `test/link` (kilim, kilim.browser, kilim.web, kilim.http, kilim.http.browser, kilim.router, kilim.router.browser, kilim.websocket, kilim.websocket.browser) | Done |
 | Time of the actions, wasm start-up time | No | Each night on fixed hardware | Waits: no fixed hardware yet |
 
 The leak tests and the link check run in the CI step "Test", with the other
@@ -184,6 +184,16 @@ The counter also does not use the fetch transport of `kilim.http.browser`:
 its builds do not contain `AbortController`, and the control program
 installs the transport.
 
+No program of the budget uses the driver of `kilim.websocket.browser`: the
+builds of the counter and of the todo, components and search examples do not
+contain `a binary frame`, a part of the text of its warning for a binary
+frame, and the control program installs the driver. Each app with `Brr_io`
+contains `WebSocket` (`Brr_io` reads `globalThis.WebSocket` when it starts),
+thus this name cannot be the check. A short name of the driver, for example
+`wasClean`, is not a good check either: the release build of wasm_of_ocaml
+keeps it in no run of bytes of the launcher or of the main `.wasm` file
+(measured: the control program contained it only in the `.js` file).
+
 ## kilim.web
 
 kilim.browser calls `queueMicrotask`, `Object.is` and Trusted Types through
@@ -239,6 +249,17 @@ of about 1.5 to 2 MB takes more than 50 ms, the limit of a busy turn
 slower, with 27 to 30 ms for 1 MB, on another text. The time is in the
 parse only: the decoders come after it. If users need larger responses, a
 later version can add a parse with `JSON.parse`.
+
+## kilim.websocket
+
+`kilim.websocket` is not in the budget programs. Its cost, measured one time
+with the counter and one `connect` subscription, against the counter (gzip
+-9, the release profile):
+
+| Part | `.js` file | Main `.wasm` file | Launcher |
+|---|---|---|---|
+| `Kilim_websocket`, with no driver | 383 bytes | 506 bytes | 1 byte |
+| With `Kilim_websocket_browser.install ()` too (total) | 1,264 bytes | 2,146 bytes | 318 bytes |
 
 ## DOM operations
 
