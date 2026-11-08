@@ -1,0 +1,5 @@
+; The native test of the components example, with kilim.testing.
+
+(test
+ (name test_components)
+ (libraries components kilim kilim.testing windtrap))
