@@ -30,6 +30,7 @@ module Private : sig
 
   module Host = Host
   module Cancel = Cancel
+  module Dlist = Dlist
   module Run_queue = Run_queue
   module Async = Async
   module Key = Key
