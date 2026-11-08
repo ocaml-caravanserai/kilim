@@ -30,3 +30,8 @@ val children : t -> int
 val descendants : t -> int
 (** The number of tokens below the token, in the lists of children at all levels
     (for the tests). A cancelled or ended token is in no list. *)
+
+val list_ops : unit -> int
+(** The number of operations on the lists of children since the start of the
+    program: each link of a child and each unlink (for the token release
+    budget). *)
