@@ -95,7 +95,7 @@ let frames () =
   is_false !ran ;
   H.advance h (Span.ms 1) ;
   is_true !ran ;
-  raises_match (Exn.invalid_arg ~substring:"frame_ms") (fun () ->
+  raises_match (Exn_match.invalid_arg "frame_ms") (fun () ->
       H.create ~frame_ms:0 () )
 
 let hidden () =
@@ -178,7 +178,7 @@ let idle_limit () =
   let h = H.create () in
   let rec again () = (H.host h).post_task again in
   again () ;
-  raises_match (Exn.failure ~substring:"limit") (fun () -> H.idle ~limit:100 h) ;
+  raises_match (Exn_match.failure "limit") (fun () -> H.idle ~limit:100 h) ;
   let h = H.create () in
   timer h 5 ignore ;
   timer h 9 ignore ;
@@ -187,7 +187,7 @@ let idle_limit () =
   let h = H.create () in
   timer h 5 ignore ;
   timer h 9 ignore ;
-  raises_match (Exn.failure ~substring:"limit") (fun () -> H.idle ~limit:4 h)
+  raises_match (Exn_match.failure "limit") (fun () -> H.idle ~limit:4 h)
 
 (* The cost of the env, spend, the clock reads and the faults. *)
 let cost () =
@@ -203,8 +203,7 @@ let cost () =
   equal float_exact 50.5 (H.now h) ;
   List.iter
     (fun cost ->
-      raises_match (Exn.invalid_arg ~substring:"cost") (fun () ->
-          H.create ~cost () ) )
+      raises_match (Exn_match.invalid_arg "cost") (fun () -> H.create ~cost ()) )
     [0.; 50.5; -1.; Float.nan]
 
 let faults () =

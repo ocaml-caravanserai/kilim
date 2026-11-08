@@ -6,4 +6,4 @@
 
 (test
  (name test_http)
- (libraries kilim kilim.http kilim.testing json_corpus windtrap))
+ (libraries kilim kilim.http kilim.testing json_corpus windtrap exn_match))
