@@ -2,7 +2,7 @@
 
     This version has the async tasks and the cancel tokens of section 12, the
     view, the commands, the subscriptions and the app of section 08, the diff of
-    section 11, and the components of section 09, with no boundary and no
+    section 11, and the components and the boundaries of section 09, with no
     Context. *)
 
 module Span = Span
@@ -13,7 +13,10 @@ module Private : sig
   (** The function that gets each error that the runtime writes to the console:
       - An exception with no error scope: from an end action, or from a callback
         of {!Async.make} after [ok] or [error].
-      - The error of each root catch.
+      - The error of each root catch. A boundary catch does not call the error
+        handler.
+      - An error that reaches a boundary that is not alive, for example after a
+        stop in a fallback.
       - Each error of the root fallback: of its function or of its write.
       - Each fault in the catch of the turn, for example a fault of the host.
       - An error of a platform library with {!error}, for example a missing
@@ -43,6 +46,7 @@ module Private : sig
   module Instance = Instance
   module Diff = Diff
   module Reconcile = Reconcile
+  module Boundary = Boundary
   module Cmd = Cmd
   module Sub = Sub
   module App = App
@@ -158,6 +162,44 @@ module View : sig
       and the scroll inside the content stay.
 
       @raise Invalid_argument as {!keyed}. *)
+
+  val boundary : ?key:string -> fallback:(exn -> 'msg t) -> 'msg t -> 'msg t
+  (** [boundary ~key ~fallback child] is [child] in an error scope (design
+      section 09). The node has one child and no DOM node of its own: its DOM
+      node is the DOM node of [child], or of the fallback.
+
+      An error of a component goes to the nearest boundary above the instance:
+      an error in [init], [update], [view], [subs] or [equal_props], in a task,
+      a subscription or a message function of the instance, or in a DOM
+      operation of its view. An error in the [~on] function of a parent goes to
+      the boundary of the parent. The boundary then unmounts its whole subtree:
+      the tasks and the subscriptions of each instance in it stop, and their
+      messages are dropped. Then it shows [fallback exn] in the place of
+      [child]. A boundary catch does not call the error handler. With no
+      boundary above it, the error goes to the root catch of {!App.make}.
+
+      The boundary keeps the error and the fallback until its place remounts: a
+      new [key], or another node kind at its place. [fallback] runs again at
+      each render of the parent, and the runtime patches the fallback: thus
+      [fallback] must have no side effects. The boundary does not try [child]
+      again: to try again, give a new [key]. The messages of the fallback go to
+      the component or app whose view holds the boundary, as the messages of
+      [child] do. An error in the fallback goes to the next boundary above, thus
+      a fallback that raises cannot cause a loop. A boundary catch does not call
+      the error handler.
+
+      For example, a button of the fallback tries the counter again:
+      {@ocaml in=test/doc/guarded.ml[
+      View.boundary ~key:(string_of_int retries)
+        ~fallback:(fun _ ->
+          El.p
+            [ txt "The counter failed."
+            ; El.button ~ev:[Ev.click Retry] [txt "Retry"] ] )
+        (Component.v
+           (module Counter)
+           ~on:(fun (Counter.Changed n) -> Count n)
+           {Counter.step= 1; label= "Safe"} )
+      ]} *)
 end
 
 val txt : string -> 'msg View.t
@@ -799,10 +841,11 @@ module App : sig
       An error in [init], [update], [view], [subs], a task, a subscription, a
       message function or a DOM operation of the app unmounts the app: its tasks
       and its subscriptions stop. Then the root shows [fallback exn] (default:
-      an empty text). The messages of the fallback do nothing, and their message
-      functions do not run. The error goes to the error handler. An error in
-      [fallback] goes to the error handler, and the root then shows an empty
-      text. *)
+      an empty text). An error of a component with no {!View.boundary} above it
+      goes to this catch too. The messages of the fallback do nothing, and their
+      message functions do not run. The error goes to the error handler. An
+      error in [fallback] goes to the error handler, and the root then shows an
+      empty text. *)
 end
 
 (** Components (design section 09). A component is a module with its own model,
@@ -889,10 +932,11 @@ end
     Component.v (module Light) ~on:(function _ -> .) ()
     ]}
 
-    In this version, an error of a component goes to the root catch of
-    {!App.make}: an error in [init], [update], [view], [subs], [equal_props], a
-    task, a subscription or a message function of the component, and an error in
-    the [~on] function of its parent. *)
+    An error of a component goes to the nearest {!View.boundary} above it, or to
+    the root catch of {!App.make}: an error in [init], [update], [view], [subs],
+    [equal_props], a task, a subscription or a message function of the
+    component. An error in the [~on] function of a parent goes to the boundary
+    of the parent. *)
 module Component : sig
   (** The typed identity of a component: it witnesses the types of the props,
       the model, the messages and the outputs. *)

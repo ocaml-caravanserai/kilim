@@ -36,7 +36,9 @@ let make ~base ~pos ~parent : ('node, 'msg) t =
   ; runs= Subs.empty
   ; autos= Subs.empty
   ; early_stale= false
-  ; state= None }
+  ; state= None
+  ; member= None
+  ; owned= None }
 
 type ext =
   { detach: 'node 'msg. 'node env -> ('node, 'msg) t -> unit
@@ -46,15 +48,21 @@ let ext = ref {detach= (fun _ _ -> ()); enqueue= (fun _ _ -> ())}
 
 let root base = make ~base ~pos:{depth= 0; serial= 0} ~parent:None
 
-let child (env : _ env) (p : _ t) =
+let child (env : _ env) (p : _ t) boundary =
   let serial = env.serial in
   env.serial <- serial + 1 ;
   let i =
     make ~base:p.base ~pos:{depth= p.pos.depth + 1; serial} ~parent:None
   in
   if p.alive then begin
+    let a = Any i in
     i.parent <- Some (Any p) ;
-    i.sibling <- Some (Dlist.push p.children (Any i))
+    i.sibling <- Some (Dlist.push p.children a) ;
+    match boundary with
+    | Some (Tree.Bound b) ->
+        i.member <- Some (Dlist.push b.members a)
+    | None ->
+        ()
   end
   else i.alive <- false ;
   i
@@ -77,6 +85,9 @@ let rec token : 'node 'msg. ('node, 'msg) t -> Cancel.t =
       let t = Cancel.child p in
       i.token <- Some t ;
       t
+
+let boundary (i : _ t) =
+  match i.mount with Some m -> m.ctx.boundary | None -> None
 
 let changed (env : _ env) (i : _ t) =
   i.dirty <- true ;

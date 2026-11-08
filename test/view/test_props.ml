@@ -269,6 +269,8 @@ let rec size (v : string View.t) =
         1 + size props
     | None ->
         1 )
+  | V.Boundary b ->
+      1 + size b.child
   | V.Element e -> (
       1
       +

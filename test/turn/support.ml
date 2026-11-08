@@ -121,3 +121,44 @@ let fquiet f =
     ~stats:(fun () -> R.stats f.rt)
 
 let same_nodes a b = List.length a = List.length b && List.for_all2 ( == ) a b
+
+(* The outputs of a component with no outputs. *)
+type none = |
+
+let never : none -> 'a = function _ -> .
+
+(* A leaf component with no model and no message: its props, the commands of its
+   [init] and its view. *)
+module type LEAF = sig
+  type props
+
+  val init : props -> unit Cmd.t
+
+  val view : props -> unit View.t
+end
+
+module Leaf (L : LEAF) = struct
+  include Component.Defaults
+
+  type props = L.props
+
+  type model = unit
+
+  type msg = unit
+
+  type out = none
+
+  let id : (props, model, msg, out) Component.id = Component.id ()
+
+  let init p = ((), L.init p)
+
+  let update _ _ () () = ((), Cmd.none)
+
+  let view p () = L.view p
+end
+
+(* [one_render p f] runs [f], and checks that [f] made one render step. *)
+let one_render p f =
+  let r = (stats p).renders in
+  f () ;
+  equal int ~msg:"one render" (r + 1) (stats p).renders

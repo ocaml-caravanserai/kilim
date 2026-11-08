@@ -1,5 +1,5 @@
-(** The virtual DOM tree (design section 08). The values are immutable. Later
-    versions add nodes for boundaries and providers. *)
+(** The virtual DOM tree (design section 08). The values are immutable. A later
+    version adds nodes for providers. *)
 
 (** An attribute or a controlled property. *)
 type at =
@@ -26,7 +26,11 @@ type ('p, 'm, 'msg, 'o) id =
   { tid: ('p * 'm * 'msg * 'o) Type.Id.t
   ; mutable last: ('p, 'm, 'msg, 'o) spec option }
 
-and 'msg t = Text of string | Element of 'msg element | Comp of 'msg comp
+and 'msg t =
+  | Text of string
+  | Element of 'msg element
+  | Comp of 'msg comp
+  | Boundary of 'msg boundary
 
 and 'msg element =
   { name: string
@@ -65,6 +69,11 @@ and 'msg comp =
       ; on: 'o -> 'msg
       ; props: 'p }
       -> 'msg comp
+
+(** A boundary node (design section 09): the [?key] of [View.boundary], the
+    fallback and the one child. The node has no DOM node of its own: its DOM
+    node is the DOM node of its child, or of its fallback after an error. *)
+and 'msg boundary = {key: string option; fallback: exn -> 'msg t; child: 'msg t}
 
 val id : unit -> ('p, 'm, 'msg, 'o) id
 (** A new identity, with an empty cache. *)

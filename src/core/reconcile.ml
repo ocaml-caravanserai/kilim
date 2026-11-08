@@ -1,8 +1,10 @@
 (* The component nodes of the diff (design section 09): the mount of an
    instance, the patch of a component node, the render of an instance alone, the
-   removal walk and the work queue. Component.v installs these functions: thus
-   an app with no component does not link them. In this version an error of a
-   component goes to the root catch: the exception leaves the diff. *)
+   removal walk and the work queue. Component.v and View.boundary install these
+   functions: thus an app with no component and no boundary does not link them.
+   An error of a component leaves the diff: the try of the nearest boundary node
+   on the path gets it, or the catch of the render of an instance alone, or the
+   root catch. *)
 
 open Tree
 
@@ -46,7 +48,7 @@ let build : type msg.
     ('node, msg) ctx -> 'node -> msg View.comp -> ('node, msg) node =
  fun ctx parent (View.C {spec; key; on; props}) ->
   let env = ctx.env in
-  let inst = Instance.child env ctx.owner in
+  let inst = Instance.child env ctx.owner ctx.boundary in
   let cctx = {ctx with post= env.post inst; owner= inst} in
   (* An output is an item of the parent. Its message function reads [on] when
      the item leaves the queue, thus a patch of the parent gives the newest
@@ -93,7 +95,7 @@ let patch : type msg.
         end
     | _ ->
         Diff.replace ctx parent r (View.Comp c) )
-  | Text _ | Element _ ->
+  | Text _ | Element _ | Boundary _ ->
       (* The diff gives only a component node. *)
       Diff.replace ctx parent r (View.Comp c)
 
@@ -108,9 +110,23 @@ let render : type msg. ('node, msg) inst -> unit =
       (* A dead instance: the work queue has none. *)
       ()
 
-(* The removal walk: each instance in a removed subtree unmounts. The walk stops
-   at a component node: the unmount of its instance reaches the instances below.
-   It allocates nothing. *)
+(* A boundary leaves its lists and the work queue. The owner can stay alive. A
+   second call does nothing. *)
+let leave : 'node 'msg. 'node env -> ('node, 'msg) boundary -> unit =
+ fun env b ->
+  b.live <- false ;
+  b.left <- true ;
+  Option.iter Dlist.remove b.owned_link ;
+  Option.iter Dlist.remove b.nested_link ;
+  env.work <- Work.remove b.place env.work
+
+let unlink env (Bound b) = leave env b
+
+(* The removal walk: each instance in a removed subtree unmounts, and each
+   boundary unlinks. The walk stops at a component node: the unmount of its
+   instance reaches the instances below. The child of a boundary holds each of
+   its members: a stopped diff in the child goes to the boundary, which unmounts
+   its members. It allocates nothing. *)
 let rec walk : 'node 'msg. 'node env -> ('node, 'msg) node -> unit =
  fun env r ->
   match r.shape with
@@ -120,6 +136,8 @@ let rec walk : 'node 'msg. 'node env -> ('node, 'msg) node -> unit =
       walk_children env e.children
   | Comp c ->
       Instance.unmount env c.inst
+  | Boundary b ->
+      leave env b ; walk env b.child
 
 and walk_children : 'node 'msg. 'node env -> ('node, 'msg) children -> unit =
  fun env c ->
@@ -141,17 +159,24 @@ let flush env catch =
   let wrote = ref false and again = ref true in
   while !again do
     match Work.min_binding_opt env.work with
-    | Some (_, Any i) ->
+    | Some (_, Inst i) ->
+        let b = Instance.boundary i in
         Instance.clean env i ;
-        (try render i with e -> catch e) ;
+        (try render i with e -> catch b e) ;
+        wrote := true
+    | Some (_, Show {b; e}) ->
+        (* An error in the fallback goes to the outer boundary. *)
+        ( try Diff.run b.ctx (fun () -> !Diff.bounds.show env b e)
+          with e -> catch b.ctx.boundary e ) ;
         wrote := true
     | None ->
         again := false
   done ;
   !wrote
 
-(* The links of an instance: the work queue, the child list of its parent, its
-   view and its children. A second call does nothing. *)
+(* The links of an instance: the work queue, the child list of its parent, the
+   member list of its boundary, its view, the boundaries of its view and its
+   children. A second call does nothing. *)
 let detach : 'node 'msg. 'node env -> ('node, 'msg) inst -> unit =
  fun env i ->
   env.work <- Work.remove i.pos env.work ;
@@ -159,6 +184,8 @@ let detach : 'node 'msg. 'node env -> ('node, 'msg) inst -> unit =
   i.sibling <- None ;
   i.parent <- None ;
   i.mount <- None ;
+  Option.iter Dlist.remove i.member ;
+  (match i.owned with Some l -> Dlist.drain unlink env l | None -> ()) ;
   if
     ( Dlist.length i.children > 0 )
     [@mutate off "a pure shortcut: no closure for an empty list"]
@@ -169,11 +196,10 @@ let detach : 'node 'msg. 'node env -> ('node, 'msg) inst -> unit =
    many model changes before a pass give one entry. *)
 let enqueue : 'node 'msg. 'node env -> ('node, 'msg) inst -> unit =
  fun env i ->
-  let a = Any i in
-  env.work <- Work.add i.pos a env.work ;
+  env.work <- Work.add i.pos (Inst i) env.work ;
   match i.state with
   | Some s when env.passes && (not i.early_stale) && subscribes i s ->
-      env.stale <- a :: env.stale
+      env.stale <- Any i :: env.stale
   | Some _ | None ->
       ()
 

@@ -83,7 +83,10 @@ type stats =
   ; mutable yields: int  (** The posted continuations. *)
   ; mutable warnings: int
   ; mutable requests: int  (** The microtask requests. *)
-  ; mutable restores: int  (** The restore functions that ran. *) }
+  ; mutable restores: int  (** The restore functions that ran. *)
+  ; mutable caught: int
+        (** The boundary catches. A boundary catch does not call the error
+            handler. *) }
 
 type inspect =
   { messages_left: int
@@ -158,7 +161,16 @@ type tree =
   ; stale: int
         (** The entries of the list of the early call. A turn that ends normally
             ends with the early call, which empties it: thus it is 0 after such
-            a turn. *) }
+            a turn. *)
+  ; owned_links: int
+        (** The entries of the owned lists of the instances, from the root: the
+            boundaries in the views of the live instances. A boundary that
+            leaves the tree leaves the list of its owner: thus a removed
+            boundary is not in the count. *)
+  ; member_links: int
+        (** The entries of the member lists of the live boundaries. *)
+  ; nested_links: int
+        (** The entries of the nested lists of the live boundaries. *) }
 
 val tree : 'node t -> tree
 

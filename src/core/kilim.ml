@@ -21,6 +21,7 @@ module Private = struct
   module Instance = Instance
   module Diff = Diff
   module Reconcile = Reconcile
+  module Boundary = Boundary
   module Cmd = Cmd
   module Sub = Sub
   module App = App
@@ -56,6 +57,8 @@ module View = struct
   let keyed = View.keyed
 
   let unsafe_html = View.unsafe_html
+
+  let boundary = Boundary.v
 end
 
 let txt = View.txt

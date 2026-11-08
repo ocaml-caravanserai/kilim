@@ -24,7 +24,8 @@ type stats =
   ; mutable yields: int
   ; mutable warnings: int
   ; mutable requests: int
-  ; mutable restores: int }
+  ; mutable restores: int
+  ; mutable caught: int }
 
 type inspect =
   { messages_left: int
@@ -324,9 +325,9 @@ and process rt (Item {inst; token; key; payload}) =
           end
           else rt.stats.dropped <- rt.stats.dropped + 1
       | exception e ->
-          catch rt e )
+          fail rt (Instance.boundary inst) e )
     | Error e ->
-        catch rt e )
+        fail rt (Instance.boundary inst) e )
   | _ ->
       rt.stats.dropped <- rt.stats.dropped + 1
 
@@ -355,7 +356,23 @@ and update : type msg.
       | _ ->
           command rt inst cmd )
   | exception e ->
-      catch rt e
+      fail rt (Instance.boundary inst) e
+
+(* The error of an instance goes to its boundary (design section 09), outside
+   the diff: the boundary goes into the work queue, thus a render is pending.
+   With no boundary, the root catch. A dead instance has no boundary: a stop
+   unmounts the root too, thus the root catch only writes the error. *)
+and fail rt b e =
+  match b with None -> catch rt e | Some b -> !Diff.bounds.fail rt.tree b e
+
+(* As [fail], in the render: the root writes its fallback at once, and the
+   render writes the fallback of a boundary. *)
+and fail_in_render rt b e =
+  match b with
+  | None ->
+      catch_in_render rt e
+  | Some b ->
+      !Diff.bounds.fail rt.tree b e
 
 (* Each request gets its token at once, under the token of the instance (made at
    the first task). A key of [Cmd.latest] cancels the old token of the key, also
@@ -437,9 +454,16 @@ and render rt =
     | None, _ ->
         false
   in
-  let wrote = !Diff.hooks.flush rt.tree (catch_in_render rt) || wrote in
-  touched rt ;
-  if wrote then rt.stats.renders <- rt.stats.renders + 1 ;
+  (* A catch in the subscription pass puts a boundary in the work queue: its
+     fallback renders, and the pass starts the subscriptions of the fallback in
+     the same render. *)
+  let wrote = ref wrote and again = ref true in
+  while !again do
+    if !Diff.hooks.flush rt.tree (fail_in_render rt) then wrote := true ;
+    touched rt ;
+    again := not (Instance.Work.is_empty rt.tree.work)
+  done ;
+  if !wrote then rt.stats.renders <- rt.stats.renders + 1 ;
   restore rt
 
 (* The subscriptions of the instances below the root whose view ran in this
@@ -453,7 +477,8 @@ and touched rt =
   List.iter
     (fun (Instance.Any i) ->
       if i.alive then
-        try subs_pass rt i ~start:true with e -> catch_in_render rt e )
+        try subs_pass rt i ~start:true
+        with e -> fail_in_render rt (Instance.boundary i) e )
     (List.rev l)
 
 (* The restores run after the write, thus they compare with the newest view. A
@@ -484,7 +509,8 @@ and early rt =
   List.iter
     (fun (Instance.Any i) ->
       if i.alive && i.early_stale then
-        try subs_pass rt i ~start:false with e -> catch rt e )
+        try subs_pass rt i ~start:false
+        with e -> fail rt (Instance.boundary i) e )
     (List.rev l)
 
 (* The subscription pass of a live instance. [subs] and the end actions of the
@@ -622,7 +648,8 @@ and write : type msg.
         ; ns= Html
         ; controlled= ref []
         ; owner= inst
-        ; env= rt.tree }
+        ; env= rt.tree
+        ; boundary= None }
       in
       let t = Diff.start ctx ~parent:rt.parent v in
       (* The user code of a component can stop the page during the mount: then
@@ -775,6 +802,7 @@ let make env dom parent root =
         { post= (fun i -> post rt i)
         ; command= (fun i cmd -> command rt i cmd)
         ; viewed= (fun () -> rt.stats.views <- rt.stats.views + 1)
+        ; caught= (fun () -> rt.stats.caught <- rt.stats.caught + 1)
         ; serial= 1
         ; work= Instance.Work.empty
         ; passes= true
@@ -792,7 +820,8 @@ let make env dom parent root =
         ; yields= 0
         ; warnings= 0
         ; requests= 0
-        ; restores= 0 }
+        ; restores= 0
+        ; caught= 0 }
     ; in_turn= false
     ; turn_requested= false
     ; continuing= false
@@ -912,17 +941,35 @@ let stop rt =
 let stats rt = {rt.stats with turns= rt.stats.turns}
 
 type tree =
-  {instances: int; tokens: int; child_links: int; queued: int; stale: int}
+  { instances: int
+  ; tokens: int
+  ; child_links: int
+  ; queued: int
+  ; stale: int
+  ; owned_links: int
+  ; member_links: int
+  ; nested_links: int }
 
 (* The walk follows the child lists from the root. A dead instance unlinks from
-   the list of its parent: thus a dead entry in a list is a leak, and
-   [instances] does not count it. *)
+   the list of its parent, and a boundary that leaves the tree from its lists:
+   thus a dead entry in a list is a leak, and [instances] does not count it. *)
 let tree rt =
   let (Root r) = rt.root in
   let instances = ref 0 and links = ref 0 in
+  let owned = ref 0 and members = ref 0 and nested = ref 0 in
   let rec walk : 'msg. (_, 'msg) Instance.t -> unit =
    fun i ->
     links := !links + Dlist.length i.children ;
+    ( match i.owned with
+    | Some l ->
+        owned := !owned + Dlist.length l ;
+        Dlist.iter
+          (fun (Tree.Bound b) ->
+            members := !members + Dlist.length b.members ;
+            nested := !nested + Dlist.length b.nested )
+          l
+    | None ->
+        () ) ;
     Dlist.iter
       (fun (Instance.Any c) ->
         if c.alive then incr instances ;
@@ -935,7 +982,10 @@ let tree rt =
       (match r.inst.token with Some t -> Cancel.descendants t | None -> 0)
   ; child_links= !links
   ; queued= Instance.Work.cardinal rt.tree.work
-  ; stale= List.length rt.tree.stale }
+  ; stale= List.length rt.tree.stale
+  ; owned_links= !owned
+  ; member_links= !members
+  ; nested_links= !nested }
 
 let inspect rt =
   let (Root r) = rt.root in

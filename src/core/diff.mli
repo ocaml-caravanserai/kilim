@@ -42,8 +42,16 @@
       the diff builds the new node, puts it in the place of the old node, then
       unmounts the old instance. When the diff removes or replaces a subtree, it
       first does the DOM operation, then unmounts each instance of the subtree
-      (the removal walk). If the owner of the view has no child instance, the
-      view has no component node, and the diff does no walk.
+      (the removal walk). If the owner of the view has no child instance and no
+      boundary, the view has no component node and no boundary node, and the
+      diff does no walk.
+
+    - A boundary node has no DOM node of its own. A boundary node with the same
+      [?key] at the same place keeps its state. If not, the diff builds the new
+      node, puts it in the place of the old node, then unmounts each instance of
+      the old node and unlinks each old boundary from its lists. The diff builds
+      and patches the child of a boundary in [try]: an exception goes to the
+      boundary, which shows its fallback (see {!Boundary}).
 
     If a DOM operation raises, the diff stops and gives the exception. Each node
     of the retained tree then is a child of the DOM node of its retained parent,
@@ -67,8 +75,9 @@ type ('node, 'msg) t = ('node, 'msg) Tree.mount =
     the component node [r] to [c]. [render i] renders the live instance [i]
     alone. [walk env r] and [walk_children env c] unmount each instance of a
     removed subtree (the removal walk). [flush env catch] renders each instance
-    of the work queue alone, from the top, gives each error to [catch], and
-    tells if it rendered one. *)
+    of the work queue alone and writes the fallback of each boundary of the work
+    queue, from the top. It gives each error to [catch], with the boundary of
+    the error ([None] for the root catch), and tells if it wrote one. *)
 type hooks =
   { build:
       'node 'msg.
@@ -80,7 +89,10 @@ type hooks =
   ; walk: 'node 'msg. 'node Tree.env -> ('node, 'msg) node -> unit
   ; walk_children:
       'node 'msg. 'node Tree.env -> ('node, 'msg) Tree.children -> unit
-  ; flush: 'node. 'node Tree.env -> (exn -> unit) -> bool }
+  ; flush:
+      'node.
+      'node Tree.env -> ('node Tree.any_boundary option -> exn -> unit) -> bool
+  }
 
 val hooks : hooks ref
 (** The functions of the component nodes. [Component.v] installs them: thus an
@@ -88,6 +100,33 @@ val hooks : hooks ref
     [render] raise [Invalid_argument]. The default [walk], [walk_children] and
     [flush] do nothing: an app with no component has no instance below its root.
 *)
+
+(** The functions of the boundary nodes. [build_boundary] and [patch_boundary]
+    are as [build] and [patch] of {!hooks}. [show env b e] writes the fallback
+    of the boundary [b], which failed with [e], in the place of its child, and
+    removes [b] from the work queue. [fail env b e] is the catch outside the
+    diff: [b] unmounts its subtree, keeps [e], and goes into the work queue:
+    thus a render is pending, and the render writes the fallback. *)
+type bounds =
+  { build_boundary:
+      'node 'msg.
+      ('node, 'msg) ctx -> 'node -> 'msg View.boundary -> ('node, 'msg) node
+  ; patch_boundary:
+      'node 'msg.
+         ('node, 'msg) ctx
+      -> 'node
+      -> ('node, 'msg) node
+      -> 'msg View.boundary
+      -> unit
+  ; show:
+      'node 'msg. 'node Tree.env -> ('node, 'msg) Tree.boundary -> exn -> unit
+  ; fail: 'node. 'node Tree.env -> 'node Tree.any_boundary -> exn -> unit }
+
+val bounds : bounds ref
+(** The functions of the boundary nodes. [View.boundary] installs them: thus an
+    app with no boundary does not link them. The default [build_boundary] and
+    [patch_boundary] raise [Invalid_argument]. The default [show] and [fail] do
+    nothing: an app with no boundary has no instance with a boundary. *)
 
 val start : ('node, 'msg) ctx -> parent:'node -> 'msg View.t -> ('node, 'msg) t
 (** [start ctx ~parent view] builds the DOM of [view] with [ctx] and appends it
@@ -140,7 +179,9 @@ val root : ('node, 'msg) t -> ('node, 'msg) node
 val dom : ('node, 'msg) node -> 'node
 (** The DOM node of a retained node. A component node is transparent: its DOM
     node is the DOM node of the root of the view of its instance, also after a
-    render of the instance alone that replaced that root. *)
+    render of the instance alone that replaced that root. A boundary node is
+    transparent: its DOM node is the DOM node of its child or of its fallback.
+*)
 
 val probes : Key.t array -> Key.t array -> int option
 (** [probes nk ok] makes the plan of a keyed patch from the old keys [ok] to the
@@ -156,5 +197,6 @@ type 'node child = Child : ('node, 'msg) node -> 'node child
 
 val children : ('node, 'msg) node -> 'node child list option
 (** The retained children of an element, or [None] for a text node and for an
-    element with {!View.unsafe_html} content. A component node is transparent:
-    the result is the children of the root of the view of its instance. *)
+    element with {!View.unsafe_html} content. A component node and a boundary
+    node are transparent: the result is the children of the root of the view of
+    the instance, or of the child of the boundary. *)
