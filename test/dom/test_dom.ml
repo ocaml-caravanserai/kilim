@@ -1904,6 +1904,144 @@ let d38 () =
   B.stop a ;
   Fut.return ()
 
+(* D42: nested components. A click in a child changes only the text of the
+   child: the parent renders with no DOM change. The output reaches the parent
+   in the same turn. A new key resets the child. A child model from 0. to -0.
+   renders: the model compare of kilim.browser keeps them apart. *)
+module D42_counter = struct
+  include Component.Defaults
+
+  type props = unit
+
+  type model = int
+
+  type msg = Incr
+
+  type out = Changed of int
+
+  let id : (props, model, msg, out) Component.id = Component.id ()
+
+  let init () = (0, Cmd.none)
+
+  let update ctx () n Incr = (n + 1, Ctx.emit ctx (Changed (n + 1)))
+
+  let view () n =
+    El.div
+      ~at:[At.data "testid" "child"]
+      [ button ~id:"inc" Incr "+"
+      ; El.output ~at:[At.data "testid" "n"] [txt (string_of_int n)] ]
+end
+
+module D42_zero = struct
+  include Component.Defaults
+
+  type props = unit
+
+  type model = float
+
+  type msg = Flip
+
+  type out = |
+
+  let id : (props, model, msg, out) Component.id = Component.id ()
+
+  let init () = (0., Cmd.none)
+
+  let update _ () _ Flip = (-0., Cmd.none)
+
+  let view () z =
+    button ~id:"zero" Flip (if 1. /. z < 0. then "negative" else "positive")
+end
+
+type d42 = Count of int | Reset
+
+let d42 () =
+  let got = ref [] in
+  let app =
+    App.make
+      ~init:(fun () -> ((0, 0), Cmd.none))
+      ~update:(fun (total, resets) m ->
+        got := m :: !got ;
+        match m with
+        | Count n ->
+            ((total + n, resets), Cmd.none)
+        | Reset ->
+            ((total, resets + 1), Cmd.none) )
+      ~view:(fun (_, resets) ->
+        El.div
+          [ button ~id:"reset" Reset "reset"
+          ; Component.v
+              (module D42_counter)
+              ~key:(string_of_int resets)
+              ~on:(fun (D42_counter.Changed n) -> Count n)
+              ()
+          ; Component.v (module D42_zero) ~on:(function _ -> .) () ] )
+      ()
+  in
+  let root, a = start app in
+  let records =
+    js
+      "(() => { const r = []; const o = new MutationObserver((l) => \
+       r.push(...l)); return { o, r }; })()"
+  in
+  ignore
+    (Jv.call (Jv.get records "o") "observe"
+       [| root
+        ; Jv.obj
+            [| ("childList", Jv.true')
+             ; ("subtree", Jv.true')
+             ; ("characterData", Jv.true')
+             ; ("attributes", Jv.true') |] |] ) ;
+  (* The targets of the records since the last call. *)
+  let targets () =
+    let o = Jv.get records "o" and r = Jv.get records "r" in
+    ignore (Jv.call r "push" (Jv.to_jv_array (Jv.call o "takeRecords" [||]))) ;
+    let l =
+      List.map
+        (fun x -> Jv.get x "target")
+        (Jv.to_jv_list (Jv.call r "splice" [|Jv.of_int 0|]))
+    in
+    l
+  in
+  let child = q root "child" in
+  let views = (stats a).views in
+  (* A window listener of the click runs after the turn of the click, in the
+     same dispatch: the parent has the output and the render is done. *)
+  let seen = ref [] in
+  let fn =
+    listen window "click" (fun _ -> seen := (!got, (stats a).renders) :: !seen)
+  in
+  let r = (stats a).renders in
+  let* () = click (q root "inc") in
+  let* () = click (q root "inc") in
+  unlisten window "click" fn ;
+  let t = targets () in
+  check "D42 a click in a child changes only the text of the child"
+    ( List.length t = 2
+    && List.for_all
+         (fun n -> Jv.to_bool (Jv.call (q root "n") "contains" [|n|]))
+         t
+    && String.equal (text (q root "n")) "2" ) ;
+  check "D42 the outputs reach the parent in the same turn"
+    ( List.rev !seen = [([Count 1], r + 1); ([Count 2; Count 1], r + 2)]
+    && (stats a).views = views + 4 ) ;
+  let* () = click (q root "reset") in
+  check "D42 a new key gives a new child with a new count"
+    ( String.equal (text (q root "n")) "0"
+    && (not (Jv.to_bool (Jv.get child "isConnected")))
+    && Jv.to_bool (Jv.get (q root "child") "isConnected") ) ;
+  let* () = click (q root "inc") in
+  check "D42 the new child works" (String.equal (text (q root "n")) "1") ;
+  check "D42 a child model of 0."
+    (String.equal (text (q root "zero")) "positive") ;
+  let* () = click (q root "zero") in
+  check "D42 a child model from 0. to -0. renders"
+    (String.equal (text (q root "zero")) "negative") ;
+  ignore (Jv.call (Jv.get records "o") "disconnect" [||]) ;
+  B.stop a ;
+  check "D42 the stop removes the DOM" (children root = 0) ;
+  Fut.return ()
+
 let tests =
   [ d2
   ; d3
@@ -1944,7 +2082,8 @@ let tests =
   ; d38
   ; d39
   ; d40
-  ; d41 ]
+  ; d41
+  ; d42 ]
 
 let () =
   ignore (Lazy.force spy) ;
