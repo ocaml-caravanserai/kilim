@@ -1,0 +1,13 @@
+; kilim.web (design section 13): the Jv bindings for the
+; Web APIs that Brr 0.0.9 does not have. It depends on Brr only. Each binding
+; is one unit with its .mli. The library has no main module: dune makes the
+; alias module, thus a program links only the units that it uses. No module
+; reads a global at initialization, thus node can load the library. The
+; library uses none of Printf, Format, Scanf, Str, Hashtbl, Random, Fun or
+; Printexc (test/link). windtrap runs only native code, thus
+; test/dom/guards.txt lists the guards of this library with their tests.
+
+(library
+ (name kilim_web)
+ (public_name kilim.web)
+ (libraries brr))

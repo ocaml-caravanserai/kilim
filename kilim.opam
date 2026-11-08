@@ -12,7 +12,7 @@ bug-reports: "https://github.com/ocaml-caravanserai/kilim/issues"
 depends: [
   "dune" {>= "3.17"}
   "ocaml" {>= "5.5.0"}
-  "brr" {>= "0.0.8"}
+  "brr" {>= "0.0.9"}
   "js_of_ocaml-compiler" {>= "6.4"}
   "wasm_of_ocaml-compiler" {with-test & >= "6.4"}
   "windtrap" {with-test & >= "0.2.0"}

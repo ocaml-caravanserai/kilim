@@ -54,7 +54,7 @@ const backend = await open(name);
 
 // The server of the build directory. /page/<prog> is the page of a program.
 // The launcher of wasm_of_ocaml fetches its assets, thus no file: URL.
-const types = { '.js': 'text/javascript', '.wasm': 'application/wasm', '.map': 'application/json' };
+const types = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.map': 'application/json' };
 const held = new Map();
 const body =
   '<body><div id="wrap"><div id="app"><p>placeholder</p></div></div>' +

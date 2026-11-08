@@ -5,8 +5,6 @@ let document = lazy (Jv.get Jv.global "document")
 
 let console = lazy (Jv.get Jv.global "console")
 
-let object_ = lazy (Jv.get Jv.global "Object")
-
 let performance = lazy (Jv.get Jv.global "performance")
 
 (* The identity of two nodes. Never [==] on a [Jv.t]: under wasm_of_ocaml, it is

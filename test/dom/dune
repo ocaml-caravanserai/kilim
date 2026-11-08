@@ -10,9 +10,9 @@
 ; name of its browser.
 
 (executables
- (names smoke test_dom)
+ (names smoke test_dom test_web)
  (modes js wasm)
- (libraries kilim kilim.browser brr))
+ (libraries kilim kilim.browser kilim.web brr))
 
 ; The files of each rule: the runner and the pages.
 
@@ -28,7 +28,10 @@
   (glob_files smoke.bc.wasm.assets/*.wasm)
   test_dom.bc.js
   test_dom.bc.wasm.js
-  (glob_files test_dom.bc.wasm.assets/*.wasm)))
+  (glob_files test_dom.bc.wasm.assets/*.wasm)
+  test_web.bc.js
+  test_web.bc.wasm.js
+  (glob_files test_web.bc.wasm.assets/*.wasm)))
 
 (rule
  (alias runtest)
@@ -43,7 +46,9 @@
    smoke.bc.js
    smoke.bc.wasm.js
    test_dom.bc.js
-   test_dom.bc.wasm.js)))
+   test_dom.bc.wasm.js
+   test_web.bc.js
+   test_web.bc.wasm.js)))
 
 ; The js_of_ocaml pages in a browser with no WebAssembly: Chrome with no JIT
 ; (as Chrome with "JavaScript optimization" off), and Firefox with the
@@ -57,7 +62,7 @@
   (env_var KILIM_CHROME)
   (env_var KILIM_REQUIRE_CHROME))
  (action
-  (run node run.mjs --no-wasm smoke.bc.js test_dom.bc.js)))
+  (run node run.mjs --no-wasm smoke.bc.js test_dom.bc.js test_web.bc.js)))
 
 (rule
  (alias browsers)
@@ -76,7 +81,9 @@
    smoke.bc.js
    smoke.bc.wasm.js
    test_dom.bc.js
-   test_dom.bc.wasm.js)))
+   test_dom.bc.wasm.js
+   test_web.bc.js
+   test_web.bc.wasm.js)))
 
 (rule
  (alias browsers)
@@ -87,7 +94,15 @@
   (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
   (env_var KILIM_REQUIRE_PLAYWRIGHT))
  (action
-  (run node run.mjs --browser firefox --no-wasm smoke.bc.js test_dom.bc.js)))
+  (run
+   node
+   run.mjs
+   --browser
+   firefox
+   --no-wasm
+   smoke.bc.js
+   test_dom.bc.js
+   test_web.bc.js)))
 
 (rule
  (alias browsers)
@@ -106,4 +121,6 @@
    smoke.bc.js
    smoke.bc.wasm.js
    test_dom.bc.js
-   test_dom.bc.wasm.js)))
+   test_dom.bc.wasm.js
+   test_web.bc.js
+   test_web.bc.wasm.js)))

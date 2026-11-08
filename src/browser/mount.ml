@@ -47,9 +47,7 @@ let traps =
           Jv.get (Jv.get Jv.global "WebAssembly") "RuntimeError"
         in
         let later f =
-          ignore
-            (Jv.call Jv.global "queueMicrotask"
-               [|Jv.callback ~arity:1 (fun _ -> f ())|] )
+          Kilim_web.Microtask.queue (Jv.callback ~arity:1 (fun _ -> f ()))
         in
         let on e =
           if Jv.instanceof e ~cons:runtime_error then
