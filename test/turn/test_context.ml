@@ -644,6 +644,153 @@ let read_raises () =
   equal int 1 (List.length (errors p)) ;
   regs p 0
 
+(* A provider in a boundary that fails: the owner keeps no registration of a
+   read in the failed subtree. *)
+let failed_subtree () =
+  (* A catch in the diff, at a patch. *)
+  let p =
+    page (fun m ->
+        fb
+          (Context.provide theme "x"
+             (El.div
+                [ Context.read theme (fun t -> span "s" t)
+                ; Context.read theme (fun t ->
+                      if m > 0 then raise Boom else txt t ) ] ) ) )
+  in
+  regs p 1 ;
+  bump p ;
+  equal string "fb light" (text p "fb") ;
+  regs ~msg:"no registration after a patch" p 0 ;
+  equal int 0 (tree p).providers ;
+  (* A catch in the diff, at the build: the provider is not in the tree. *)
+  let p =
+    page (fun _ ->
+        fb
+          (Context.provide theme "x"
+             (El.div
+                [ Context.read theme (fun t -> span "s" t)
+                ; Context.read theme (fun _ -> raise Boom) ] ) ) )
+  in
+  equal string "fb light" (text p "fb") ;
+  regs ~msg:"no registration after a build" p 0 ;
+  (* A catch outside the diff, and a read in a nested boundary: the catch
+     removes the nested boundary. *)
+  let p =
+    page (fun _ ->
+        Context.provide theme "x"
+          (fb
+             (El.div
+                [ Context.read theme (fun t -> span "s" t)
+                ; fb ~id:"inner" (Context.read theme (fun t -> span "t" t))
+                ; bomb () ] ) ) )
+  in
+  regs p 2 ;
+  P.click p (By.test_id "bomb") ;
+  equal string "fb x" (text p "fb") ;
+  regs ~msg:"only the read of the fallback" p 1 ;
+  no_errors p ;
+  quiet p
+
+(* Where the catch of [Owner] comes: outside the diff (an [update] raises), in
+   the diff of a render alone, or in the build of the mount. *)
+type trigger = Outside | Diff | Build
+
+(* An owner with a read in a boundary of its view. With [inner], the provider is
+   in the boundary too: B (P (read)). If not, the provider is in the view of the
+   parent: P above B (read). The fallback does not read. A click on "o" adds 1
+   to the model. *)
+module Owner = struct
+  include C.Defaults
+
+  type props = {trigger: trigger; inner: bool}
+
+  type model = int
+
+  type msg = Incr
+
+  type out = none
+
+  let id : (props, model, msg, out) C.id = C.id ()
+
+  let init _ = (0, Cmd.none)
+
+  let update _ _ m Incr = (m + 1, Cmd.none)
+
+  let view p m =
+    say "view o" ;
+    let trigger =
+      match p.trigger with
+      | Outside ->
+          bomb ()
+      | Diff ->
+          Context.read theme (fun _ -> if m > 0 then raise Boom else txt "")
+      | Build ->
+          Context.read theme (fun _ -> raise Boom)
+    in
+    let body = El.div [Context.read theme (fun t -> span "s" t); trigger] in
+    El.div
+      [ El.button ~at:[test_id "o"] ~ev:[Ev.click Incr] [txt "+"]
+      ; View.boundary
+          ~fallback:(fun _ -> span "fb" "failed")
+          (if p.inner then Context.provide theme "x" body else body) ]
+end
+
+(* After the catch, no registration of the owner stays, and a new value of the
+   provider of the parent does not render the owner. *)
+let owner_catch () =
+  List.iter
+    (fun (trigger, inner) ->
+      let p =
+        page (fun m ->
+            Context.provide theme (string_of_int m)
+              (C.v (module Owner) ~on:never {Owner.trigger; inner}) )
+      in
+      ( match trigger with
+      | Outside ->
+          regs ~msg:"before" p 1 ;
+          P.click p (By.test_id "bomb")
+      | Diff ->
+          regs ~msg:"before" p 1 ;
+          P.click p (By.test_id "o")
+      | Build ->
+          () ) ;
+      equal string "failed" (text p "fb") ;
+      regs ~msg:"after the catch" p 0 ;
+      equal int ~msg:"the provider of the parent" 1 (tree p).providers ;
+      ignore (take ()) ;
+      bump p ;
+      equal (list string) ~msg:"a new value does not render the owner" []
+        (take ()) ;
+      equal int 1 (tree p).instances ;
+      no_errors p ;
+      quiet p )
+    [ (Outside, false)
+    ; (Diff, false)
+    ; (Build, false)
+    ; (Outside, true)
+    ; (Diff, true)
+    ; (Build, true) ]
+
+(* A catch keeps the registrations of the reads outside its subtree: in another
+   boundary, and in no boundary. *)
+let kept () =
+  let read id = Context.read theme (fun t -> span id t) in
+  let p =
+    page (fun _ ->
+        Context.provide theme "x"
+          (El.div
+             [ fb ~id:"other" (read "s")
+             ; fb (El.div [read "t"; bomb ()])
+             ; read "u" ] ) )
+  in
+  regs p 3 ;
+  P.click p (By.test_id "bomb") ;
+  regs ~msg:"the other boundary, and the outside with the fallback" p 2 ;
+  is_false ~msg:"the read in the subtree" (has p "t") ;
+  equal string "fb x" (text p "fb") ;
+  no_errors p ;
+  quiet p
+
 (* A component of the root fallback is dead, and the root is dead: no read
    registers. *)
 let dead_reads () =
@@ -695,4 +842,10 @@ let tests =
           many_reads
       ; test "a read function that raises: the boundary, or the root catch"
           read_raises
+      ; test "a provider in a boundary that fails leaves no registration"
+          failed_subtree
+      ; test
+          "a catch in the view of a component: no stale registration, no render"
+          owner_catch
+      ; test "a catch keeps the registrations outside its subtree" kept
       ; test "no read of the root fallback registers" dead_reads ] ]
