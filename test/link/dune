@@ -64,10 +64,10 @@
 
 ; kilim.web has no main module: a program that uses only Microtask links the
 ; unit Kilim_web__Microtask and no other unit of kilim.web. web_check is the
-; positive control: it links the three units.
+; positive control: it links the four units.
 
 (rule
  (alias runtest)
  (action
   (system
-   "units() { ocamlobjinfo \"$1\" | grep -cE 'compilation unit .Kilim_web__'; }; test \"$(units %{dep:web_check.bc})\" = 3 || { echo 'web_check does not link the 3 units of kilim.web: the check is not valid'; exit 1; }; test \"$(units %{dep:web_one.bc})\" = 1 || { echo 'a program that uses one module of kilim.web links other units (design section 13)'; exit 1; }")))
+   "units() { ocamlobjinfo \"$1\" | grep -cE 'compilation unit .Kilim_web__'; }; test \"$(units %{dep:web_check.bc})\" = 4 || { echo 'web_check does not link the 4 units of kilim.web: the check is not valid'; exit 1; }; test \"$(units %{dep:web_one.bc})\" = 1 || { echo 'a program that uses one module of kilim.web links other units (design section 13)'; exit 1; }")))

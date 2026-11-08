@@ -220,8 +220,56 @@ let shallow () =
   List.iter print_endline !errors ;
   check (name "true means the same view (2,000 cases)") (!errors = [])
 
+(* Es_module.import on node: a data: URL, a bare specifier stays as it is, and a
+   throw of the resolve gives an error (node has no document: a fake one). *)
+let es_module () =
+  let finish = wait () in
+  let import s = Kilim_web.Es_module.import (Jstr.v s) in
+  Fut.await (import "data:text/javascript,export const x = 42;") (fun data ->
+      Fut.await (import "kilim-no-such-package") (fun bare ->
+          Jv.set Jv.global "document"
+            (Jv.obj [|("baseURI", Jv.of_string "not a URL")|]) ;
+          let thrown = import "./x.mjs" in
+          Jv.delete Jv.global "document" ;
+          let no_document = import "./kilim-missing.mjs" in
+          Fut.await thrown (fun thrown ->
+              Fut.await no_document (fun no_document ->
+                  finish (fun () ->
+                      check "H Es_module: a data: URL"
+                        ( match data with
+                        | Ok m ->
+                            Jv.to_int (Jv.get m "x") = 42
+                        | Error _ ->
+                            false ) ;
+                      let message = function
+                        | Error e ->
+                            Jstr.to_string (Jv.Error.message e)
+                        | Ok _ ->
+                            "ok"
+                      in
+                      check "H Es_module: a bare specifier stays as it is"
+                        ( Jstr.find_sub
+                            ~sub:(Jstr.v "'kilim-no-such-package'")
+                            (Jstr.v (message bare))
+                        <> None ) ;
+                      check "H Es_module: a throw of the resolve is an error"
+                        ( match thrown with
+                        | Error e ->
+                            Jstr.equal (Jv.Error.name e) (Jstr.v "TypeError")
+                        | Ok _ ->
+                            false ) ;
+                      (* With no document, node loads the specifier as it is: a
+                         missing module gives the name Error on node. *)
+                      check "H Es_module: no document, ./ stays as it is"
+                        ( match no_document with
+                        | Error e ->
+                            Jstr.equal (Jv.Error.name e) (Jstr.v "Error")
+                        | Ok _ ->
+                            false ) ) ) ) ) )
+
 let () =
   shallow () ;
+  es_module () ;
   queues
   @@ fun () ->
   (* A real timer. *)

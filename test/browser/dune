@@ -1,9 +1,9 @@
 ; The host of kilim.browser: timers, a fetch with an abort and the order of its
 ; queues, in the js_of_ocaml and wasm_of_ocaml builds on node (a local HTTP
-; server of node). Also Component.shallow_equal with the identity of
-; kilim.browser, and the property of test/shallow.
+; server of node). Also Kilim_web.Es_module, Component.shallow_equal with the
+; identity of kilim.browser, and the property of test/shallow.
 
 (test
  (name test_browser)
  (modes js wasm)
- (libraries kilim kilim.browser brr shallow_law))
+ (libraries kilim kilim.browser kilim.web brr shallow_law))
