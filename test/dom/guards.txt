@@ -1,11 +1,12 @@
-The guards of kilim.browser and their tests (design section 14)
+The guards of kilim.browser and kilim.web and their tests (design section 14)
 
-windtrap runs only native code, thus it makes no mutant of src/browser. Each
-line gives one guard (file, function, condition) and the test that fails when
-the guard changes: replace the condition with true or with false (or remove the
-call), then run `dune test --force test/dom test/browser test/loader`. A line
-"EXPECT EXCEPTION" in the output is not a failure: look for "FAILED". The tests
-with D are in test/dom/test_dom.ml. The tests with H are in
+windtrap runs only native code, thus it makes no mutant of src/browser and
+src/web. Each line gives one guard (file, function, condition) and the test
+that fails when the guard changes: replace the condition with true or with
+false (or remove the call), then run `dune test --force test/dom test/browser
+test/loader`. A line "EXPECT EXCEPTION" in the output is not a failure: look
+for "FAILED". The tests with D are in test/dom/test_dom.ml. The tests with W
+are in test/dom/test_web.ml. The tests with H are in
 test/browser/test_browser.ml. The other names are the scenarios of
 test/loader/run.mjs.
 
@@ -132,3 +133,21 @@ browser_host.ml  set_timer  the first clear only        true: H3, D25.
 window.ml   start      the end action removes the listener  removed: D24 (a removed
                                                         key), D25.
 window.ml   start      passive                          false: D24.
+
+The guards of kilim.web (src/web):
+
+microtask.ml  queue    the queueMicrotask call          removed: W1.
+js_object.ml  is       Object.is                        Jv.strict_equal: W2 (0 and
+                                                        -0, NaN).
+trusted_types.ml  exists  Jv.is_none of trustedTypes    true: W3 (a null
+                                                        trustedTypes). false: W3
+                                                        (exists).
+trusted_types.ml  is_html  no trustedTypes: false       removed: W3 (a null
+                                                        trustedTypes: a JS
+                                                        TypeError).
+trusted_types.ml  is_html  isHTML is a function         removed: W3 (an element with
+                                                        the id trustedTypes: a JS
+                                                        TypeError).
+trusted_types.ml  is_html  isHTML gives true            true: W3 (a JS string, an
+                                                        object). false: W3 (a
+                                                        TrustedHTML).
