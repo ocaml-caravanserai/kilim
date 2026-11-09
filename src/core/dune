@@ -5,6 +5,8 @@
 (library
  (name kilim)
  (public_name kilim)
+ (flags
+  (:standard -w +50))
  (instrumentation
   (backend ppx_windtrap.coverage))
  (instrumentation
