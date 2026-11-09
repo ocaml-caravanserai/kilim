@@ -1492,6 +1492,16 @@ Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope:
     <p>Documentation and the first release, 0.1.0.</p>
     <div class="exit"><b>Exit:</b> the README examples compile in CI, and all budgets pass.</div>
     <p>The first step is in Phase 1: <code>test/readme</code> makes sure that the code of the README is the code of the examples.</p>
+    <p><b>State:</b> the exit is met: <code>test/readme</code> checks the code blocks of the README, of <code>docs/index.mld</code> and of the doc comments in CI, CI builds the examples, and <code>make budgets</code> passes. The pull requests of Phase 5:</p>
+    <ul>
+      <li>P5-0 (#30): an opam install with the tests (the items that follow).</li>
+      <li>P5-3 (#31): small API changes before 0.1.0 (the items that follow).</li>
+      <li>P5-1 (#32): a doc comment for each public value and type, short overviews at the head of the main <code>.mli</code> files, the <code>Private</code> modules and the internal values of <code>kilim.testing</code> between <code>(**/**)</code> markers, and warning 50 in the flags of the public libraries.</li>
+      <li>P5-2 (#33): <code>docs/index.mld</code>, the landing page of the docs, with code blocks that <code>test/readme</code> checks. Each odoc warning is an error in the dev profile (not in the release profile, thus a new odoc does not stop an opam build of the docs), and the CI job <code>test</code> builds <code>@doc</code>.</li>
+      <li>P5-4 (#34): the README sections Status, Install, The libraries, Documentation and Known limitations, and the 0.x notes of <code>docs/budgets.md</code> and <code>docs/loader.md</code>.</li>
+      <li>P5-5: the release metadata. <code>dune-project</code> has the documentation URL of ocaml.org, the tags, a description that names the libraries and the executable, and the bounds <code>js_of_ocaml-compiler</code> and <code>wasm_of_ocaml-compiler</code> <code>&gt;= 6.4.1 &amp; &lt; 7.0</code> (the CI job <code>opam</code> passes with 6.4.1 and 6.5.0). <code>kilim --version</code> gives the version of <code>dune subst</code>, or <code>dev</code> in a clone of the repository (<code>test/dist</code>). <code>CHANGES.md</code> has the entry of 0.1.0 with no date.</li>
+      <li>The publish step (P5-6) waits for the go-ahead of the user: the date in <code>CHANGES.md</code>, the tag <code>v0.1.0</code>, the GitHub release with the tarball, and the opam-repository pull request. After the tag exists, the link of <code>docs/index.mld</code> to <code>docs/loader.md</code> can name the tag in place of <code>main</code>.</li>
+    </ul>
     <p>The items of P5-0 (an opam install with the tests):</p>
     <ul>
       <li><code>dune-project</code>: <code>(lang dune 3.21)</code>, because windtrap 0.3 in opam needs dune 3.21, and <code>(maintenance_intent "(latest)")</code>, which gives <code>x-maintenance-intent</code> in <code>kilim.opam</code>. The test dependency is <code>windtrap &gt;= 0.3.0</code>. <code>ppx_windtrap</code> is not an opam dependency: dune needs it only with <code>--instrument-with</code> (<code>make mutate</code>), and <code>flake.nix</code> keeps it.</li>

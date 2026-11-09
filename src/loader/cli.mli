@@ -6,6 +6,7 @@
                [--loader NAME] [--name ID]
     kilim loader -o FILE
     kilim csp
+    kilim --version
     kilim dist --template FILE --base BASE --js PATH
                (--wasm PATH | --build js) [--form inline|file]
                [--name ID] [--page FILE] -o DIR
@@ -14,7 +15,7 @@
     [page] writes a page for the dev profile: fixed names and [data-dev].
     [loader] writes the loader text (the loader.js form). [csp] writes the CSP
     source expression of the loader text. [dist] writes the release files
-    ({!Dist.run}). *)
+    ({!Dist.run}). [--version] writes the version of the package. *)
 
 (** [Usage]: an argument is not valid. [Fault]: a fault of a file, a conflict or
     a marker. *)
@@ -34,6 +35,11 @@ val run : string array -> (string, error) result
     - An [ID] has only the characters [a-z], [0-9] and "-", and at least one.
     - [--wasm] and [--build js] are not permitted together, and one of them is
       necessary. *)
+
+val version : string -> string
+(** [version raw] is the text of [kilim --version] for the version [raw] of
+    dune: ["dev"] if [raw] is empty (a clone of the repository with no
+    [dune subst]), else [raw]. *)
 
 val exit_code : (string, error) result -> int
 (** 0 for [Ok], 1 for [Fault], 2 for [Usage]. *)

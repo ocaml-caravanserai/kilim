@@ -15,7 +15,8 @@ The package installs the executable `kilim`:
 | `kilim dist` | The release files: content names, and the page. |
 
 A usage error gives exit status 2. A fault of a file, a marker or a
-conflict gives exit status 1. `kilim COMMAND --help` lists the options.
+conflict gives exit status 1. `kilim COMMAND --help` lists the options, and
+`kilim --version` writes the version of the package.
 
 ## The template
 
