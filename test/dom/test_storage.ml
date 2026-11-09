@@ -62,23 +62,21 @@ let show_get = function
 
 let show_unit = function Ok () -> "ok" | Error e -> S.error_to_string e
 
-(* The result of [task] in a new app. The result is synchronous: it comes in the
-   first turn. *)
+(* The result of [task]. The task starts under a new token on the host of the
+   page, with its own run queue, and its result is synchronous. An init task of
+   an App is not used: if its first turn takes more than the limit of 50 ms (for
+   example in a slow CI machine with no JIT), the turn stops before the task,
+   and the result comes too late. test/storage tests the init task and the first
+   render on the virtual clock. *)
 let result task =
-  let r = ref None in
-  let a =
-    B.start
-      (el (container ()))
-      (App.make
-         ~init:(fun () -> ((), Cmd.task (Async.map (fun s -> Some s) task)))
-         ~update:(fun () s ->
-           r := s ;
-           ((), Cmd.none) )
-         ~view:(fun () -> txt "")
-         () )
-  in
-  B.stop a ;
-  Option.value ~default:"none" !r
+  let r = ref "no result" in
+  let q = Private.Run_queue.create ~schedule:ignore in
+  Private.Run_queue.with_turn q (fun () ->
+      Private.Async.start ~host:B.host ~run:q (Private.Cancel.root ()) task
+        ~ok:(fun s -> r := s)
+        ~error:(fun _ -> r := "exception") ;
+      Private.Run_queue.drain q ) ;
+  !r
 
 let get a k = result (Async.map show_get (S.get a k))
 
@@ -92,8 +90,7 @@ let local_item k =
   in
   if Jv.is_null v then "null" else Jv.to_string v
 
-(* ST1: a round trip in the two areas, and the init task gives its result before
-   the first render. *)
+(* ST1: a round trip in the two areas. *)
 let st1 () =
   let k = "kilim-st1" in
   (* In order: OCaml evaluates the items of a list from the last one. *)
