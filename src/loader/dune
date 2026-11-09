@@ -10,6 +10,17 @@
  (instrumentation
   (backend ppx_windtrap.mutate)))
 
+; The version of the package for `kilim --version`: dune subst (opam, and
+; dune-release) writes it in dune-project. In a clone of the repository it is
+; empty, and Cli.version gives "dev".
+
+(rule
+ (targets version.ml)
+ (action
+  (with-stdout-to
+   version.ml
+   (echo "let raw = \"%{version:kilim}\"\n"))))
+
 (rule
  (targets loader_text.ml loader.txt)
  (deps loader.js loader.csp)

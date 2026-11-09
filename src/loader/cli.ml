@@ -238,7 +238,10 @@ let csp args =
   fun () -> Ok (Loader_text.csp ^ "\n")
 
 let usage =
-  "usage: kilim (page | loader | csp | dist) [options]; kilim COMMAND --help"
+  "usage: kilim (page | loader | csp | dist) [options]; kilim COMMAND --help; \
+   kilim --version"
+
+let version raw = if raw = "" then "dev" else raw
 
 let run argv =
   try
@@ -254,6 +257,8 @@ let run argv =
           dist (Array.of_list rest)
       | _ :: ("--help" | "-help") :: _ ->
           fun () -> Ok (usage ^ "\n")
+      | [_; "--version"] ->
+          fun () -> Ok (version Version.raw ^ "\n")
       | _ :: c :: _ ->
           bad "an unknown command: %s (%s)" c usage
       | _ ->

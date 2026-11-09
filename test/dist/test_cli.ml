@@ -150,8 +150,20 @@ let tests =
               ; ["csp"; "extra"]
               ; ["dist"] ] ;
             status 0 ["--help"] ;
+            status 2 ["--version"; "extra"] ;
             is_true (contains (error ["page"; "--bogus"]) "--bogus") ;
             is_true (contains (error ["other"]) "unknown command: other") )
+      ; test "--version" (fun () ->
+            equal string "dev" (Kilim_dist.Cli.version "") ;
+            equal string "0.1.0" (Kilim_dist.Cli.version "0.1.0") ;
+            match kilim ["--version"] with
+            | Ok s ->
+                equal string
+                  (Kilim_dist.Cli.version Kilim_dist.Version.raw ^ "\n")
+                  s ;
+                is_true (s <> "\n")
+            | Error _ ->
+                fail "--version" )
       ; test "a missing template is a fault" (fun () ->
             in_dir (fun d ->
                 status 1
