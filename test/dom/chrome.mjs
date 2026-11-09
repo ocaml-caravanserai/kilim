@@ -134,19 +134,39 @@ const text = (a) => (a.value !== undefined ? String(a.value) : a.description ?? 
 // the creation of the target. page is the page of browser.mjs: the Runtime,
 // Log and Page domains of the target are on before body starts. The result is
 // the result of body. It rejects at the time limit, when Chrome exits, or when
-// body rejects. At the end, the target closes.
+// body rejects, or when the page crashes or detaches. At the end, the target
+// closes. The message of the time limit gives each command with no reply and
+// its send time (from the start of withPage): for example "no result in
+// 30000 ms (no reply: Runtime.evaluate, sent at 2140 ms)".
 const withPage = async (browser, limitMs, body) => {
   let sessionId;
   let targetId;
   let timer;
   const handlers = [];
   const bindings = new Map();
-  const send = (method, params) => browser.send(method, params, sessionId);
+  const start = Date.now();
+  // The commands of this page with no reply: [method, send time].
+  const noReply = new Set();
+  const command = (method, params, session) => {
+    const c = [method, Date.now() - start];
+    noReply.add(c);
+    return browser.send(method, params, session).finally(() => noReply.delete(c));
+  };
+  const send = (method, params) => command(method, params, sessionId);
   const emit = (e) => {
     for (const h of handlers) h(e);
   };
+  // A crash of the renderer or a detach of the session: Chrome does not
+  // reply to the commands that wait, thus lost stops the run at once.
+  let lostKo;
+  const lost = new Promise((_, ko) => { lostKo = ko; });
+  lost.catch(() => {});
   const remove = browser.listen((m) => {
-    if (!sessionId || m.sessionId !== sessionId) return;
+    if (!sessionId) return;
+    if (m.method === 'Target.detachedFromTarget' && m.params?.sessionId === sessionId)
+      lostKo(new Error('the page detached from the session'));
+    if (m.sessionId !== sessionId) return;
+    if (m.method === 'Inspector.targetCrashed') lostKo(new Error('the renderer of the page crashed'));
     const p = m.params;
     if (m.method === 'Runtime.consoleAPICalled') emit({ kind: 'console', type: p.type, text: p.args.map(text).join(' ') });
     else if (m.method === 'Runtime.exceptionThrown') {
@@ -174,11 +194,14 @@ const withPage = async (browser, limitMs, body) => {
     on: (f) => handlers.push(f),
   };
   const limit = new Promise((_, ko) => {
-    timer = setTimeout(() => ko(new Error(`no result in ${limitMs} ms`)), limitMs);
+    timer = setTimeout(() => {
+      const waiting = [...noReply].map(([m, t]) => `${m}, sent at ${t} ms`);
+      ko(new Error(`no result in ${limitMs} ms` + (waiting.length ? ` (no reply: ${waiting.join('; ')})` : '')));
+    }, limitMs);
   });
   const run = (async () => {
-    ({ targetId } = await browser.send('Target.createTarget', { url: 'about:blank' }));
-    ({ sessionId } = await browser.send('Target.attachToTarget', { targetId, flatten: true }));
+    ({ targetId } = await command('Target.createTarget', { url: 'about:blank' }));
+    ({ sessionId } = await command('Target.attachToTarget', { targetId, flatten: true }));
     await send('Runtime.enable');
     await send('Log.enable');
     await send('Page.enable');
@@ -187,7 +210,7 @@ const withPage = async (browser, limitMs, body) => {
   // A failure of the run after the limit is handled, thus node does not stop.
   run.catch(() => {});
   try {
-    return await Promise.race([run, limit, browser.whenGone]);
+    return await Promise.race([run, limit, lost, browser.whenGone]);
   } finally {
     clearTimeout(timer);
     remove();
