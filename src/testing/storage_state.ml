@@ -10,7 +10,7 @@ type t =
   ; mutable session: (string * string) list
   ; mutable blocked: bool }
 
-let last : t option ref = ref None
+let last = Last_host.make (fun s -> s.host)
 
 let items s = function S.Local -> s.local | S.Session -> s.session
 
@@ -31,21 +31,11 @@ let driver s =
         use s (fun () -> put s area (List.remove_assoc key (items s area))) ) }
 
 let of_host_or_fresh host =
-  match !last with
-  | Some s when s.host == host ->
-      s
-  | Some _ | None ->
-      let s = {host; local= []; session= []; blocked= false} in
-      last := Some s ;
-      s
+  Last_host.find_or last host (fun () ->
+      {host; local= []; session= []; blocked= false} )
 
 let preset host area l = put (of_host_or_fresh host) area l
 
 let install host = S.Private.set_driver (Some (driver (of_host_or_fresh host)))
 
-let of_host host =
-  match !last with
-  | Some s when s.host == host ->
-      s
-  | Some _ | None ->
-      failwith "Kilim_testing.Storage_mock: the page is not the last page"
+let of_host host = Last_host.get last host ~mock:"Storage_mock"

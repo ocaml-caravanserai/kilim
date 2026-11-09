@@ -1505,6 +1505,7 @@ Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope:
       <li>The four <code>Private</code> modules of the drivers have the same form: a setter that takes an option (<code>Kilim_http.Private.set_transport</code>, <code>Kilim_router.Private.set_history</code>, and <code>set_driver</code> of <code>kilim.websocket</code> and <code>kilim.storage</code>), and a getter (<code>transport</code>, <code>history</code> and <code>driver</code>). <code>set_transport None</code> replaces <code>Kilim_http.Private.clear</code>. The getters stay, because <code>Http_mock</code> and the tests read them, and <code>Kilim_storage.Private.driver</code> is new.</li>
       <li><code>Kilim_websocket.error_to_string</code> gives <code>"not open"</code>, as <code>kilim.http</code> and <code>kilim.storage</code> have an <code>error_to_string</code>.</li>
       <li>The <code>install</code> function of each of the four driver libraries has the same text: "A second call does nothing." The head of <code>kilim_router_browser.mli</code> has the style of the three others.</li>
+      <li><code>Last_host</code>, an internal module of <code>kilim.testing</code>, holds the rule "the last host wins". The state of <code>Http_mock</code>, <code>History_mock</code>, <code>Websocket_mock</code> and <code>Storage_mock</code> uses it. The behavior does not change.</li>
     </ul>
   </div></div>
   <div class="phase"><div class="n">Later</div><div>

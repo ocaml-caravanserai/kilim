@@ -17,7 +17,7 @@ type server =
 
 type t = {host: Host.t; mutable servers: server list}
 
-let last : t option ref = ref None
+let last = Last_host.make (fun (s : t) -> s.host)
 
 (* The URL against the page URL http://localhost/, with the scheme http changed
    to ws, as the browser driver does. *)
@@ -96,24 +96,8 @@ let connect s url h =
         (* The handlers reach the message function, thus the model. *)
         x.conns <- List.filter (fun y -> y != c) x.conns ) }
 
-let fresh host =
-  let s = {host; servers= []} in
-  last := Some s ;
-  s
-
 let install host =
-  let s =
-    match !last with
-    | Some s when s.host == host ->
-        s
-    | Some _ | None ->
-        fresh host
-  in
+  let s = Last_host.find_or last host (fun () -> {host; servers= []}) in
   W.Private.set_driver (Some {W.connect= connect s})
 
-let of_host host =
-  match !last with
-  | Some s when s.host == host ->
-      s
-  | Some _ | None ->
-      failwith "Kilim_testing.Websocket_mock: the page is not the last page"
+let of_host host = Last_host.get last host ~mock:"Websocket_mock"
