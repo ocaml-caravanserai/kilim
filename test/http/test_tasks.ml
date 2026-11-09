@@ -411,7 +411,7 @@ let stop_hook () =
       equal string "none" (current ()) ;
       (* The state stays readable, and a reply raises. *)
       equal int 0 (List.length (M.requests p1)) ;
-      raises_match (Exn.invalid_arg ~substring:"Http_mock") (fun () ->
+      raises_match (Exn_match.invalid_arg "Http_mock") (fun () ->
           M.on_get p1 "/b" `Never ) ;
       P.stop p1 ;
       (* A new page has an empty mock. *)
@@ -429,7 +429,7 @@ let stop_hook () =
       equal string "three" (text p3) ;
       (* The last host wins: a page of another host stops the mock of p3. *)
       let p4 = P.start (app task) in
-      raises_match (Exn.invalid_arg ~substring:"Http_mock") (fun () ->
+      raises_match (Exn_match.invalid_arg "Http_mock") (fun () ->
           M.on_get p3 "/a" `Never ) ;
       equal int ~msg:"p2 and p3 share the mock of their host" 2
         (List.length (M.requests p3)) ;

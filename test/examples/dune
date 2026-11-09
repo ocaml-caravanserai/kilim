@@ -57,10 +57,11 @@
  (deps
   (alias files)
   (env_var KILIM_CHROME)
-  (env_var KILIM_REQUIRE_CHROME))
+  (env_var KILIM_REQUIRE_CHROME)
+  (env_var KILIM_REQUIRE_NODE))
  (action
   (run
-   node
+   %{exe:../node/node_run.exe}
    run.mjs
    --kilim
    %{bin:kilim}
@@ -79,10 +80,11 @@
   (env_var KILIM_PLAYWRIGHT)
   (env_var PLAYWRIGHT_BROWSERS_PATH)
   (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
-  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+  (env_var KILIM_REQUIRE_PLAYWRIGHT)
+  (env_var KILIM_REQUIRE_NODE))
  (action
   (run
-   node
+   %{exe:../node/node_run.exe}
    run.mjs
    --kilim
    %{bin:kilim}
@@ -103,10 +105,11 @@
   (env_var KILIM_PLAYWRIGHT)
   (env_var PLAYWRIGHT_BROWSERS_PATH)
   (env_var __EGL_VENDOR_LIBRARY_FILENAMES)
-  (env_var KILIM_REQUIRE_PLAYWRIGHT))
+  (env_var KILIM_REQUIRE_PLAYWRIGHT)
+  (env_var KILIM_REQUIRE_NODE))
  (action
   (run
-   node
+   %{exe:../node/node_run.exe}
    run.mjs
    --kilim
    %{bin:kilim}

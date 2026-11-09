@@ -472,7 +472,7 @@ let duplicate_law (a, b) =
   let before = dump p and kids_before = retained_kids p in
   if List.length (dedupe Fun.id b) <> List.length b then begin
     F.reset p.doc ;
-    raises_match (Exn.invalid_arg ~substring:"duplicate") (fun () ->
+    raises_match (Exn_match.invalid_arg "duplicate") (fun () ->
         Diff.patch p.tree (titled b) ) ;
     equal int ~msg:"no operation" 0 (F.total p.doc) ;
     equal string ~msg:"the same DOM" before (dump p) ;

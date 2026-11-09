@@ -19,31 +19,37 @@
 
 (rule
  (alias runtest)
- (deps weak.bc.js)
+ (deps
+  weak.bc.js
+  (env_var KILIM_REQUIRE_NODE))
  (action
-  (run node --expose-gc weak.bc.js)))
+  (run %{exe:../node/node_run.exe} --expose-gc weak.bc.js)))
 
 (rule
  (alias runtest)
  (deps
   weak.bc.wasm.js
-  (glob_files weak.bc.wasm.assets/*))
+  (glob_files weak.bc.wasm.assets/*)
+  (env_var KILIM_REQUIRE_NODE))
  (action
-  (run node --expose-gc weak.bc.wasm.js)))
+  (run %{exe:../node/node_run.exe} --expose-gc weak.bc.wasm.js)))
 
 (rule
  (alias runtest)
- (deps weak_fut.bc.js)
+ (deps
+  weak_fut.bc.js
+  (env_var KILIM_REQUIRE_NODE))
  (action
-  (run node --expose-gc weak_fut.bc.js)))
+  (run %{exe:../node/node_run.exe} --expose-gc weak_fut.bc.js)))
 
 (rule
  (alias runtest)
  (deps
   weak_fut.bc.wasm.js
-  (glob_files weak_fut.bc.wasm.assets/*))
+  (glob_files weak_fut.bc.wasm.assets/*)
+  (env_var KILIM_REQUIRE_NODE))
  (action
-  (run node --expose-gc weak_fut.bc.wasm.js)))
+  (run %{exe:../node/node_run.exe} --expose-gc weak_fut.bc.wasm.js)))
 
 ; weak_router: the popstate listener of kilim.router.browser, with a JS shim
 ; of location, history and the window listeners.
@@ -56,17 +62,20 @@
 
 (rule
  (alias runtest)
- (deps weak_router.bc.js)
+ (deps
+  weak_router.bc.js
+  (env_var KILIM_REQUIRE_NODE))
  (action
-  (run node --expose-gc weak_router.bc.js)))
+  (run %{exe:../node/node_run.exe} --expose-gc weak_router.bc.js)))
 
 (rule
  (alias runtest)
  (deps
   weak_router.bc.wasm.js
-  (glob_files weak_router.bc.wasm.assets/*))
+  (glob_files weak_router.bc.wasm.assets/*)
+  (env_var KILIM_REQUIRE_NODE))
  (action
-  (run node --expose-gc weak_router.bc.wasm.js)))
+  (run %{exe:../node/node_run.exe} --expose-gc weak_router.bc.wasm.js)))
 
 ; weak_http: a request of kilim.http.browser to a node server that never
 ; answers, then an unmount.
@@ -79,17 +88,20 @@
 
 (rule
  (alias runtest)
- (deps weak_http.bc.js)
+ (deps
+  weak_http.bc.js
+  (env_var KILIM_REQUIRE_NODE))
  (action
-  (run node --expose-gc weak_http.bc.js)))
+  (run %{exe:../node/node_run.exe} --expose-gc weak_http.bc.js)))
 
 (rule
  (alias runtest)
  (deps
   weak_http.bc.wasm.js
-  (glob_files weak_http.bc.wasm.assets/*))
+  (glob_files weak_http.bc.wasm.assets/*)
+  (env_var KILIM_REQUIRE_NODE))
  (action
-  (run node --expose-gc weak_http.bc.wasm.js)))
+  (run %{exe:../node/node_run.exe} --expose-gc weak_http.bc.wasm.js)))
 
 ; weak_websocket: the listeners of kilim.websocket.browser on a socket, with
 ; a JS shim of location and of a WebSocket class that never opens.
@@ -102,14 +114,17 @@
 
 (rule
  (alias runtest)
- (deps weak_websocket.bc.js)
+ (deps
+  weak_websocket.bc.js
+  (env_var KILIM_REQUIRE_NODE))
  (action
-  (run node --expose-gc weak_websocket.bc.js)))
+  (run %{exe:../node/node_run.exe} --expose-gc weak_websocket.bc.js)))
 
 (rule
  (alias runtest)
  (deps
   weak_websocket.bc.wasm.js
-  (glob_files weak_websocket.bc.wasm.assets/*))
+  (glob_files weak_websocket.bc.wasm.assets/*)
+  (env_var KILIM_REQUIRE_NODE))
  (action
-  (run node --expose-gc weak_websocket.bc.wasm.js)))
+  (run %{exe:../node/node_run.exe} --expose-gc weak_websocket.bc.wasm.js)))

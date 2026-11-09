@@ -19,17 +19,23 @@
 ; The CSP hash of the loader text, with node:crypto (only the tests use
 ; node). When loader.js changes and loader.csp does not, this rule fails, and
 ; `dune promote` writes the new hash. Thus each change of the hash is a line
-; in the diff of a pull request.
+; in the diff of a pull request. With no node (test/node), node_run.exe writes
+; loader.csp, thus the rule does a skip.
 
 (rule
  (alias runtest)
- (deps loader.txt)
+ (deps
+  loader.txt
+  loader.csp
+  (env_var KILIM_REQUIRE_NODE))
  (action
   (progn
    (with-stdout-to
     loader.csp.gen
     (run
-     node
+     %{exe:../../test/node/node_run.exe}
+     --or-copy
+     loader.csp
      -e
      "const c = require('node:crypto'), f = require('node:fs'); process.stdout.write(\"'sha256-\" + c.createHash('sha256').update(f.readFileSync(process.argv[1])).digest('base64') + \"'\\n\")"
      loader.txt))

@@ -1,0 +1,8 @@
+; The exception predicates of the native suites (test/view, test/turn and
+; test/http), for raises_match of windtrap. They use only the standard
+; library, thus the tests compile with each windtrap: the fork of flake.nix
+; (Exn.invalid_arg ~substring) and windtrap 0.3 of opam (Exn.invalid_arg
+; ?sub).
+
+(library
+ (name exn_match))

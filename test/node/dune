@@ -1,0 +1,30 @@
+; node_run.exe ARGS runs `node ARGS`, if node is in PATH and its version is
+; 22.3.0 or later. If not, it writes "SKIP: no node" and gives exit status 0,
+; but 1 if KILIM_REQUIRE_NODE is 1 (CI). Each rule of the aliases runtest and
+; browsers that runs node uses it, thus `dune build @runtest` passes with no
+; node (an opam install with the tests). Each of these rules has the dependency
+; (env_var KILIM_REQUIRE_NODE).
+;
+; The minimum version: node 20 has no WebAssembly GC, thus the wasm_of_ocaml
+; tests do not start. Node 22.0.0 runs them, but test/browser and test/weak
+; use process.getBuiltinModule, which came in node 22.3.0. All the tests pass
+; with node 22.3.0.
+;
+; --or-copy FILE: if node does not run, write FILE to stdout. The CSP rule of
+; src/loader gives the hash to stdout, then compares it with loader.csp.
+
+(library
+ (name node_version)
+ (modules node_version))
+
+(executable
+ (name node_run)
+ (modules node_run)
+ (libraries node_version unix))
+
+; The parser of `node --version`, with pre-release versions.
+
+(test
+ (name test_node_version)
+ (modules test_node_version)
+ (libraries node_version))

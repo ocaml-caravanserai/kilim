@@ -5,4 +5,4 @@
 
 (test
  (name test_view)
- (libraries kilim kilim.testing windtrap))
+ (libraries kilim kilim.testing windtrap exn_match))

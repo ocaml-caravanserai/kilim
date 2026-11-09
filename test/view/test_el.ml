@@ -6,7 +6,7 @@ open Kilim
 open Support
 
 let refused f =
-  raises_match (Exn.invalid_arg ~substring:"kilim") (fun () -> ignore (f ()))
+  raises_match (Exn_match.invalid_arg "kilim") (fun () -> ignore (f ()))
 
 let element (v : string View.t) =
   match v with

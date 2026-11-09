@@ -1492,6 +1492,14 @@ Cmd.map ?scope:<span class="kw">"left"</span> f cmd   <span class="cm">(* scope:
     <p>Documentation and the first release, 0.1.0.</p>
     <div class="exit"><b>Exit:</b> the README examples compile in CI, and all budgets pass.</div>
     <p>The first step is in Phase 1: <code>test/readme</code> makes sure that the code of the README is the code of the examples.</p>
+    <p>The items of P5-0 (an opam install with the tests):</p>
+    <ul>
+      <li><code>dune-project</code>: <code>(lang dune 3.21)</code>, because windtrap 0.3 in opam needs dune 3.21, and <code>(maintenance_intent "(latest)")</code>, which gives <code>x-maintenance-intent</code> in <code>kilim.opam</code>. The test dependency is <code>windtrap &gt;= 0.3.0</code>. <code>ppx_windtrap</code> is not an opam dependency: dune needs it only with <code>--instrument-with</code> (<code>make mutate</code>), and <code>flake.nix</code> keeps it.</li>
+      <li><code>test/exn_match</code> gives the exception predicates of the native suites with the standard library only. Thus the tests compile with the windtrap fork of <code>flake.nix</code> and with windtrap 0.3.1 of opam.</li>
+      <li><code>test/node/node_run.exe</code> runs node for each rule of the aliases runtest and browsers: the js and wasm runs, <code>test/readme</code>, the CSP rule of <code>src/loader</code> and the browser runners. With no node, or with a node older than 22.3.0, it writes "SKIP: no node" and gives exit status 0. <code>KILIM_REQUIRE_NODE=1</code> (CI) makes it a failure. Node 20 has no WebAssembly GC, and <code>test/browser</code> and <code>test/weak</code> use <code>process.getBuiltinModule</code> of node 22.3.0.</li>
+      <li>The folder <code>spikes/</code> is removed. <code>docs/phase0.md</code> keeps the results and names c31b1cc, the last commit that has the folder.</li>
+      <li>The CI job <code>opam</code>: <code>ocaml/setup-ocaml</code> with OCaml 5.5, <code>opam install . --deps-only --with-test</code>, <code>dune build -p kilim @install @runtest</code> and <code>opam lint</code>, with the newest js_of_ocaml and wasm_of_ocaml, and with the two pinned to 6.4.1. The job puts binaryen 133 first in PATH (with a fixed sha256), because Ubuntu 24.04 has binaryen 108, and wasm_of_ocaml needs 119 or later. The Chrome tests run with <code>KILIM_REQUIRE_CHROME=1</code>. The opam description tells users of <code>opam install kilim --with-test</code> that the tests need binaryen 119 or later and node 22.3.0 or later.</li>
+    </ul>
   </div></div>
   <div class="phase"><div class="n">Later</div><div>
     <h4>After version 1</h4>

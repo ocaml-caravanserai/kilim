@@ -763,7 +763,7 @@ let table () =
   in
   let a = Key.int (List.nth last 0) and b = Key.int (List.nth last 1) in
   equal (option int) (Some 7) (probes [a; b] [b; Key.int c.(1)]) ;
-  raises_match (Exn.invalid_arg ~substring:"duplicate") (fun () ->
+  raises_match (Exn_match.invalid_arg "duplicate") (fun () ->
       ignore (probes [a; b; a] []) )
 
 (* A keyed patch with colliding keys: the plan reads too many slots and goes to
@@ -784,7 +784,7 @@ let colliding_keys () =
   let dup b =
     let p = mount (ul ~key l) in
     F.reset p.doc ;
-    raises_match (Exn.invalid_arg ~substring:"duplicate") (fun () ->
+    raises_match (Exn_match.invalid_arg "duplicate") (fun () ->
         Diff.patch p.tree (ul ~key b) ) ;
     equal int 0 (F.total p.doc) ;
     check_tree p
@@ -804,7 +804,7 @@ let duplicates () =
     let p = mount (View.keyed (El.ul ~at:[At.id "a"]) (rows a)) in
     let before = dump p and kids_before = retained_kids p in
     F.reset p.doc ;
-    raises_match (Exn.invalid_arg ~substring:"duplicate") (fun () ->
+    raises_match (Exn_match.invalid_arg "duplicate") (fun () ->
         Diff.patch p.tree (View.keyed (El.ul ~at:[At.id "b"]) (rows b)) ) ;
     equal int 0 (F.total p.doc) ;
     equal string before (dump p) ;
@@ -825,12 +825,12 @@ let duplicates () =
   dup [0; 1] [0; 5; 0] ;
   (* At a mount, before any operation, and from plain children. *)
   let doc = F.create () in
-  raises_match (Exn.invalid_arg ~substring:"duplicate") (fun () ->
+  raises_match (Exn_match.invalid_arg "duplicate") (fun () ->
       mount_with doc (ul [1; 2; 1]) ) ;
   equal int 0 (F.total doc) ;
   let p = mount (El.ul ~at:[At.id "a"] [txt "x"]) in
   F.reset p.doc ;
-  raises_match (Exn.invalid_arg ~substring:"duplicate") (fun () ->
+  raises_match (Exn_match.invalid_arg "duplicate") (fun () ->
       Diff.patch p.tree (View.keyed (El.ul ~at:[At.id "b"]) (rows [5; 5])) ) ;
   equal int 0 (F.total p.doc) ;
   (* A string key and an int key are different. *)
