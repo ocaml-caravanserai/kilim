@@ -3,7 +3,27 @@
 ; server of node). Also Async.of_fut, Kilim_web.Es_module, Component.shallow_equal
 ; with the identity of kilim.browser, and the property of test/shallow.
 
-(test
+; An executable and two rules, not a test stanza: the runs use node through
+; test/node, thus they do a skip with no node.
+
+(executable
  (name test_browser)
  (modes js wasm)
  (libraries kilim kilim.browser kilim.web brr shallow_law))
+
+(rule
+ (alias runtest)
+ (deps
+  test_browser.bc.js
+  (env_var KILIM_REQUIRE_NODE))
+ (action
+  (run %{exe:../node/node_run.exe} test_browser.bc.js)))
+
+(rule
+ (alias runtest)
+ (deps
+  test_browser.bc.wasm.js
+  (glob_files test_browser.bc.wasm.assets/*)
+  (env_var KILIM_REQUIRE_NODE))
+ (action
+  (run %{exe:../node/node_run.exe} test_browser.bc.wasm.js)))

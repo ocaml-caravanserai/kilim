@@ -13,10 +13,11 @@
   ../../src/testing/kilim_testing.mli
   ../../src/browser/kilim_browser.mli
   (source_tree ../../examples)
-  (source_tree ../doc))
+  (source_tree ../doc)
+  (env_var KILIM_REQUIRE_NODE))
  (action
   (run
-   node
+   %{exe:../node/node_run.exe}
    check.mjs
    ../..
    README.md

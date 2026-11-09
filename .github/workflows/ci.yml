@@ -11,9 +11,12 @@ on:
 
 # A status line for each test, and a limit for each test: a test that hangs
 # fails with its name.
+# With KILIM_REQUIRE_NODE, a missing node (or a node older than 22.3.0) is a
+# failure, not a skip (test/node).
 env:
   WINDTRAP_VERBOSE: "1"
   WINDTRAP_TIMEOUT: "120"
+  KILIM_REQUIRE_NODE: "1"
 
 jobs:
   test:

@@ -4,7 +4,32 @@
 ; mutation suite, because each mutant would run them. Also the JSON corpus of
 ; test/json_corpus and the range of Decode.int in each build.
 
-(test
+; An executable and three rules, not a test stanza: the js and wasm runs use
+; node through test/node, thus they do a skip with no node.
+
+(executable
  (name test_cross)
  (modes exe js wasm)
  (libraries kilim kilim.testing kilim.http json_corpus))
+
+(rule
+ (alias runtest)
+ (action
+  (run %{exe:test_cross.exe})))
+
+(rule
+ (alias runtest)
+ (deps
+  test_cross.bc.js
+  (env_var KILIM_REQUIRE_NODE))
+ (action
+  (run %{exe:../node/node_run.exe} test_cross.bc.js)))
+
+(rule
+ (alias runtest)
+ (deps
+  test_cross.bc.wasm.js
+  (glob_files test_cross.bc.wasm.assets/*)
+  (env_var KILIM_REQUIRE_NODE))
+ (action
+  (run %{exe:../node/node_run.exe} test_cross.bc.wasm.js)))
