@@ -13,83 +13,30 @@ kilim has three main ideas:
 
 kilim builds with js_of_ocaml and wasm_of_ocaml in their default modes.
 
-## Status
+## Contents
 
-The version is 0.1.0. The API can change in the 0.x versions. The browser
-tests run in Chrome, Firefox and WebKit.
-
-## Install
-
-```sh
-opam install kilim
-```
-
-The js_of_ocaml build needs only this package. For the wasm_of_ocaml build,
-also install `wasm_of_ocaml-compiler`:
-
-```sh
-opam install wasm_of_ocaml-compiler
-```
-
-The tests of the package (`opam install kilim --with-test`) need binaryen
-119 or later in `PATH`, and node 22.3.0 or later. With no node, the js and
-wasm runs of the tests do a skip.
-
-To work on kilim, use the Nix dev shell: see [Development](#development).
-
-## The libraries
-
-Each library has a pure part and a browser part. Use the pure part for the
-modules of the app and for the tests. Use the browser part only in
-`main.ml`. Then `kilim.testing` can test the app as native code.
-
-| Library | It gives | Pure part | Browser part |
-|---|---|---|---|
-| `kilim` | The app, the view, the tasks, the subscriptions and the components | `Kilim` | `kilim.browser` (`Kilim_browser.run`) |
-| `kilim.testing` | A fake DOM, a host with a virtual clock, pages with simulated events, and the mocks of the libraries | `Kilim_testing` | None |
-| `kilim.http` | HTTP requests as tasks, JSON and decoders | `Kilim_http` | `kilim.http.browser` (fetch) |
-| `kilim.router` | The routes of an app in the path of the URL | `Kilim_router` | `kilim.router.browser` (History API) |
-| `kilim.websocket` | A WebSocket as a subscription | `Kilim_websocket` | `kilim.websocket.browser` (WebSocket API) |
-| `kilim.storage` | localStorage and sessionStorage as tasks | `Kilim_storage` | `kilim.storage.browser` (Web Storage API) |
-| `kilim.web` | The bindings for the Web APIs that Brr does not have | None | `Kilim_web` (one unit for each API) |
-
-The package also installs the executable `kilim`. It makes the page and
-the loader of an app, and the release files with content names (see
-[docs/loader.md](docs/loader.md)).
-
-## Documentation
-
-- The API docs are on ocaml.org:
-  <https://ocaml.org/p/kilim/latest/doc/index.html>. The link is valid
-  after the release of the package in opam. In this repository,
-  `dune build @doc` writes them to `_build/default/_doc/_html`.
-- [docs/design.html](docs/design.html): the design.
-- [docs/loader.md](docs/loader.md): the loader, the template, the CSP and
-  the release files.
-- [docs/budgets.md](docs/budgets.md): the budgets and their numbers.
-- [docs/phase0.md](docs/phase0.md): the results of the spikes.
-
-## Known limitations
-
-These are the limitations of 0.1.0:
-
-- Nobody checked kilim in Safari. The tests use Playwright WebKit. If your
-  users have Safari, use the inline form of the loader (see
-  [docs/loader.md](docs/loader.md)).
-- The CSP hash of the loader can change in a 0.x version. Take it from
-  `kilim csp` after each update of kilim.
-- wasm_of_ocaml 6.4.1 emits the legacy Wasm exception handling (`try`).
-  Firefox 157 marks it as deprecated. If a later Firefox removes it, the
-  wasm_of_ocaml build breaks in Firefox after the probe of the loader
-  passes, with no fallback to the js_of_ocaml build.
-- The JSON parser is OCaml code. It is about 5 to 6 times slower than
-  `JSON.parse` (see [docs/budgets.md](docs/budgets.md)).
-- Some items come after version 1 (the "Later" list of the design): the
-  Resize, Intersection and Mutation observers, the hash mode of the router,
-  the `storage` event, binary WebSocket frames, element handles, server
-  rendering and devtools.
+- [Getting started](#getting-started)
+  - [Run the examples](#run-the-examples)
+  - [An app](#an-app)
+  - [A test](#a-test)
+  - [A component](#a-component)
+  - [HTTP](#http)
+  - [Routing](#routing)
+  - [Storage](#storage)
+  - [WebSocket](#websocket)
+  - [Test with mocks](#test-with-mocks)
+  - [A release](#a-release)
+- [Status](#status)
+- [Install](#install)
+- [The libraries](#the-libraries)
+- [Documentation](#documentation)
+- [Known limitations](#known-limitations)
+- [Development](#development)
+- [License](#license)
 
 ## Getting started
+
+To install kilim, see [Install](#install).
 
 ### Run the examples
 
@@ -514,6 +461,82 @@ node examples/serve.mjs --base /static/ dist
 The build files get content names, and `examples/serve.mjs` serves them as
 immutable files. The page is `dist/index.html`: open
 `http://127.0.0.1:8000/` again.
+
+## Status
+
+The version is 0.1.0. The API can change in the 0.x versions. The browser
+tests run in Chrome, Firefox and WebKit.
+
+## Install
+
+```sh
+opam install kilim
+```
+
+The js_of_ocaml build needs only this package. For the wasm_of_ocaml build,
+also install `wasm_of_ocaml-compiler`:
+
+```sh
+opam install wasm_of_ocaml-compiler
+```
+
+The tests of the package (`opam install kilim --with-test`) need binaryen
+119 or later in `PATH`, and node 22.3.0 or later. With no node, the js and
+wasm runs of the tests do a skip.
+
+To work on kilim, use the Nix dev shell: see [Development](#development).
+
+## The libraries
+
+Each library has a pure part and a browser part. Use the pure part for the
+modules of the app and for the tests. Use the browser part only in
+`main.ml`. Then `kilim.testing` can test the app as native code.
+
+| Library | It gives | Pure part | Browser part |
+|---|---|---|---|
+| `kilim` | The app, the view, the tasks, the subscriptions and the components | `Kilim` | `kilim.browser` (`Kilim_browser.run`) |
+| `kilim.testing` | A fake DOM, a host with a virtual clock, pages with simulated events, and the mocks of the libraries | `Kilim_testing` | None |
+| `kilim.http` | HTTP requests as tasks, JSON and decoders | `Kilim_http` | `kilim.http.browser` (fetch) |
+| `kilim.router` | The routes of an app in the path of the URL | `Kilim_router` | `kilim.router.browser` (History API) |
+| `kilim.websocket` | A WebSocket as a subscription | `Kilim_websocket` | `kilim.websocket.browser` (WebSocket API) |
+| `kilim.storage` | localStorage and sessionStorage as tasks | `Kilim_storage` | `kilim.storage.browser` (Web Storage API) |
+| `kilim.web` | The bindings for the Web APIs that Brr does not have | None | `Kilim_web` (one unit for each API) |
+
+The package also installs the executable `kilim`. It makes the page and
+the loader of an app, and the release files with content names (see
+[docs/loader.md](docs/loader.md)).
+
+## Documentation
+
+- The API docs are on ocaml.org:
+  <https://ocaml.org/p/kilim/latest/doc/index.html>. The link is valid
+  after the release of the package in opam. In this repository,
+  `dune build @doc` writes them to `_build/default/_doc/_html`.
+- [docs/design.html](docs/design.html): the design.
+- [docs/loader.md](docs/loader.md): the loader, the template, the CSP and
+  the release files.
+- [docs/budgets.md](docs/budgets.md): the budgets and their numbers.
+- [docs/phase0.md](docs/phase0.md): the results of the spikes.
+
+## Known limitations
+
+These are the limitations of 0.1.0:
+
+- Nobody checked kilim in Safari. The tests use Playwright WebKit. If your
+  users have Safari, use the inline form of the loader (see
+  [docs/loader.md](docs/loader.md)).
+- The CSP hash of the loader can change in a 0.x version. Take it from
+  `kilim csp` after each update of kilim.
+- wasm_of_ocaml 6.4.1 emits the legacy Wasm exception handling (`try`).
+  Firefox 157 marks it as deprecated. If a later Firefox removes it, the
+  wasm_of_ocaml build breaks in Firefox after the probe of the loader
+  passes, with no fallback to the js_of_ocaml build.
+- The JSON parser is OCaml code. It is about 5 to 6 times slower than
+  `JSON.parse` (see [docs/budgets.md](docs/budgets.md)).
+- Some items come after version 1 (the "Later" list of the design): the
+  Resize, Intersection and Mutation observers, the hash mode of the router,
+  the `storage` event, binary WebSocket frames, element handles, server
+  rendering and devtools.
 
 ## Development
 
