@@ -13,8 +13,10 @@ val bind : 'a t -> ('a -> 'b t) -> 'b t
 
 module Syntax : sig
   val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
+  (** [let* x = t in e] is [bind t (fun x -> e)]. *)
 
   val ( let+ ) : 'a t -> ('a -> 'b) -> 'b t
+  (** [let+ x = t in e] is [map (fun x -> e) t]. *)
 
   val ( and+ ) : 'a t -> 'b t -> ('a * 'b) t
   (** The two branches run at the same time. The first error cancels the other

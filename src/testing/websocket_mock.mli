@@ -1,12 +1,12 @@
 (** The driver of kilim.websocket on the virtual host (design section 14).
 
     Each page sets this mock as the driver of kilim.websocket when it starts. A
-    {!server} is the side of the server for one URL: it gets each connection to
-    the URL, also the connections that started before the call. A new connection
-    stays in the state CONNECTING until {!accept}. Each event comes as a raw
-    macrotask of the host (see {!Host.raw}): run the host, for example with
-    {!Page.run}, to get it. The phase of a connection changes when its event
-    runs.
+    {!type-server} is the side of the server for one URL: it gets each
+    connection to the URL, also the connections that started before the call. A
+    new connection stays in the state CONNECTING until {!accept}. Each event
+    comes as a raw macrotask of the host (see {!Host.raw}): run the host, for
+    example with {!Page.run}, to get it. The phase of a connection changes when
+    its event runs.
 
     URLs: a relative URL resolves against the page URL [http://localhost/], and
     the scheme [http] becomes [ws]. Thus [server page "/chat"] gets the

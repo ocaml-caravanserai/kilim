@@ -1,7 +1,17 @@
 (** kilim.browser: the browser part of kilim (docs/design.html).
 
-    This version has the browser host, the real DOM, the listeners, {!run},
-    {!Async.of_fut}, {!Unsafe_html.of_trusted} and {!Sub.window}. *)
+    [main.ml] calls {!run} to start an app in an element of the page. The other
+    parts add browser values to the modules of kilim:
+    - {!Unsafe_html.of_trusted}: the HTML of a Trusted Types policy
+    - {!Async.of_fut} and {!Async.of_fut_or_error}: tasks from Brr futures
+    - {!Sub.window}: the events of [window] as a subscription.
+
+    Write the modules of the app with kilim only. Use this library only in
+    [main.ml]. Then kilim.testing can test the app as native code. The libraries
+    kilim.http, kilim.router, kilim.websocket and kilim.storage also have a
+    browser part, for [main.ml]. *)
+
+(**/**)
 
 (** The internals for the tests. They can change at any time. *)
 module Private : sig
@@ -59,6 +69,8 @@ module Private : sig
   (** The start function of {!Async.of_fut}: it gives its cell. The end of the
       token clears the cell. *)
 end
+
+(**/**)
 
 val run : mount:string -> Kilim.App.t -> unit
 (** [run ~mount app] starts [app] in the element with the id [mount], at once if

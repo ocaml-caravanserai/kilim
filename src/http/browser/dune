@@ -6,4 +6,6 @@
 (library
  (name kilim_http_browser)
  (public_name kilim.http.browser)
+ (flags
+  (:standard -w +50))
  (libraries kilim kilim.http kilim.browser brr))

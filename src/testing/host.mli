@@ -1,7 +1,6 @@
 (** A host with a virtual clock (design section 14). It gives the timers, the
-    frames, the tasks and the microtasks of {!Kilim.Private.Host} in a fixed
-    order. Nothing runs until the test calls {!step}, {!run}, {!advance} or
-    {!idle}.
+    frames, the tasks and the microtasks of the runtime host in a fixed order.
+    Nothing runs until the test calls {!step}, {!run}, {!advance} or {!idle}.
 
     The rules:
     - The clock is a float. Only the cost of the env (see {!create}), {!spend},
@@ -40,15 +39,22 @@ val create : ?cost:float -> ?frame_ms:int -> unit -> t
       if [cost] is not more than 0 and at most 50: with more, a turn can make no
       progress. Also if [frame_ms] is not positive. *)
 
+(**/**)
+
 val host : t -> Kilim.Private.Host.t
+(** The host for the runtime. *)
 
 val env : t -> Kilim.Private.Runtime.env
 (** The env of the runtime: {!host}, the hidden flag, the cost, and [( == )] for
     [same]. *)
 
+(**/**)
+
 val now : t -> float
+(** The virtual clock, in ms. *)
 
 val hidden : t -> bool
+(** The hidden flag of the page. The default is [false]. *)
 
 val set_hidden : t -> bool -> unit
 (** Only the flag. {!Page.set_hidden} also tells the runtime. *)

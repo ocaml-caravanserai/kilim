@@ -8,4 +8,6 @@
 (library
  (name kilim_storage_browser)
  (public_name kilim.storage.browser)
+ (flags
+  (:standard -w +50))
  (libraries kilim kilim.storage brr))

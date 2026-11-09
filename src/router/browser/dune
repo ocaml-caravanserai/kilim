@@ -8,4 +8,6 @@
 (library
  (name kilim_router_browser)
  (public_name kilim.router.browser)
+ (flags
+  (:standard -w +50))
  (libraries kilim kilim.router kilim.web brr))

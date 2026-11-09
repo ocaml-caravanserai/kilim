@@ -10,4 +10,6 @@
 (library
  (name kilim_web)
  (public_name kilim.web)
+ (flags
+  (:standard -w +50))
  (libraries brr))

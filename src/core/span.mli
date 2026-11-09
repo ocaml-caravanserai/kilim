@@ -1,5 +1,6 @@
 (** Durations: a count of milliseconds, from 0 to [max_ms]. *)
 
+(** A duration. *)
 type t
 
 val max_ms : int
@@ -8,6 +9,7 @@ val max_ms : int
     integers. *)
 
 val zero : t
+(** [zero] is 0 ms. *)
 
 val ms : int -> t
 (** [ms n] is [n] milliseconds.
@@ -21,7 +23,10 @@ val s : int -> t
       if [n] is negative or the result is more than [max_ms]. *)
 
 val to_ms : t -> int
+(** [to_ms d] is the number of milliseconds of [d]. *)
 
 val compare : t -> t -> int
+(** [compare a b] compares the two durations, as [Int.compare] does. *)
 
 val equal : t -> t -> bool
+(** [equal a b] is [true] if [a] and [b] are the same duration. *)
