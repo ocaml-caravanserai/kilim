@@ -22,7 +22,7 @@ type server
 val server : 'out Page.t -> string -> server
 (** [server page url] is the server of [url] on the host of [page].
 
-    @raise Failure if a page of another host started after [page]. *)
+    Raises [Failure] if a page of another host started after [page]. *)
 
 val accept : server -> unit
 (** Each connection in the state CONNECTING opens: [Opened]. *)

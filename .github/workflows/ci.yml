@@ -31,6 +31,10 @@ jobs:
         run: nix develop -c dune build
       - name: Format
         run: nix develop -c dune build @fmt
+      # The odoc docs. In the dev profile, an odoc warning is an error (the
+      # root dune file).
+      - name: Docs
+        run: nix develop -c dune build @doc
       # The DOM tests need Chrome: the runner image has it in /usr/bin. With
       # this variable, a missing Chrome is a failure, not a skip.
       - name: Test

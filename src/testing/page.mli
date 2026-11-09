@@ -189,4 +189,4 @@ val stop : 'out t -> unit
 (** Stops the runtime, then the [Http_mock] of the page. *)
 
 val expect_no_tasks : 'out t -> unit
-(** @raise Failure if a timer is live or the token of the root has a child. *)
+(** Raises [Failure] if a timer is live or the token of the root has a child. *)

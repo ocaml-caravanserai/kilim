@@ -14,13 +14,13 @@ val zero : t
 val ms : int -> t
 (** [ms n] is [n] milliseconds.
 
-    @raise Invalid_argument if [n] is negative or more than [max_ms]. *)
+    Raises [Invalid_argument] if [n] is negative or more than [max_ms]. *)
 
 val s : int -> t
 (** [s n] is [n] seconds.
 
-    @raise Invalid_argument
-      if [n] is negative or the result is more than [max_ms]. *)
+    Raises [Invalid_argument] if [n] is negative or the result is more than
+    [max_ms]. *)
 
 val to_ms : t -> int
 (** [to_ms d] is the number of milliseconds of [d]. *)

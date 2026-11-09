@@ -1,0 +1,8 @@
+; In the dev profile, an odoc warning is an error: CI builds @doc. The release
+; profile (opam, dune build -p) keeps the warnings, thus a new odoc version
+; does not stop the build of the docs of the package.
+
+(env
+ (dev
+  (odoc
+   (warnings fatal))))

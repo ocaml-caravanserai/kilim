@@ -100,9 +100,8 @@ val element : string -> at list -> 'msg handler list -> 'msg children -> 'msg t
     joins the values of the [class] attributes, in order, with one space, and it
     drops the empty values.
 
-    @raise Invalid_argument
-      for a duplicate attribute name (the case is ignored), a duplicate
-      property, or two handlers for one DOM event name. *)
+    Raises [Invalid_argument] for a duplicate attribute name (the case is
+    ignored), a duplicate property, or two handlers for one DOM event name. *)
 
 val txt : string -> 'msg t
 

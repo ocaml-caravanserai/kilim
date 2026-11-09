@@ -1,7 +1,8 @@
 ; The check of the code in the documentation (check.mjs): each tagged block of
-; README.md, docs/loader.md and the doc comments of src/core/kilim.mli,
-; src/testing/kilim_testing.mli and src/browser/kilim_browser.mli is the code
-; of a file of the repository.
+; README.md, docs/loader.md, docs/index.mld and the doc comments of
+; src/core/kilim.mli, src/testing/kilim_testing.mli,
+; src/browser/kilim_browser.mli and the four browser libraries is the code of
+; a file of the repository.
 
 (rule
  (alias runtest)
@@ -9,9 +10,14 @@
   check.mjs
   ../../README.md
   ../../docs/loader.md
+  ../../docs/index.mld
   ../../src/core/kilim.mli
   ../../src/testing/kilim_testing.mli
   ../../src/browser/kilim_browser.mli
+  ../../src/http/browser/kilim_http_browser.mli
+  ../../src/router/browser/kilim_router_browser.mli
+  ../../src/websocket/browser/kilim_websocket_browser.mli
+  ../../src/storage/browser/kilim_storage_browser.mli
   (source_tree ../../examples)
   (source_tree ../doc)
   (env_var KILIM_REQUIRE_NODE))
@@ -24,9 +30,19 @@
    22
    docs/loader.md
    2
+   docs/index.mld
+   2
    src/core/kilim.mli
-   7
+   8
    src/testing/kilim_testing.mli
    1
    src/browser/kilim_browser.mli
+   1
+   src/http/browser/kilim_http_browser.mli
+   1
+   src/router/browser/kilim_router_browser.mli
+   1
+   src/websocket/browser/kilim_websocket_browser.mli
+   1
+   src/storage/browser/kilim_storage_browser.mli
    1)))

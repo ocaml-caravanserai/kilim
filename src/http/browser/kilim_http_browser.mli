@@ -1,6 +1,6 @@
 (** kilim.http.browser: the fetch transport of kilim.http.
 
-    {[
+    {@ocaml in=test/doc/install_http.ml[
     let () =
       Kilim_http_browser.install () ;
       Kilim_browser.run ~mount:"app" app

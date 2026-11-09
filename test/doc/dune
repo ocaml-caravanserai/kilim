@@ -1,12 +1,12 @@
 ; The code of the examples in the doc comments of src/core/kilim.mli,
-; src/testing/kilim_testing.mli and src/browser/kilim_browser.mli, and of one
-; example of docs/loader.md. Each example is a tagged block, and
+; src/testing/kilim_testing.mli, src/browser/kilim_browser.mli and the four
+; browser libraries, and of one example of docs/loader.md. Each example is a tagged block, and
 ; test/readme/check.mjs makes sure that it is the code of a file here. Thus
 ; the examples compile, and test_doc runs the example of Kilim_testing.mount.
 
 (library
  (name doc_examples)
- (modules counter guarded light parent themed)
+ (modules counter guarded keyed light parent themed)
  (wrapped false)
  (libraries kilim))
 
@@ -15,10 +15,26 @@
  (modules test_doc)
  (libraries doc_examples kilim.testing))
 
-; The examples of src/browser/kilim_browser.mli and docs/loader.md, which need
-; the browser libraries.
+; The examples of src/browser/kilim_browser.mli, docs/loader.md and the four
+; browser libraries, which need the browser libraries. No executable links
+; this library, thus the calls of Kilim_browser.run do not run.
 
 (library
  (name doc_browser_examples)
- (modules fetch_abort es_load)
- (libraries kilim kilim.browser kilim.web brr))
+ (modules
+  fetch_abort
+  es_load
+  app
+  install_http
+  install_router
+  install_websocket
+  install_storage)
+ (libraries
+  kilim
+  kilim.browser
+  kilim.web
+  kilim.http.browser
+  kilim.router.browser
+  kilim.websocket.browser
+  kilim.storage.browser
+  brr))
