@@ -17,7 +17,9 @@ val attribute_ok : string -> string -> bool
     parser finds) and [ping] (a list of URLs that ASCII whitespace separates).
 *)
 
-(** {1 Kilim.Url} The text of each function is in kilim.mli. *)
+(** {1 Kilim.Url}
+
+    The text of each function is in kilim.mli. *)
 
 val encode_component : string -> string
 

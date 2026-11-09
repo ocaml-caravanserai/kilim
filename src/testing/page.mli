@@ -15,7 +15,10 @@
     After each top-level call, the page runs the microtasks, then the undo of a
     prevented click, then the tasks of the dispatch (for example the restore
     task after a click on a checkbox), each with the microtasks after it. This
-    is the order of a browser. *)
+    is the order of a browser.
+
+    The docs do not show [stats], [inspect] and [tree]: these are helpers for
+    the budget tests, and they can change. *)
 
 (** A page. ['out] is the type of the outputs that {!outputs} gives. *)
 type 'out t
@@ -49,6 +52,7 @@ val outputs : 'out t -> 'out list
     {!start} has none. *)
 
 val host : 'out t -> Host.t
+(** The host of the page. *)
 
 (**/**)
 
@@ -58,6 +62,7 @@ val http_mock : 'out t -> Http_mock_state.t
 (**/**)
 
 val doc : 'out t -> Fake_dom.t
+(** The fake document, with the counts of the DOM operations. *)
 
 val root : 'out t -> Fake_dom.node
 (** The mount element. *)
@@ -159,15 +164,26 @@ val set_hidden : 'out t -> bool -> unit
 (** Sets the hidden flag of the host, then tells the runtime. *)
 
 val advance : 'out t -> Kilim.Span.t -> unit
+(** [advance t span] is {!Host.advance} on the host of the page. *)
 
 val run : 'out t -> unit
+(** [run t] is {!Host.run} on the host of the page. *)
+
+(**/**)
 
 val stats : 'out t -> Kilim.Private.Runtime.stats
+(** The counts of the runtime, for example turns, messages and renders. The
+    budget tests use these counts. The fields can change. *)
 
 val inspect : 'out t -> Kilim.Private.Runtime.inspect
+(** The state of the queues of the runtime. The budget tests use these counts.
+    The fields can change. *)
 
 val tree : 'out t -> Kilim.Private.Runtime.tree
-(** The counts of the instance tree. *)
+(** The counts of the instance tree. The budget tests use these counts. The
+    fields can change. *)
+
+(**/**)
 
 val stop : 'out t -> unit
 (** Stops the runtime, then the [Http_mock] of the page. *)

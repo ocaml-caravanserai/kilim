@@ -1,13 +1,33 @@
 (** kilim: a browser application library for OCaml (docs/design.html).
 
-    This version has the async tasks and the cancel tokens of section 12, the
-    view, the commands, the subscriptions and the app of section 08, the diff of
-    section 11, and the components and the boundaries of section 09, with no
-    Context. *)
+    An app is a model, an [update] function and a [view] function. [update]
+    gives a new model and a command (the tasks to start). [view] gives a virtual
+    DOM tree, and the runtime writes the changes to the DOM. This library has no
+    browser code: kilim.browser starts an app in a page, and kilim.testing runs
+    the same app as native code.
+
+    The parts:
+    - {!Span}: durations
+    - {!Cancel} and {!Async}: cold tasks and their cancel tokens
+    - {!View}, {!At}, {!Ev} and {!El}: the virtual DOM tree of a view
+    - {!Key}: the keys of a keyed list
+    - {!Unsafe_html}: HTML text with no check
+    - {!Cmd} and {!Sub}: the tasks of [update], and the event sources of a model
+    - {!App}: the root instance, which [Kilim_browser.run] starts
+    - {!Component}, {!Ctx} and {!COMPONENT}: components with their own model and
+      outputs
+    - {!View.boundary}: an error scope in the view
+    - {!Context}: shared state that a provider gives to the views below it
+    - {!Url}: the URL check, the encoding and the locations of the router.
+
+    The README, section "Getting started", shows a first app. *)
 
 module Span = Span
 
-(** The internals for the runtime and the tests. They can change at any time. *)
+(**/**)
+
+(** The internals for the runtime, the platform libraries and the tests. They
+    can change at any time. *)
 module Private : sig
   val set_error_handler : (exn -> unit) -> unit
   (** The function that gets each error that the runtime writes to the console:
@@ -56,11 +76,15 @@ module Private : sig
   module Shallow = Shallow
 end
 
+(**/**)
+
 (** Cancel tokens. *)
 module Cancel : sig
+  (** A cancel token. Each task that the runtime starts has a new token. *)
   type t = Private.Cancel.t
 
   val cancelled : t -> bool
+  (** [cancelled t] is [true] after the cancel of [t] or of a token above it. *)
 
   val on_end : t -> (unit -> unit) -> unit
   (** [on_end t f] runs [f] one time: at the cancel of [t], or when the step of
@@ -72,19 +96,26 @@ end
 (** Cold async tasks. Nothing runs until the runtime starts a task with a token.
 *)
 module Async : sig
+  (** A task that gives a value of type ['a], or fails with an exception. *)
   type 'a t = 'a Private.Async.t
 
   val return : 'a -> 'a t
+  (** [return x] is a task that gives [x]. *)
 
   val fail : exn -> 'a t
+  (** [fail e] is a task that fails with [e]. *)
 
   val map : ('a -> 'b) -> 'a t -> 'b t
+  (** [map f t] gives [f x] when [t] gives [x]. *)
 
   val bind : 'a t -> ('a -> 'b t) -> 'b t
+  (** [bind t f] runs [t], then runs the task [f x] when [t] gives [x]. *)
 
+  (** The binding operators of the tasks. *)
   module Syntax = Private.Async.Syntax
 
   val sleep : Span.t -> unit t
+  (** [sleep span] gives [()] after [span]. A cancel clears its timer. *)
 
   val first : 'a t list -> 'a t
   (** The first [ok] wins and cancels the other branches. If all branches fail,
@@ -114,17 +145,20 @@ end
 
 (** The keys of {!View.keyed}: an int or a string. *)
 module Key : sig
+  (** A key. *)
   type t = Private.Key.t
 
   val int : int -> t
+  (** [int n] is the key [n]. *)
 
   val string : string -> t
   (** [string s] is the key [s]. [int 1] and [string "1"] are different keys. *)
 end
 
-(** HTML text for {!View.unsafe_html}, with no check (design section 13). Do not
-    make a value from data of a user. *)
+(** HTML text for {!Kilim.View.unsafe_html}, with no check (design section 13).
+    Do not make a value from data of a user. *)
 module Unsafe_html : sig
+  (** HTML text. *)
   type t = Private.Unsafe_html.t
 
   val of_string : string -> t
@@ -136,6 +170,7 @@ end
 
 (** Virtual DOM trees (design section 08). A view is an immutable value. *)
 module View : sig
+  (** A view that sends messages of type ['msg]. *)
   type 'msg t = 'msg Private.View.t
 
   val txt : string -> 'msg t
@@ -213,6 +248,7 @@ val txt : string -> 'msg View.t
     raises [Invalid_argument] when the code builds the element. The names
     compare with the ASCII case ignored. *)
 module At : sig
+  (** An attribute or a controlled property. *)
   type t = Private.View.at
 
   val v : string -> string -> t
@@ -251,6 +287,8 @@ module At : sig
       @raise Invalid_argument as {!v}, and if [name] is empty. *)
 
   val class_ : string -> t
+  (** [class_ c] is the attribute [class="c"]. An element joins all of its
+      [class] attributes. *)
 
   val classes : string list -> t
   (** [classes l] is [class_] of the non-empty strings of [l], joined with one
@@ -340,16 +378,18 @@ end
 
     The options [~prevent_default] and [~stop] are static: the listener applies
     them synchronously, before [update]. The default of each one is [false]. An
-    element can have one handler for each DOM event name, thus not {!click} and
-    {!check} together.
+    element can have one handler for each DOM event name, thus not {!Ev.click}
+    and {!Ev.check} together.
 
     The listener reads the payload synchronously. The message function (for
-    example [f] of {!input}) runs when the message leaves the queue, thus its
+    example [f] of {!Ev.input}) runs when the message leaves the queue, thus its
     error goes to the instance, as for a task result. *)
 module Ev : sig
+  (** An event handler that sends messages of type ['msg]. *)
   type 'msg t = 'msg Private.View.handler
 
   val click : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
+  (** [click msg] gives [msg] for each [click] event. *)
 
   val link_click : ?stop:bool -> 'msg -> 'msg t
   (** [link_click msg] is for a link ([El.a] with [At.href]) that the app
@@ -384,12 +424,15 @@ module Ev : sig
   (** [change f] gives [f] the [value] of the target. *)
 
   val submit : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
+  (** [submit msg] gives [msg] for each [submit] event. To stop the browser
+      submit, give [~prevent_default:true]. *)
 
   val keydown :
     ?prevent_default:bool -> ?stop:bool -> (string -> 'msg) -> 'msg t
   (** [keydown f] gives [f] the [key] of the event. *)
 
   val keyup : ?prevent_default:bool -> ?stop:bool -> (string -> 'msg) -> 'msg t
+  (** [keyup f] gives [f] the [key] of the event. *)
 
   val focus : ?prevent_default:bool -> ?stop:bool -> 'msg -> 'msg t
   (** [focus] uses [focusin], which bubbles. *)
@@ -431,8 +474,8 @@ end
     [linearGradient].
 
     The namespace of an element comes from its place: [svg] starts the SVG
-    namespace, and the children of [foreign_object] are HTML. Thus {!a},
-    {!title} and {!style} in an [svg] element are SVG elements.
+    namespace, and the children of [foreign_object] are HTML. Thus {!El.a},
+    {!El.title} and {!El.style} in an [svg] element are SVG elements.
 
     Each function raises [Invalid_argument] for a duplicate attribute or handler
     (see {!At} and {!Ev}). *)
@@ -770,9 +813,11 @@ end
 
 (** Commands: the work that [update] asks for, as a value. *)
 module Cmd : sig
+  (** A command that gives messages of type ['msg]. *)
   type 'msg t = 'msg Private.Cmd.t
 
   val none : 'msg t
+  (** [none] starts no task. *)
 
   val batch : 'msg t list -> 'msg t
   (** The tasks start in the order of the list. *)
@@ -794,16 +839,19 @@ module Cmd : sig
 end
 
 (** Subscriptions: the event sources that the model needs, with keys (design
-    section 08). [subs] of {!App.make} gives a set of subscriptions for a model.
-    After a render, the runtime compares the keys of the set with the keys of
-    the last set. A new key starts its subscription, a removed key stops it, and
-    a key that stays keeps it. *)
+    section 08). [subs] of {!Kilim.App.make} gives a set of subscriptions for a
+    model. After a render, the runtime compares the keys of the set with the
+    keys of the last set. A new key starts its subscription, a removed key stops
+    it, and a key that stays keeps it. *)
 module Sub : sig
+  (** A set of subscriptions that give messages of type ['msg]. *)
   type 'msg t = 'msg Private.Sub.t
 
   val none : 'msg t
+  (** [none] is the empty set. *)
 
   val batch : 'msg t list -> 'msg t
+  (** [batch l] has all the subscriptions of the sets of [l]. *)
 
   val every : Span.t -> 'msg -> 'msg t
   (** [every span msg] sends [msg] [span] after its start, then [span] after
@@ -843,6 +891,8 @@ end
 
 (** An application: the root instance. *)
 module App : sig
+  (** An app that {!make} gives, for [Kilim_browser.run] or a page of
+      kilim.testing. *)
   type t = Private.App.t
 
   val make :
@@ -1021,7 +1071,7 @@ module Component : sig
 
     val id : (props, model, msg, out) id
     (** The identity of the component: make it one time, at the top level, with
-        {!Component.id}. *)
+        {!Component.val-id}. *)
 
     val init : props -> model * msg Cmd.t
     (** The mount calls [init]. Its commands become task requests: the tasks
@@ -1060,8 +1110,10 @@ module Component : sig
       With [Defaults.subs], the instance has no subscription pass. *)
   module Defaults : sig
     val subs : 'p -> 'm -> 'msg Sub.t
+    (** [subs _ _] is {!Sub.none}. *)
 
     val equal_props : 'p -> 'p -> bool
+    (** [equal_props] is {!shallow_equal}. *)
   end
 
   val v :
@@ -1231,9 +1283,9 @@ module Url : sig
       has the path [["a"; ""]]. A first segment ["."] before an empty segment is
       not in the path: ["/.//a"] has the path [[""; "a"]] (see {!to_string}).
       The query comes from the text between the first [?] and the first [#], as
-      {!query} gives it. The fragment is the decoded text after the first [#],
-      or [None] with no [#]. The path and the fragment keep bytes that are not
-      valid UTF-8. The query replaces them with U+FFFD.
+      {!val-query} gives it. The fragment is the decoded text after the first
+      [#], or [None] with no [#]. The path and the fragment keep bytes that are
+      not valid UTF-8. The query replaces them with U+FFFD.
 
       A browser removes each ["."] segment, and each [".."] segment with the
       segment before it, also in the form ["%2E"] (see {!to_string}). Thus the

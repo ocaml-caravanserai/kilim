@@ -1,11 +1,11 @@
 (** kilim.websocket: a WebSocket as a subscription (design section 08).
 
-    {!connect} is a subscription: its key comes from the URL and [~id]. A new
-    key opens a socket, and a removed key (a change of the model, an unmount)
-    closes it. The events of the socket come as messages: {!Opened} gives the
-    connection, and the app keeps it in its model to {!send} text and to
-    {!close} the socket. The effects are tasks with a result: the app maps them
-    to a message with [Cmd.task].
+    {!val-connect} is a subscription: its key comes from the URL and [~id]. A
+    new key opens a socket, and a removed key (a change of the model, an
+    unmount) closes it. The events of the socket come as messages: {!Opened}
+    gives the connection, and the app keeps it in its model to {!val-send} text
+    and to {!val-close} the socket. The effects are tasks with a result: the app
+    maps them to a message with [Cmd.task].
 
     In the browser, [main.ml] calls [Kilim_websocket_browser.install ()] (the
     library kilim.websocket.browser) before [Kilim_browser.run]. In the tests of
@@ -30,7 +30,7 @@ type close = {code: int; reason: string; clean: bool}
 type conn
 
 type event =
-  | Opened of conn  (** The socket is open: {!send} can send text. *)
+  | Opened of conn  (** The socket is open: {!val-send} can send text. *)
   | Message of string  (** A text frame from the server. *)
   | Closed of close  (** The socket closed. No event comes after it. *)
   | Failed
@@ -86,6 +86,8 @@ type handlers =
     functions of [h] for its events, each one in a later task. *)
 type driver = {connect: string -> handlers -> socket}
 
+(**/**)
+
 (** The internals for the drivers and the tests. They can change at any time. *)
 module Private : sig
   val set_driver : driver option -> unit
@@ -107,3 +109,5 @@ module Private : sig
   (** The live subscriptions of {!connect}, for the leak tests. The count
       decreases at the end of the key, not at the close event. *)
 end
+
+(**/**)

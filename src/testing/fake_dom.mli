@@ -1,5 +1,5 @@
 (** A strict fake DOM in pure OCaml (design section 14). It gives the DOM
-    operations of {!Kilim.Private.Dom} and counts each operation.
+    operations of the diff and counts each operation.
 
     The fake DOM is strict: an operation that the real DOM permits, but that the
     diff must not do, raises {!Misuse}. For example, for [insert_before], a
@@ -52,9 +52,14 @@ exception Misuse of string
 exception Fault
 
 val create : unit -> t
+(** [create ()] is a new document with all counts at 0. *)
+
+(**/**)
 
 val ops : t -> node Kilim.Private.Dom.t
 (** The DOM operations on the nodes of [t]. *)
+
+(**/**)
 
 val element : string -> node
 (** [element name] is a new HTML element with no operation counted, for example
@@ -92,21 +97,29 @@ val focused : t -> node option
 (** {1 The tree} *)
 
 val parent : node -> node option
+(** The parent of a node, or [None] for a node with no parent. *)
 
 val children : node -> node list
+(** The children of a node, in order. *)
 
 val name : node -> string
 (** The name of an element, ["#text"] for a text node, or ["#html"] for the HTML
     of [set_inner_html]. *)
 
+(**/**)
+
 val ns : node -> Kilim.Private.Dom.ns option
 (** The namespace of an element. *)
+
+(**/**)
 
 val text : node -> string
 (** The text of a text node or of the HTML of [set_inner_html], or the text of
     all text nodes inside an element. *)
 
 val attribute : node -> string -> string option
+(** [attribute n name] is the value of the attribute [name] of [n], if it has
+    one. *)
 
 val value : node -> string
 (** The live [value] property (see the model above), with no count. *)
@@ -118,6 +131,8 @@ val group : node -> node list
 (** The other radio buttons of the group of a radio button (see the model
     above), in the order of the document, or [[]]. *)
 
+(**/**)
+
 val browser_set : node -> Kilim.Private.Dom.prop -> unit
 (** [browser_set node prop] writes a property as the browser does, for example
     when the user types: no count and no fault. The model above applies.
@@ -125,15 +140,23 @@ val browser_set : node -> Kilim.Private.Dom.prop -> unit
     @raise Misuse if [node] is not an element. *)
 
 val cell : node -> Kilim.Private.Dom.cell option
+(** The cell of an element: the state that the diff keeps for it (handlers,
+    value, checked). *)
+
+(**/**)
 
 val listeners : node -> (string * bool) list
 (** The listeners of the element, with their passive flag, sorted. *)
+
+(**/**)
 
 val fire : node -> string -> 'a Kilim.Private.Dom.payload -> 'a -> unit
 (** [fire node event payload x] calls the handler for [event] in the cell of
     [node] with [x].
 
     @raise Misuse if no handler exists, or if its payload is different. *)
+
+(**/**)
 
 val to_html : node -> string
 (** The HTML of the node, with the attributes sorted by name. *)

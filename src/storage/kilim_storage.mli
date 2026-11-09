@@ -46,6 +46,8 @@ type driver =
   ; set: area -> string -> string -> (unit, error) result
   ; remove: area -> string -> (unit, error) result }
 
+(**/**)
+
 (** The internals for the drivers and the tests. They can change at any time. *)
 module Private : sig
   val set_driver : driver option -> unit
@@ -55,3 +57,5 @@ module Private : sig
   val driver : unit -> driver option
   (** The driver, if there is one. *)
 end
+
+(**/**)

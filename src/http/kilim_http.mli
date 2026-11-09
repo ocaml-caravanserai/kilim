@@ -77,6 +77,8 @@ val get_json :
     request. *)
 type transport = {send: request -> (response, string) result Kilim.Async.t}
 
+(**/**)
+
 (** The internals for kilim.http.browser and kilim.testing. They can change at
     any time. *)
 module Private : sig
@@ -86,3 +88,5 @@ module Private : sig
 
   val transport : unit -> transport option
 end
+
+(**/**)

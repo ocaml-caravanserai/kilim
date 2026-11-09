@@ -1,5 +1,5 @@
-(** The router of kilim (design section 06): the routes of an app in the path of
-    the URL, with the History API.
+(** kilim.router: the routes of an app in the path of the URL, with the History
+    API (design section 06).
 
     The app keeps the route in its model. [parse] gives a route of the app from
     a {!Kilim.Url.location}, and [print] is its inverse. A route that the app
@@ -87,8 +87,8 @@ val push : 'r t -> 'r -> unit Kilim.Async.t
     same route. *)
 
 val replace : 'r t -> 'r -> unit Kilim.Async.t
-(** [replace r route] is as {!push}, but with no new entry in the history and no
-    scroll. *)
+(** [replace r route] is as {!val-push}, but with no new entry in the history
+    and no scroll. *)
 
 val back : unit -> unit Kilim.Async.t
 (** [back ()] is one step back in the history. The task gives its result at
@@ -97,22 +97,22 @@ val back : unit -> unit Kilim.Async.t
 val changes : 'r t -> ('r -> 'msg) -> 'msg Kilim.Sub.t
 (** [changes r f] gives [f route] for each change of the URL of the document:
     each [popstate] event (the buttons back and forward of the browser, and
-    {!back}), and each {!push} and {!replace} of a router of the page. Each
-    subscription keeps the last URL that it gave, and gives no message for the
-    same URL two times. The key comes from [base].
+    {!val-back}), and each {!val-push} and {!val-replace} of a router of the
+    page. Each subscription keeps the last URL that it gave, and gives no
+    message for the same URL two times. The key comes from [base].
 
     A subscription starts at a render, thus after the init tasks of the turn.
-    When it starts, it gives the route of the URL if a {!push} or a {!replace}
-    changed the URL after the last route that the program got (from {!current}
-    or from a message of [changes]), or if the URL is not the URL of that route.
-    A subscription that stops and starts with no change of the URL gives no
-    message. Thus a redirect in [update] (for example a [replace] for an unknown
-    route of [current]) and a push in [init] give a message. A new history
-    driver starts with no change.
+    When it starts, it gives the route of the URL if a {!val-push} or a
+    {!val-replace} changed the URL after the last route that the program got
+    (from {!current} or from a message of [changes]), or if the URL is not the
+    URL of that route. A subscription that stops and starts with no change of
+    the URL gives no message. Thus a redirect in [update] (for example a
+    [replace] for an unknown route of [current]) and a push in [init] give a
+    message. A new history driver starts with no change.
 
     A message of a [popstate] event is not discrete: the runtime renders it at
-    the next frame, or after 100 ms. A message of a {!push} in a click renders
-    in the turn of the click. *)
+    the next frame, or after 100 ms. A message of a {!val-push} in a click
+    renders in the turn of the click. *)
 
 val link :
      'r t
@@ -127,6 +127,8 @@ val link :
     modifier key or the middle button gives no message: the browser opens the
     URL, for example in a new tab. Do not put a [href] in [at]. *)
 
+(**/**)
+
 (** The internals for the drivers and the tests. They can change at any time. *)
 module Private : sig
   val set_history : history option -> unit
@@ -140,3 +142,5 @@ module Private : sig
   val listeners : unit -> int
   (** The live {!changes} subscriptions, for the leak tests. *)
 end
+
+(**/**)

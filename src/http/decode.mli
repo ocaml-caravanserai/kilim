@@ -9,6 +9,7 @@ type 'a t
 type error = {path: string list; message: string}
 
 val decode : 'a t -> Json.t -> ('a, error) result
+(** [decode d v] gives the result of [d] for the value [v]. *)
 
 val decode_string : 'a t -> string -> ('a, error) result
 (** [decode_string d s] parses [s] with {!Json.parse}, then decodes the value. A
@@ -19,10 +20,13 @@ val error_to_string : error -> string
     path [[]], only the message. *)
 
 val string : string t
+(** A JSON string. *)
 
 val bool : bool t
+(** A JSON boolean. *)
 
 val float : float t
+(** A JSON number. *)
 
 val int : int t
 (** An integral number in the range of [int] of the build: from [min_int] to
@@ -55,11 +59,13 @@ val value : Json.t t
 (** The value with no change. *)
 
 val succeed : 'a -> 'a t
+(** [succeed x] gives [x] for each value. *)
 
 val fail : string -> 'a t
 (** [fail message] fails with [message]. *)
 
 val map : ('a -> 'b) -> 'a t -> 'b t
+(** [map f d] gives [f x] when [d] gives [x]. *)
 
 val bind : 'a t -> ('a -> 'b t) -> 'b t
 (** [bind d f] decodes the same value with [f x] when [d] gives [x]. *)
@@ -68,8 +74,11 @@ val one_of : 'a t list -> 'a t
 (** The result of the first decoder that does not fail. If all fail, the error
     of the last one. [one_of []] always fails. *)
 
+(** The binding operators of the decoders. For example, a decoder of a record:
+    [let+ x = field "x" int and+ y = field "y" int in {x; y}]. *)
 module Syntax : sig
   val ( let+ ) : 'a t -> ('a -> 'b) -> 'b t
+  (** [let+ x = d in e] is [map (fun x -> e) d]. *)
 
   val ( and+ ) : 'a t -> 'b t -> ('a * 'b) t
   (** The two decoders decode the same value. *)

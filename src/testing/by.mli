@@ -9,6 +9,7 @@ type t =
   | Label of string  (** See {!label}. *)
 
 val node : Fake_dom.node -> t
+(** [node n] finds the node [n]. *)
 
 val test_id : string -> t
 (** [test_id s] finds the one element with the attribute [data-testid="s"]. *)
