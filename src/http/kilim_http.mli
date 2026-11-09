@@ -80,11 +80,9 @@ type transport = {send: request -> (response, string) result Kilim.Async.t}
 (** The internals for kilim.http.browser and kilim.testing. They can change at
     any time. *)
 module Private : sig
-  val set_transport : transport -> unit
-  (** The global transport. The last call wins. *)
-
-  val clear : unit -> unit
-  (** No transport. *)
+  val set_transport : transport option -> unit
+  (** [set_transport (Some t)] makes [t] the transport of the program, and
+      [set_transport None] removes the transport. *)
 
   val transport : unit -> transport option
 end

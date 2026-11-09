@@ -38,4 +38,6 @@ let remove area key = task (fun d -> d.remove area key)
 
 module Private = struct
   let set_driver d = current := d
+
+  let driver () = !current
 end

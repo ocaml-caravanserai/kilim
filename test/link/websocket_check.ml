@@ -9,6 +9,7 @@ let () =
     ignore s ;
     ignore (W.send : W.conn -> string -> (unit, W.error) result Kilim.Async.t) ;
     ignore (W.close : W.conn -> unit Kilim.Async.t) ;
+    ignore (W.error_to_string Not_open) ;
     W.Private.set_driver
       (Some
          { connect=

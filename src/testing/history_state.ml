@@ -12,7 +12,7 @@ type t =
   ; mutable scrolls: int
   ; listeners: (unit -> unit) Dlist.t }
 
-let last : t option ref = ref None
+let last = Last_host.make (fun s -> s.host)
 
 let entry s = List.nth s.entries s.index
 
@@ -53,28 +53,23 @@ let fresh host url =
     ; scrolls= 0
     ; listeners= Dlist.create () }
   in
-  last := Some s ;
+  Last_host.set last s ;
   Kilim_router.Private.set_history (Some (driver s))
 
 (* The state of the host changes in place: the live subscriptions keep it. *)
 let set_url host url =
-  match !last with
-  | Some s when s.host == host ->
+  match Last_host.find last host with
+  | Some s ->
       s.entries <- [url] ;
       s.index <- 0
-  | Some _ | None ->
+  | None ->
       fresh host url
 
 let install host =
-  match !last with
-  | Some s when s.host == host ->
+  match Last_host.find last host with
+  | Some s ->
       Kilim_router.Private.set_history (Some (driver s))
-  | Some _ | None ->
+  | None ->
       fresh host "/"
 
-let of_host host =
-  match !last with
-  | Some s when s.host == host ->
-      s
-  | Some _ | None ->
-      failwith "Kilim_testing.History_mock: the page is not the last page"
+let of_host host = Last_host.get last host ~mock:"History_mock"

@@ -64,8 +64,8 @@ Measured with OCaml 5.5.1, js_of_ocaml and wasm_of_ocaml 6.4.1, Brr 0.0.9:
 | `example-components` | `main.bc.js` (js_of_ocaml) | 41,805 bytes | 44,000 bytes |
 | `example-components` | The main `.wasm` file (wasm_of_ocaml) | 43,918 bytes | 46,000 bytes |
 | `example-components` | `main.bc.wasm.js` (the launcher) | 6,938 bytes | 7,500 bytes |
-| `example-search` | `main.bc.js` (js_of_ocaml) | 46,854 bytes | 49,500 bytes |
-| `example-search` | The main `.wasm` file (wasm_of_ocaml) | 51,031 bytes | 54,000 bytes |
+| `example-search` | `main.bc.js` (js_of_ocaml) | 46,897 bytes | 49,500 bytes |
+| `example-search` | The main `.wasm` file (wasm_of_ocaml) | 51,105 bytes | 54,000 bytes |
 | `example-search` | `main.bc.wasm.js` (the launcher) | 7,546 bytes | 8,000 bytes |
 
 The components example adds about 4.0 KB (js_of_ocaml) and 6.1 KB

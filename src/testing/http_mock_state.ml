@@ -26,7 +26,7 @@ type t =
   ; mutable aborted: int
   ; transport: H.transport }
 
-let live : t option ref = ref None
+let live = Last_host.make (fun m -> m.host)
 
 let page_url = "http://localhost/"
 
@@ -121,10 +121,7 @@ let send m (req : H.request) =
 
 let start host =
   let m =
-    match !live with
-    | Some m when m.host == host ->
-        m
-    | Some _ | None ->
+    Last_host.find_or live host (fun () ->
         let rec m =
           { host
           ; pages= 0
@@ -135,24 +132,23 @@ let start host =
           ; aborted= 0
           ; transport= {H.send= (fun r -> send m r)} }
         in
-        live := Some m ;
-        m
+        m )
   in
   m.pages <- m.pages + 1 ;
-  H.Private.set_transport m.transport ;
+  H.Private.set_transport (Some m.transport) ;
   m
 
 let stop m =
-  match !live with
+  match Last_host.current live with
   | Some l when l == m ->
       m.pages <- m.pages - 1 ;
       if m.pages = 0 then begin
-        live := None ;
+        Last_host.clear live ;
         (* Not the transport of another library, for example kilim.http.browser
            in a test of the browser. *)
         match H.Private.transport () with
         | Some t when t == m.transport ->
-            H.Private.clear ()
+            H.Private.set_transport None
         | Some _ | None ->
             ()
       end
@@ -161,7 +157,7 @@ let stop m =
 
 (* A reply goes only to the live mock. *)
 let check_live m =
-  match !live with
+  match Last_host.current live with
   | Some l when l == m ->
       ()
   | Some _ | None ->

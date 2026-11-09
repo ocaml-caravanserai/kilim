@@ -16,6 +16,6 @@ let () =
   ignore (H.Decode.decode_string d (H.Json.to_string (H.Json.Number 1.))) ;
   ignore (H.Decode.error_to_string {path= []; message= ""}) ;
   ignore (H.get_json ~timeout:(Kilim.Span.ms 1) d "/x") ;
-  H.Private.set_transport {send= (fun _ -> Kilim.Async.return (Error ""))} ;
+  H.Private.set_transport (Some {send= (fun _ -> Kilim.Async.return (Error ""))}) ;
   ignore (H.Private.transport ()) ;
-  H.Private.clear ()
+  H.Private.set_transport None

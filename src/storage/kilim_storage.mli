@@ -51,4 +51,7 @@ module Private : sig
   val set_driver : driver option -> unit
   (** [set_driver (Some d)] makes [d] the driver of the program, and
       [set_driver None] removes the driver. *)
+
+  val driver : unit -> driver option
+  (** The driver, if there is one. *)
 end

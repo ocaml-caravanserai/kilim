@@ -13,5 +13,6 @@ let () =
       (Some
          { get= (fun _ _ -> Ok None)
          ; set= (fun _ _ _ -> Error Quota_exceeded)
-         ; remove= (fun _ _ -> Error Unavailable) } )
+         ; remove= (fun _ _ -> Error Unavailable) } ) ;
+    ignore (S.Private.driver ())
   end

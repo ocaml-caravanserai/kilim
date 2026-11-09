@@ -11,6 +11,9 @@ module By = Kilim_testing.By
 module M = Kilim_testing.Http_mock
 module Host = Kilim_testing.Host
 
+(* No transport. *)
+let clear () = Http.Private.set_transport None
+
 let show = function Ok s -> s | Error e -> Http.error_to_string e
 
 type msg = Go | Got of string
@@ -40,9 +43,7 @@ let go p = P.click p (By.text "go")
 (* The page of [app], and the stop at the end, also after a failure. *)
 let with_page ?latest task f =
   let p = P.start (app ?latest task) in
-  Fun.protect
-    ~finally:(fun () -> P.stop p ; Http.Private.clear ())
-    (fun () -> f p)
+  Fun.protect ~finally:(fun () -> P.stop p ; clear ()) (fun () -> f p)
 
 let get_json ?timeout url () =
   Async.map
@@ -154,7 +155,7 @@ let init_unmatched () =
          () )
   in
   Fun.protect
-    ~finally:(fun () -> P.stop p ; Http.Private.clear ())
+    ~finally:(fun () -> P.stop p ; clear ())
     (fun () ->
       equal int 1 (List.length (M.unmatched p)) ;
       P.run p ;
@@ -350,7 +351,7 @@ let unmount () =
   let w = Weak.create 1 in
   let p = P.start (holder w) in
   Fun.protect
-    ~finally:(fun () -> P.stop p ; Http.Private.clear ())
+    ~finally:(fun () -> P.stop p ; clear ())
     (fun () ->
       M.on_get p "/n" `Never ;
       P.click p (By.text "show") ;
@@ -367,7 +368,7 @@ let unmount () =
 
 (* No transport: the task fails with Failure. *)
 let no_transport () =
-  Http.Private.clear () ;
+  clear () ;
   let r = ref None in
   let q = Private.Run_queue.create ~schedule:ignore in
   let host = Host.host (Host.create ()) in
@@ -386,7 +387,7 @@ let no_transport () =
    stop. *)
 let stop_aborts () =
   let p = P.start (app (ref (get_json "/n"))) in
-  Fun.protect ~finally:Http.Private.clear (fun () ->
+  Fun.protect ~finally:clear (fun () ->
       M.on_get p "/n" `Never ;
       go p ;
       equal int 1 (M.pending p) ;
@@ -402,7 +403,7 @@ let current () =
 
 (* The stop hook: Page.stop stops the mock of its host. *)
 let stop_hook () =
-  Fun.protect ~finally:Http.Private.clear (fun () ->
+  Fun.protect ~finally:clear (fun () ->
       let task = ref (get_json "/a") in
       let p1 = P.start (app task) in
       M.on_get p1 "/a" (`Json {|["one"]|}) ;
@@ -440,7 +441,8 @@ let stop_hook () =
       P.run p4 ;
       equal string "four" (text p4) ;
       (* The stop does not clear the transport of another library. *)
-      Http.Private.set_transport {send= (fun _ -> Async.return (Error "other"))} ;
+      Http.Private.set_transport
+        (Some {send= (fun _ -> Async.return (Error "other"))}) ;
       P.stop p4 ;
       equal string "set" (current ()) )
 
