@@ -21,6 +21,12 @@ The leak tests and the link check run in the CI step "Test", with the other
 tests. `make budgets` runs the size, the allocation, the DOM operation, the
 partial update and the token release checks.
 
+The timing budget is not a part of the CI budget gate. Timing on shared CI
+machines changes from one run to the next. Thus the timing budget waits for
+fixed hardware. Version 0.1.0 has no timing check. The CI budget gate is
+the size, the allocations, the DOM operations, the partial update, the
+token release, the leaks and the linked modules.
+
 ## Size
 
 `make size` (and `make budgets`) builds five programs in the release
