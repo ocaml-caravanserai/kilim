@@ -61,4 +61,4 @@ val leaves : 'msg t -> 'msg leaf list
 (** The leaves in the order of the tree (left to right). The walk uses an
     explicit stack: a deep [Batch] does not overflow the stack.
 
-    @raise Invalid_argument for a duplicate key of [Run]. *)
+    Raises [Invalid_argument] for a duplicate key of [Run]. *)

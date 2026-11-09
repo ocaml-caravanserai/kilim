@@ -231,7 +231,7 @@ val probes : Key.t array -> Key.t array -> int option
     common start and end, the plan adds each key of [nk] to the table, then
     finds each key of [ok]. For the tests.
 
-    @raise Invalid_argument for a duplicate key in [nk]. *)
+    Raises [Invalid_argument] for a duplicate key in [nk]. *)
 
 (** A retained node, with its message type hidden. *)
 type 'node child = Child : ('node, 'msg) node -> 'node child

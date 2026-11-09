@@ -186,10 +186,9 @@ module View : sig
         (List.map (fun it -> (Key.int it.id, El.li [txt it.label])) items)
       ]}
 
-      @raise Invalid_argument
-        if [el []] is not an element, or is a void element. If [rows] has a
-        duplicate key, the diff raises [Invalid_argument] before it writes the
-        DOM of the element. *)
+      Raises [Invalid_argument] if [el []] is not an element, or is a void
+      element. If [rows] has a duplicate key, the diff raises [Invalid_argument]
+      before it writes the DOM of the element. *)
 
   val unsafe_html : el:('msg t list -> 'msg t) -> Unsafe_html.t -> 'msg t
   (** [unsafe_html ~el h] is the element [el []] with the content [h], which the
@@ -197,7 +196,7 @@ module View : sig
       it does not change, the diff writes nothing. Thus the selection, the focus
       and the scroll inside the content stay.
 
-      @raise Invalid_argument as {!keyed}. *)
+      Raises [Invalid_argument] as {!keyed} does. *)
 
   val boundary : ?key:string -> fallback:(exn -> 'msg t) -> 'msg t -> 'msg t
   (** [boundary ~key ~fallback child] is [child] in an error scope (design
@@ -264,10 +263,10 @@ module At : sig
       URL of [srcset], as the srcset parser of the browser finds them, and each
       URL of [ping].
 
-      @raise Invalid_argument
-        if [name] is not an ASCII letter or [_], then letters, digits, [_], [-]
-        or [.] (thus a name with [:] is refused: use [href] in SVG), if [name]
-        starts with [on] or is [srcdoc], or if a URL has a refused scheme. *)
+      Raises [Invalid_argument] if [name] is not an ASCII letter or [_], then
+      letters, digits, [_], [-] or [.] (thus a name with [:] is refused: use
+      [href] in SVG), if [name] starts with [on] or is [srcdoc], or if a URL has
+      a refused scheme. *)
 
   val none : t
   (** [none] adds nothing, for example
@@ -279,12 +278,12 @@ module At : sig
   val data : string -> string -> t
   (** [data name value] is [v ("data-" ^ name) value].
 
-      @raise Invalid_argument as {!v}, and if [name] is empty. *)
+      Raises [Invalid_argument] as {!v} does, and if [name] is empty. *)
 
   val aria : string -> string -> t
   (** [aria name value] is [v ("aria-" ^ name) value].
 
-      @raise Invalid_argument as {!v}, and if [name] is empty. *)
+      Raises [Invalid_argument] as {!v} does, and if [name] is empty. *)
 
   val class_ : string -> t
   (** [class_ c] is the attribute [class="c"]. An element joins all of its
@@ -492,9 +491,9 @@ module El : sig
       element gets the usual spelling of the name. For example, [v "DIV"] is
       [div] and [v "foreignobject"] is [foreignObject].
 
-      @raise Invalid_argument
-        if [name] (with the ASCII case ignored) is not on the allowlist, or if
-        [name] is a void element and the children are not empty. *)
+      Raises [Invalid_argument] if [name] (with the ASCII case ignored) is not
+      on the allowlist, or if [name] is a void element and the children are not
+      empty. *)
 
   (** {1 Void HTML elements} *)
 
@@ -859,9 +858,8 @@ module Sub : sig
       [span]: two [every] with the same span get their position among them in
       the key. A key that stays sends the newest [msg].
 
-      @raise Invalid_argument
-        if [span] is zero. In [subs], this goes to the error scope of the
-        instance. *)
+      Raises [Invalid_argument] if [span] is zero. In [subs], this goes to the
+      error scope of the instance. *)
 
   val run : key:string -> (('msg -> unit) -> unit Async.t) -> 'msg t
   (** [run ~key f] starts the task [f send] at a render. [send m] sends the
@@ -871,7 +869,7 @@ module Sub : sig
       not start again. An error of the task goes to the error scope of the
       instance.
 
-      @raise Invalid_argument for a duplicate key, in [subs]. *)
+      Raises [Invalid_argument] for a duplicate key, in [subs]. *)
 end
 
 (** The context of the [update] of a component (design section 09). *)

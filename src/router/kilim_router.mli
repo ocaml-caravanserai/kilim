@@ -64,9 +64,9 @@ val make :
     the browser resolves it, and the URL can go out of [base]. [History_mock]
     does not resolve these segments.
 
-    @raise Invalid_argument
-      if [base] is not [""] or ["/"] and it does not start with exactly one [/],
-      or it ends with [/], or it has a character outside [A-Za-z0-9-._~/]. *)
+    Raises [Invalid_argument] if [base] is not [""] or ["/"] and it does not
+    start with exactly one [/], or it ends with [/], or it has a character
+    outside [A-Za-z0-9-._~/]. *)
 
 val href : 'r t -> 'r -> string
 (** [href r route] is [base] and [Kilim.Url.to_string (print route)], for

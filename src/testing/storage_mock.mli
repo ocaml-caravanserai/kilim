@@ -15,7 +15,7 @@ val preset : Host.t -> Kilim_storage.area -> (string * string) list -> unit
 val contents : 'out Page.t -> Kilim_storage.area -> (string * string) list
 (** The keys and values of [area], sorted by key.
 
-    @raise Failure if a page of another host started after the page. *)
+    Raises [Failure] if a page of another host started after the page. *)
 
 val block : 'out Page.t -> unit
 (** Each later call of the driver gives [Error Unavailable], as a browser that

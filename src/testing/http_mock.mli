@@ -44,8 +44,8 @@ val on :
     reply. With [~once:true], the mock removes the reply after its first
     request.
 
-    @raise Invalid_argument
-      if the page is stopped, or if a page of another host started after it. *)
+    Raises [Invalid_argument] if the page is stopped, or if a page of another
+    host started after it. *)
 
 val on_get :
   'out Page.t -> ?delay:Kilim.Span.t -> ?once:bool -> string -> reply -> unit
@@ -68,4 +68,4 @@ val unmatched : 'out Page.t -> Kilim_http.request list
 (** The requests that had no reply, the oldest first. *)
 
 val expect_done : 'out Page.t -> unit
-(** @raise Failure if a request is in flight or had no reply. *)
+(** Raises [Failure] if a request is in flight or had no reply. *)

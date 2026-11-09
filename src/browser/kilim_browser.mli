@@ -31,7 +31,7 @@ module Private : sig
   val start : Brr.El.t -> Kilim.App.t -> app
   (** As {!run}, at once, with the element.
 
-      @raise Invalid_argument if the element has a live app. *)
+      Raises [Invalid_argument] if the element has a live app. *)
 
   val mounted : Brr.El.t -> app option
   (** The live app of an element. A trap of wasm_of_ocaml in the first turn of
@@ -85,10 +85,9 @@ val run : mount:string -> Kilim.App.t -> unit
     kilim app inside the DOM of another kilim app is not supported. Apps side by
     side work. One element has at most one live app.
 
-    @raise Invalid_argument
-      if the element does not exist and the document is not "loading", or if the
-      element has a live app. After the wait, a missing element goes to the
-      error handler. *)
+    Raises [Invalid_argument] if the element does not exist and the document is
+    not "loading", or if the element has a live app. After the wait, a missing
+    element goes to the error handler. *)
 
 (** {!Kilim.Unsafe_html}, and the values of Trusted Types (design section 13).
 *)
@@ -107,8 +106,8 @@ module Unsafe_html : sig
       [Unsafe_html.of_string (String(v))]: thus a small polyfill that gives
       strings works.
 
-      @raise Invalid_argument
-        if [trustedTypes] exists and [v] is not a [TrustedHTML]. *)
+      Raises [Invalid_argument] if [trustedTypes] exists and [v] is not a
+      [TrustedHTML]. *)
 end
 
 (** The tasks of {!Kilim.Async}, and the tasks from Brr futures. *)

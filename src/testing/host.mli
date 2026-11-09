@@ -35,9 +35,8 @@ val create : ?cost:float -> ?frame_ms:int -> unit -> t
     error handler and the warning handler of {!Kilim.Private} to the lists of
     the new host.
 
-    @raise Invalid_argument
-      if [cost] is not more than 0 and at most 50: with more, a turn can make no
-      progress. Also if [frame_ms] is not positive. *)
+    Raises [Invalid_argument] if [cost] is not more than 0 and at most 50: with
+    more, a turn can make no progress. Also if [frame_ms] is not positive. *)
 
 (**/**)
 
@@ -87,7 +86,7 @@ val idle : ?limit:int -> ?until:(unit -> bool) -> t -> unit
     [true]. The host calls [until] before each step and before each move of the
     clock. A frame that waits while the page is hidden does not count.
 
-    @raise Failure after [limit] steps (default 1,000,000). *)
+    Raises [Failure] after [limit] steps (default 1,000,000). *)
 
 val live_timers : t -> int
 (** The timers of [set_timer] that did not run and are not cleared. *)
