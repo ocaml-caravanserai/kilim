@@ -79,6 +79,22 @@
   test_storage.bc.wasm.js
   (glob_files test_storage.bc.wasm.assets/*.wasm)))
 
+; The checks of the Chrome back end (test_chrome.mjs): a crash of the
+; renderer and a command with no reply. They use no page of a program.
+
+(rule
+ (alias runtest)
+ (deps
+  test_chrome.mjs
+  browser.mjs
+  chrome.mjs
+  playwright.mjs
+  (env_var KILIM_CHROME)
+  (env_var KILIM_REQUIRE_CHROME)
+  (env_var KILIM_REQUIRE_NODE))
+ (action
+  (run %{exe:../node/node_run.exe} test_chrome.mjs)))
+
 ; The dev profile. Chrome in the alias runtest, Firefox and WebKit in the alias
 ; browsers. --no-wasm: the js_of_ocaml pages in a browser with no WebAssembly:
 ; Chrome with no JIT (as Chrome with "JavaScript optimization" off), and
