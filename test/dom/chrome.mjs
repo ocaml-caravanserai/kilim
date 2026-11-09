@@ -41,7 +41,8 @@ export const findChrome = () => {
 //   whenGone                          a promise that rejects when Chrome exits,
 //                                     with the end of the stderr of Chrome
 //   gone()                            that error, or null
-//   close()                           stops Chrome and removes its directory
+//   close()                           stops Chrome, waits for its exit, then
+//                                     removes its directory (a promise)
 const launch = (chrome, flags = []) => {
   const home = mkdtempSync(join(tmpdir(), 'kilim-chrome-'));
   const env = { HOME: home, TMPDIR: tmpdir(), PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' };
@@ -104,8 +105,23 @@ const launch = (chrome, flags = []) => {
     listeners.add(f);
     return () => listeners.delete(f);
   };
-  const close = () => {
+  // Chrome can write to its directory until it exits. Thus close waits for
+  // the exit (2 s, then SIGKILL and 2 s more) before it removes the directory.
+  const exited = new Promise((ok) => {
+    if (proc.exitCode !== null || proc.signalCode !== null) ok();
+    else proc.once('exit', ok);
+  });
+  const waitExit = (ms) => {
+    let timer;
+    const late = new Promise((ok) => { timer = setTimeout(() => ok(false), ms); });
+    return Promise.race([exited.then(() => true), late]).finally(() => clearTimeout(timer));
+  };
+  const close = async () => {
     proc.kill();
+    if (!(await waitExit(2000))) {
+      proc.kill('SIGKILL');
+      await waitExit(2000);
+    }
     try { rmSync(home, { recursive: true, force: true }); } catch {}
   };
   return { send, listen, whenGone, gone: () => gone, close };
@@ -186,6 +202,6 @@ export const start = async (exe, options = {}) => {
   const browser = launch(exe, options.noWasm ? ['--js-flags=--jitless'] : []);
   return {
     withPage: (limitMs, body) => withPage(browser, limitMs, body),
-    close: async () => browser.close(),
+    close: () => browser.close(),
   };
 };
