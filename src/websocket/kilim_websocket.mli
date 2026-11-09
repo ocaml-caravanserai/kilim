@@ -50,6 +50,9 @@ val connect : ?id:string -> string -> (event -> 'msg) -> 'msg Kilim.Sub.t
 
 type error = Not_open  (** The socket is not open. *)
 
+val error_to_string : error -> string
+(** ["not open"]. *)
+
 val send : conn -> string -> (unit, error) result Kilim.Async.t
 (** [send c text] sends [text] as a text frame. After a close and after the end
     of the key, the task gives [Error Not_open] and sends nothing. *)

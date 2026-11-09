@@ -449,6 +449,8 @@ let weak () =
   is_true ~msg:"the sensitivity control: the handlers keep the model"
     (escape ~leak:true)
 
+let errors () = equal string "not open" (W.error_to_string W.Not_open)
+
 let tests =
   [ group "websocket"
       [ test "open, send and push" open_send_push
@@ -460,6 +462,7 @@ let tests =
       ; test "the end of the key closes the socket" unmount
       ; test "the keys" keys
       ; test "no driver" no_driver
+      ; test "error_to_string" errors
       ; test "the URLs of the mock" urls
       ; test "the reads after the stop, the last host" after_stop
       ; test "100 mounts and stops" leak

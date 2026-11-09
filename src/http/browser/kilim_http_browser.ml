@@ -54,4 +54,4 @@ let start (r : H.request) tok : (H.response, string) result Fut.t =
 
 let transport = {H.send= (fun r -> Kilim_browser.Async.of_fut (start r))}
 
-let install () = H.Private.set_transport transport
+let install () = H.Private.set_transport (Some transport)

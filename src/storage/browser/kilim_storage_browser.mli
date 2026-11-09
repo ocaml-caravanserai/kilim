@@ -8,7 +8,7 @@
 
 val install : unit -> unit
 (** [install ()] makes the driver of this module the driver of kilim.storage. A
-    second call changes nothing. Each call of the driver reads
+    second call does nothing. Each call of the driver reads
     [window.localStorage] or [window.sessionStorage] again, then calls
     [getItem], [setItem] or [removeItem]. A value of [getItem] that is not a
     string gives [None].

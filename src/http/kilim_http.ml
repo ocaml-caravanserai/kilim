@@ -41,9 +41,7 @@ type transport = {send: request -> (response, string) result Async.t}
 let current : transport option ref = ref None
 
 module Private = struct
-  let set_transport t = current := Some t
-
-  let clear () = current := None
+  let set_transport t = current := t
 
   let transport () = !current
 end

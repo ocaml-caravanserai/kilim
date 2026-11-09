@@ -1,6 +1,6 @@
-(** The history driver of {!Kilim_router} on the History API of the browser
-    (design section 06). Call {!install} in [main.ml], before
-    [Kilim_browser.run]:
+(** kilim.router.browser: the history driver of kilim.router on the History API
+    of the browser (design section 06).
+
     {[
     let () =
       Kilim_router_browser.install () ;
@@ -9,7 +9,7 @@
 
 val install : unit -> unit
 (** [install ()] makes the driver of this module the history driver of
-    kilim.router. A second call does nothing more. The driver:
+    kilim.router. A second call does nothing. The driver:
     - [location] reads [pathname], [search] and [hash] of [location].
     - [push] calls [history.pushState] with a null state and the URL that it
       resolves against the URL of the document ([location.href]). Then it

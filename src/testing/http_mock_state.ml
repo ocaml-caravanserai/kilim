@@ -139,7 +139,7 @@ let start host =
         m
   in
   m.pages <- m.pages + 1 ;
-  H.Private.set_transport m.transport ;
+  H.Private.set_transport (Some m.transport) ;
   m
 
 let stop m =
@@ -152,7 +152,7 @@ let stop m =
            in a test of the browser. *)
         match H.Private.transport () with
         | Some t when t == m.transport ->
-            H.Private.clear ()
+            H.Private.set_transport None
         | Some _ | None ->
             ()
       end

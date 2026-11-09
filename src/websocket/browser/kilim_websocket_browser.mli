@@ -9,7 +9,7 @@
 
 val install : unit -> unit
 (** [install ()] makes the driver of this module the driver of kilim.websocket.
-    A second call changes nothing. The driver:
+    A second call does nothing. The driver:
     - Resolves the URL against [location.href], and changes the scheme [http] to
       [ws] and [https] to [wss]. Then it calls [new WebSocket(url)], with the
       constructor of [globalThis.WebSocket] at the time of the call.

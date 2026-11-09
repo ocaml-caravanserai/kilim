@@ -7,8 +7,8 @@
     ]} *)
 
 val install : unit -> unit
-(** [install ()] makes [fetch] the transport of kilim.http. A second call
-    changes nothing.
+(** [install ()] makes [fetch] the transport of kilim.http. A second call does
+    nothing.
 
     Each request reads the body in full in the same step as the headers. A
     cancel of the task calls [abort ()] on the [AbortController] of the request:

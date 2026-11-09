@@ -102,7 +102,14 @@ let errors () =
   equal string "other TypeError" (S.error_to_string (Other "TypeError"))
 
 let no_driver () =
+  S.Private.set_driver
+    (Some
+       { get= (fun _ _ -> Ok None)
+       ; set= (fun _ _ _ -> Ok ())
+       ; remove= (fun _ _ -> Ok ()) } ) ;
+  is_true ~msg:"a driver" (S.Private.driver () <> None) ;
   S.Private.set_driver None ;
+  is_true ~msg:"no driver" (S.Private.driver () = None) ;
   let host = H.create () in
   let got = ref None in
   let q = Private.Run_queue.create ~schedule:ignore in

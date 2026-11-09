@@ -18,6 +18,8 @@ type event = Opened of conn | Message of string | Closed of close | Failed
 
 type error = Not_open
 
+let error_to_string Not_open = "not open"
+
 (* The one driver of the program, as the error handler of the core. *)
 let current : driver option ref = ref None
 
