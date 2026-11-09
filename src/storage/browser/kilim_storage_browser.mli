@@ -1,6 +1,6 @@
 (** kilim.storage.browser: the driver of kilim.storage on the Web Storage API.
 
-    {[
+    {@ocaml in=test/doc/install_storage.ml[
     let () =
       Kilim_storage_browser.install () ;
       Kilim_browser.run ~mount:"app" app

@@ -1,7 +1,7 @@
 (** kilim.router.browser: the history driver of kilim.router on the History API
     of the browser (design section 06).
 
-    {[
+    {@ocaml in=test/doc/install_router.ml[
     let () =
       Kilim_router_browser.install () ;
       Kilim_browser.run ~mount:"app" App.app

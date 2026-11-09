@@ -181,7 +181,7 @@ module View : sig
       compares by key, not by position. A row that keeps its key keeps its DOM
       node, also when it moves. For example:
 
-      {[
+      {@ocaml in=test/doc/keyed.ml[
       View.keyed El.ul
         (List.map (fun it -> (Key.int it.id, El.li [txt it.label])) items)
       ]}

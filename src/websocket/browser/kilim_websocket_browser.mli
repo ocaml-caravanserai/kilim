@@ -1,7 +1,7 @@
 (** kilim.websocket.browser: the driver of kilim.websocket on the WebSocket API
     of the browser.
 
-    {[
+    {@ocaml in=test/doc/install_websocket.ml[
     let () =
       Kilim_websocket_browser.install () ;
       Kilim_browser.run ~mount:"app" app

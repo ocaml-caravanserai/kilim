@@ -1,0 +1,6 @@
+; The landing page of the odoc docs of the package (index.mld).
+; test/readme/check.mjs checks its tagged blocks.
+
+(documentation
+ (package kilim)
+ (mld_files index))

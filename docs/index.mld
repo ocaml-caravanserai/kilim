@@ -1,0 +1,73 @@
+{0 kilim}
+
+kilim is a browser application library for OCaml. An app is a model, an
+[update] function and a [view] function. The runtime writes the changes of the
+view to the DOM.
+
+{1 The libraries}
+
+Each library has a pure part and a browser part. Use the pure part for the
+modules of the app and for the tests. Use the browser part only in [main.ml].
+Then kilim.testing can test the app as native code.
+
++ kilim: the app, the view, the tasks, the subscriptions and the components.
+  See {!Kilim}.
++ kilim.browser: {!Kilim_browser.run} starts an app in a page. See
+  {!Kilim_browser}.
++ kilim.testing: a fake DOM, a host with a virtual clock, pages with simulated
+  events and the mocks of the libraries. See {!Kilim_testing}.
++ kilim.http and kilim.http.browser: HTTP requests as tasks, JSON and
+  decoders. See {!Kilim_http} and {!Kilim_http_browser}.
++ kilim.router and kilim.router.browser: the routes of an app in the path of
+  the URL. See {!Kilim_router} and {!Kilim_router_browser}.
++ kilim.websocket and kilim.websocket.browser: a WebSocket as a subscription.
+  See {!Kilim_websocket} and {!Kilim_websocket_browser}.
++ kilim.storage and kilim.storage.browser: localStorage and sessionStorage as
+  tasks. See {!Kilim_storage} and {!Kilim_storage_browser}.
++ kilim.web: the bindings for the Web APIs that Brr does not have. The library
+  has no main module. Its units are {!Kilim_web.Es_module},
+  {!Kilim_web.Js_object}, {!Kilim_web.Microtask}, {!Kilim_web.Scroll} and
+  {!Kilim_web.Trusted_types}.
++ The executable [kilim] makes the page and the loader of an app, and the
+  release files with content names. See
+  {{:https://github.com/ocaml-caravanserai/kilim/blob/main/docs/loader.md}
+  docs/loader.md}.
+
+{1 First app}
+
+This is [examples/counter/counter.ml]:
+
+{@ocaml file=examples/counter/counter.ml[
+(* The counter example: the model is an int. The messages change it, and the
+   view shows it between two buttons. *)
+
+open Kilim
+
+type msg = Inc | Dec | Reset
+
+let update n = function
+  | Inc ->
+      (n + 1, Cmd.none)
+  | Dec ->
+      (n - 1, Cmd.none)
+  | Reset ->
+      (0, Cmd.none)
+
+let view n =
+  El.div
+    [ El.button ~at:[At.aria_label "Decrement"] ~ev:[Ev.click Dec] [txt "-"]
+    ; El.output ~at:[At.data "testid" "count"] [txt (string_of_int n)]
+    ; El.button ~at:[At.aria_label "Increment"] ~ev:[Ev.click Inc] [txt "+"]
+    ; El.button ~ev:[Ev.click Reset] [txt "Reset"] ]
+
+let app = App.make ~init:(fun () -> (0, Cmd.none)) ~update ~view ()
+]}
+
+[main.ml] starts the app in the element with the id [app]:
+
+{@ocaml file=examples/counter/main.ml[
+let () = Kilim_browser.run ~mount:"app" Counter.app
+]}
+
+The README of the repository tells how to build and serve the app, and how to
+test it with kilim.testing.
