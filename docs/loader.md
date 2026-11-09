@@ -167,7 +167,9 @@ A repeat visit then starts with no request for the loader and the builds.
 - Add the hash of `kilim csp` to `script-src`, for the inline form:
   `script-src 'self' 'sha256-...'`. The hash is the same in the dev and the
   release profiles, and for each app. It changes only when a version of
-  kilim changes the loader.
+  kilim changes the loader. In the 0.x versions, a new version can change
+  the loader. Thus take the hash from `kilim csp` after each update of
+  kilim.
 - Do not use `'strict-dynamic'` with kilim. The hash does not cover the
   `data-` attributes: a copy of the loader that an attacker injects into
   the page has the same hash, and with `'strict-dynamic'` the scripts that
